@@ -630,6 +630,14 @@
     if (!c.fs.get(sh.cwd)) mkdirp(c.fs, sh.cwd);
     sh.daemon = daemon;
     sh.container = c;
+    if (c.security && c.security.readOnly) {
+      const writable = c.mounts.filter(m => m.rw).map(m => m.destination).concat(c.security.tmpfs.map(t => t.split(':')[0]), ['/dev']);
+      const orig = sh.writeFile.bind(sh), origW = sh.openWriter.bind(sh);
+      const guard = p => { const a = sh.abs(p); if (!/^\/dev\//.test(a) && !writable.some(w => a === w || a.startsWith(w.replace(/\/$/, '') + '/'))) throw new MB.ShellError(`can't create ${p}: Read-only file system`); };
+      sh.writeFile = (p, content, append) => { guard(p); return orig(p, content, append); };
+      sh.openWriter = (p, append, io) => { guard(p); return origW(p, append, io); };
+      for (const t of c.security.tmpfs) mkdirp(c.fs, t.split(':')[0]);
+    }
     sh.extraCommands = CONTAINER_CMDS;
     sh.hiddenCommands = HOST_ONLY;
     return sh;
@@ -1078,7 +1086,7 @@
       case 'postgres': {
         if (!has(sh, '/usr/local/bin/postgres')) return { createError: notFoundMsg('postgres') };
         const env = envObj(sh);
-        if (!env.POSTGRES_PASSWORD && env.POSTGRES_HOST_AUTH_METHOD !== 'trust') return { exit: 1, log: 'Error: Database is uninitialized and superuser password is not specified.\n       You must specify POSTGRES_PASSWORD to a non-empty value for the\n       superuser. For example, "-e POSTGRES_PASSWORD=password" on "docker run".\n' };
+        if (!env.POSTGRES_PASSWORD && !(env.POSTGRES_PASSWORD_FILE && sh.fs.get(env.POSTGRES_PASSWORD_FILE)) && env.POSTGRES_HOST_AUTH_METHOD !== 'trust') return { exit: 1, log: 'Error: Database is uninitialized and superuser password is not specified.\n       You must specify POSTGRES_PASSWORD to a non-empty value for the\n       superuser. For example, "-e POSTGRES_PASSWORD=password" on "docker run".\n' };
         const pgdata = env.PGDATA || '/var/lib/postgresql/data';
         const init = !c.fs.get(pgdata + '/PG_VERSION');
         if (init) { writeFile(c.fs, pgdata + '/PG_VERSION', '16\n', 38e6); if (env.POSTGRES_DB) mkdirp(c.fs, pgdata + '/base/' + env.POSTGRES_DB); }
@@ -1168,7 +1176,9 @@
       status: 'created', exitCode: 0, logs: '', server: null,
       restart: opts.restart || 'no', autoRemove: !!opts.rm, labels: Object.assign({}, cfg.Labels, opts.labels || {}),
       tty: !!opts.tty, interactive: !!opts.interactive, healthcheck: cfg.Healthcheck, health: null,
-      fs: image.fs.clone(), compose: opts.compose || null
+      fs: image.fs.clone(), compose: opts.compose || null,
+      limits: opts.limits || { memory: 0, cpus: 0, pids: 0, memRes: 0 }, security: opts.security || { readOnly: false, capDrop: [], capAdd: [], secOpt: [], tmpfs: [], privileged: false, init: false },
+      logDriver: opts.logDriver || 'json-file', logOpt: opts.logOpt || [], platform: opts.platform || ''
     };
     // port conflicts
     for (const p of c.ports) {
@@ -1546,7 +1556,7 @@
       Id: c.id, Created: '2026-10-22T12:00:00.000000000Z', Path: ((c.entrypoint || []).concat(c.cmd || []))[0] || '', Args: ((c.entrypoint || []).concat(c.cmd || [])).slice(1),
       State: { Status: c.status, Running: c.status === 'running', ExitCode: c.exitCode, Health: c.health ? { Status: c.health } : undefined },
       Image: 'sha256:' + c.imageId, Name: '/' + c.name, RestartCount: 0,
-      HostConfig: { PortBindings: Object.fromEntries(c.ports.map(p => [`${p.container}/${p.proto || 'tcp'}`, [{ HostIp: '', HostPort: String(p.host) }]])), RestartPolicy: { Name: c.restart }, AutoRemove: c.autoRemove, Binds: c.mounts.filter(m => m.type === 'bind').map(m => `${m.source}:${m.destination}`), NetworkMode: c.networks[0] },
+      HostConfig: { PortBindings: Object.fromEntries(c.ports.map(p => [`${p.container}/${p.proto || 'tcp'}`, [{ HostIp: '', HostPort: String(p.host) }]])), RestartPolicy: { Name: (c.restart || 'no').split(':')[0], MaximumRetryCount: +((c.restart || '').split(':')[1] || 0) }, AutoRemove: c.autoRemove, Memory: (c.limits || {}).memory || 0, MemoryReservation: (c.limits || {}).memRes || 0, NanoCpus: Math.round(((c.limits || {}).cpus || 0) * 1e9), PidsLimit: (c.limits || {}).pids || null, ReadonlyRootfs: !!(c.security || {}).readOnly, CapDrop: (c.security || {}).capDrop || null, CapAdd: (c.security || {}).capAdd || null, SecurityOpt: (c.security || {}).secOpt || null, Privileged: !!(c.security || {}).privileged, Init: !!(c.security || {}).init, Tmpfs: Object.fromEntries(((c.security || {}).tmpfs || []).map(t => [t.split(':')[0], t.split(':')[1] || ''])), LogConfig: { Type: c.logDriver || 'json-file', Config: Object.fromEntries((c.logOpt || []).map(o => [o.split('=')[0], o.split('=').slice(1).join('=')])) }, Binds: c.mounts.filter(m => m.type === 'bind').map(m => `${m.source}:${m.destination}`), NetworkMode: c.networks[0] },
       Mounts: c.mounts.map(m => ({ Type: m.type, Name: m.name, Source: m.type === 'bind' ? m.source : `/var/lib/docker/volumes/${m.source}/_data`, Destination: m.destination, RW: m.rw })),
       Config: { Hostname: short(c.id), User: c.user || '', Env: c.env, Cmd: c.cmd, Image: c.image, WorkingDir: c.workdir === '/' ? '' : c.workdir, Entrypoint: c.entrypoint, Labels: c.labels, ExposedPorts: Object.fromEntries((c.exposed || []).map(p => [p, {}])) },
       NetworkSettings: { IPAddress: c.ips.bridge || '', Ports: Object.fromEntries(c.ports.map(p => [`${p.container}/${p.proto || 'tcp'}`, [{ HostIp: '0.0.0.0', HostPort: String(p.host) }]])), Networks: Object.fromEntries(c.networks.map(n => [n, { IPAddress: c.ips[n] || '', Aliases: c.aliases }])) }
@@ -1600,9 +1610,9 @@
     return { type: isPath ? 'bind' : 'volume', source: isPath ? hostSh.abs(src) : src, destination: dst, readonly: mode === 'ro' };
   }
   const RUN_SPEC = {
-    bool: { '-d': 'detach', '--detach': 'detach', '-i': 'interactive', '--interactive': 'interactive', '-t': 'tty', '--tty': 'tty', '--rm': 'rm', '-P': 'publishAll', '--publish-all': 'publishAll', '--init': 'init', '--privileged': 'priv' },
-    val: { '--name': 'name', '-p': 'publish', '--publish': 'publish', '-e': 'env', '--env': 'env', '--env-file': 'envFile', '-v': 'volume', '--volume': 'volume', '--mount': 'mount', '-w': 'workdir', '--workdir': 'workdir', '--network': 'network', '--net': 'network', '--entrypoint': 'entrypoint', '-u': 'user', '--user': 'user', '--restart': 'restart', '-h': 'hostname', '--hostname': 'hostname', '-l': 'label', '--label': 'label', '-m': 'memory', '--memory': 'memory', '--cpus': 'cpus', '--health-cmd': 'healthCmd', '--platform': 'platform', '--network-alias': 'alias' },
-    multi: new Set(['publish', 'env', 'volume', 'label', 'mount', 'alias']),
+    bool: { '-d': 'detach', '--detach': 'detach', '-i': 'interactive', '--interactive': 'interactive', '-t': 'tty', '--tty': 'tty', '--rm': 'rm', '-P': 'publishAll', '--publish-all': 'publishAll', '--init': 'init', '--privileged': 'priv', '--read-only': 'readOnly' },
+    val: { '--name': 'name', '-p': 'publish', '--publish': 'publish', '-e': 'env', '--env': 'env', '--env-file': 'envFile', '-v': 'volume', '--volume': 'volume', '--mount': 'mount', '-w': 'workdir', '--workdir': 'workdir', '--network': 'network', '--net': 'network', '--entrypoint': 'entrypoint', '-u': 'user', '--user': 'user', '--restart': 'restart', '-h': 'hostname', '--hostname': 'hostname', '-l': 'label', '--label': 'label', '-m': 'memory', '--memory': 'memory', '--cpus': 'cpus', '--health-cmd': 'healthCmd', '--platform': 'platform', '--network-alias': 'alias', '--pids-limit': 'pids', '--memory-reservation': 'memRes', '--cap-drop': 'capDrop', '--cap-add': 'capAdd', '--security-opt': 'secOpt', '--tmpfs': 'tmpfs', '--ulimit': 'ulimit', '--stop-timeout': 'stopTimeout', '--log-driver': 'logDriver', '--log-opt': 'logOpt' },
+    multi: new Set(['publish', 'env', 'volume', 'label', 'mount', 'alias', 'capDrop', 'capAdd', 'secOpt', 'tmpfs', 'ulimit', 'logOpt']),
     stop: true
   };
   function runOptsToCreate(d, o, pos, sh, io) {
@@ -1628,8 +1638,17 @@
     return {
       image, imageRef: parseRef(imageRef).explicit || /^[0-9a-f]{12,}$/.test(imageRef) ? imageRef : imageRef, name: o.name, cmd: pos.slice(1), env, ports, mounts,
       workdir: o.workdir, user: o.user, networks: o.network ? [o.network] : null, entrypoint: o.entrypoint !== undefined ? (o.entrypoint ? [o.entrypoint] : []) : undefined,
-      restart: o.restart, rm: o.rm, labels, tty: o.tty, interactive: o.interactive, hostSh: sh, aliases: o.alias
+      restart: o.restart, rm: o.rm, labels, tty: o.tty, interactive: o.interactive, hostSh: sh, aliases: o.alias,
+      limits: { memory: parseBytes(o.memory), cpus: o.cpus ? parseFloat(o.cpus) : 0, pids: o.pids ? parseInt(o.pids, 10) : 0, memRes: parseBytes(o.memRes) },
+      security: { readOnly: !!o.readOnly, capDrop: o.capDrop || [], capAdd: o.capAdd || [], secOpt: o.secOpt || [], tmpfs: o.tmpfs || [], privileged: !!o.priv, init: !!o.init },
+      logDriver: o.logDriver || 'json-file', logOpt: o.logOpt || [], platform: o.platform || ''
     };
+  }
+  function parseBytes(v) {
+    if (!v) return 0;
+    const m = /^(\d+(?:\.\d+)?)([bkmg]?)b?$/i.exec(String(v).trim());
+    if (!m) throw new DockerError(`invalid size: '${v}'`);
+    return Math.round(parseFloat(m[1]) * { '': 1, b: 1, k: 1024, m: 1024 ** 2, g: 1024 ** 3 }[m[2].toLowerCase()]);
   }
   function dockerRun(d, args, io, sh) {
     const { o, pos } = parseOpts(args, RUN_SPEC);
@@ -1998,36 +2017,72 @@
     return 0;
   }
   function statsCmd(d, args, io) {
-    const list = d.containers.filter(c => c.status === 'running');
-    io.out(table(list.map((c, i) => [short(c.id), c.name, (0.1 * (i + 1)).toFixed(2) + '%', `${(12 + i * 7.5).toFixed(1)}MiB / 7.66GiB`, ((12 + i * 7.5) / 78.4).toFixed(2) + '%', '1.2kB / 0B', '0B / 0B', '3']), ['CONTAINER ID', 'NAME', 'CPU %', 'MEM USAGE / LIMIT', 'MEM %', 'NET I/O', 'BLOCK I/O', 'PIDS']));
-    void args;
+    const { o, pos } = parseOpts(args, { bool: { '--no-stream': 'nostream', '-a': 'all', '--all': 'all', '--no-trunc': 'notrunc' }, val: { '--format': 'format' } });
+    let list = d.containers.filter(c => o.all || c.status === 'running');
+    if (pos.length) list = pos.map(n => needContainer(d, n));
+    const rows = list.map((c, i) => {
+      const lim = (c.limits || {}).memory || 7.66 * 1024 ** 3, used = (12 + i * 7.5) * 1024 ** 2;
+      const cpu = Math.min(0.1 * (i + 1), ((c.limits || {}).cpus || 64) * 100);
+      return { ID: short(c.id), Container: short(c.id), Name: c.name, CPUPerc: cpu.toFixed(2) + '%', MemUsage: `${(used / 1024 ** 2).toFixed(1)}MiB / ${lim >= 1024 ** 3 ? (lim / 1024 ** 3).toFixed(2) + 'GiB' : (lim / 1024 ** 2).toFixed(0) + 'MiB'}`, MemPerc: (used / lim * 100).toFixed(2) + '%', NetIO: '1.2kB / 0B', BlockIO: '0B / 0B', PIDs: '3' };
+    });
+    if (o.format) {
+      const f = o.format.replace(/^table\s+/, '');
+      io.out(rows.map(r => goTemplate(f, r)).join('\n') + (rows.length ? '\n' : ''));
+      return 0;
+    }
+    io.out(table(rows.map(r => [r.ID, r.Name, r.CPUPerc, r.MemUsage, r.MemPerc, r.NetIO, r.BlockIO, r.PIDs]), ['CONTAINER ID', 'NAME', 'CPU %', 'MEM USAGE / LIMIT', 'MEM %', 'NET I/O', 'BLOCK I/O', 'PIDS']));
     return 0;
   }
 
   // ------------------------------------------------------------- compose
   function composeFile(sh, file) {
-    const names = file ? [file] : ['compose.yaml', 'compose.yml', 'docker-compose.yml', 'docker-compose.yaml'];
+    const names = file ? [file] : arguments[2] ? ['compose.override.yaml', 'compose.override.yml', 'docker-compose.override.yml', 'docker-compose.override.yaml'] : ['compose.yaml', 'compose.yml', 'docker-compose.yml', 'docker-compose.yaml'];
     for (const n of names) { const c = sh.readFile(n); if (c !== null) return { name: n, text: c }; }
     return null;
   }
   function interpolate(text, vars) {
     return text.replace(/\$\{(\w+)(?::?-([^}]*))?\}|\$(\w+)/g, (m, a, def, b) => { const k = a || b; const v = vars[k]; return v !== undefined && v !== '' ? v : (def !== undefined ? def : ''); });
   }
+  function mergeCompose(a, b) {
+    if (Array.isArray(a) && Array.isArray(b)) return a.concat(b.filter(x => !a.some(y => JSON.stringify(y) === JSON.stringify(x))));
+    if (a && b && typeof a === 'object' && typeof b === 'object' && !Array.isArray(a) && !Array.isArray(b)) {
+      const out = Object.assign({}, a);
+      for (const k of Object.keys(b)) out[k] = k in a ? mergeCompose(a[k], b[k]) : b[k];
+      return out;
+    }
+    return b === undefined ? a : b;
+  }
   function loadProject(sh, o) {
-    const f = composeFile(sh, o.file);
+    const files = [].concat(o.file || []);
+    const sources = [];
+    if (files.length) for (const fn of files) { const c = sh.readFile(fn); if (c === null) throw new DockerError(`open ${sh.abs(fn)}: no such file or directory`); sources.push({ name: fn, text: c }); }
+    else {
+      const base = composeFile(sh);
+      if (base) { sources.push(base); const ov = composeFile(sh, null, true); if (ov) sources.push(ov); }
+    }
+    const f = sources[0];
     if (!f) throw new DockerError('no configuration file provided: not found');
     const dotenv = {};
     const envText = sh.readFile('.env');
     if (envText) for (const l of envText.split('\n')) { const m = /^\s*([\w.]+)\s*=\s*(.*)$/.exec(l); if (m && !l.trim().startsWith('#')) dotenv[m[1]] = m[2].replace(/^(["'])(.*)\1$/, '$2'); }
     const vars = Object.assign({}, dotenv, envObj(sh));
     let doc;
-    try { doc = parseYAML(interpolate(f.text, vars)); }
-    catch (e) { throw new DockerError(`${f.name}: ${e.message}`); }
+    for (const src of sources) {
+      let part;
+      try { part = parseYAML(interpolate(src.text, vars)); }
+      catch (e) { throw new DockerError(`${src.name}: ${e.message}`); }
+      doc = doc === undefined ? part : mergeCompose(doc, part);
+    }
+    const active = new Set([].concat(o.profile || []).concat((vars.COMPOSE_PROFILES || '').split(',')).map(x => x.trim()).filter(Boolean));
+    if (doc && doc.services && typeof doc.services === 'object') {
+      const named = o.only || [];
+      for (const [n, sv] of Object.entries(doc.services)) if (sv && sv.profiles && !named.includes(n) && !sv.profiles.some(p => active.has(p) || active.has('*'))) delete doc.services[n];
+    }
     if (!doc || typeof doc !== 'object' || !doc.services || typeof doc.services !== 'object') throw new DockerError(`${f.name}: services must be a mapping (did you forget the top-level "services:" key?)`);
     const project = (o.project || doc.name || sh.cwd.split('/').pop() || 'project').toLowerCase().replace(/[^a-z0-9_-]/g, '');
     for (const [name, s] of Object.entries(doc.services)) {
       if (!s || typeof s !== 'object') throw new DockerError(`service "${name}" has neither an image nor a build context specified: invalid compose project`);
-      const allowed = ['image', 'build', 'ports', 'environment', 'env_file', 'depends_on', 'volumes', 'networks', 'command', 'entrypoint', 'restart', 'healthcheck', 'container_name', 'working_dir', 'user', 'expose', 'labels', 'deploy', 'profiles', 'stdin_open', 'tty', 'platform', 'hostname'];
+      const allowed = ['image', 'build', 'ports', 'environment', 'env_file', 'depends_on', 'volumes', 'networks', 'command', 'entrypoint', 'restart', 'healthcheck', 'container_name', 'working_dir', 'user', 'expose', 'labels', 'deploy', 'profiles', 'stdin_open', 'tty', 'platform', 'hostname', 'mem_limit', 'mem_reservation', 'cpus', 'pids_limit', 'read_only', 'cap_drop', 'cap_add', 'security_opt', 'tmpfs', 'extra_hosts', 'develop', 'secrets', 'init', 'stop_grace_period', 'logging', 'configs'];
       for (const k of Object.keys(s)) if (!allowed.includes(k)) throw new DockerError(`validating ${f.name}: services.${name} additional properties '${k}' not allowed`);
       if (!s.image && !s.build) throw new DockerError(`service "${name}" has neither an image nor a build context specified: invalid compose project`);
       if (s.ports && !Array.isArray(s.ports)) throw new DockerError(`services.${name}.ports must be a list`);
@@ -2051,9 +2106,10 @@
     return order;
   }
   function composeCmd(d, args, io, sh) {
-    const { o, pos } = parseOpts(args, { bool: {}, val: { '-f': 'file', '--file': 'file', '-p': 'project', '--project-name': 'project' }, stop: true });
+    const { o, pos } = parseOpts(args, { bool: {}, val: { '-f': 'file', '--file': 'file', '-p': 'project', '--project-name': 'project', '--profile': 'profile' }, multi: new Set(['file', 'profile']), stop: true });
     const sub = pos[0];
     const rest = pos.slice(1);
+    if (sub === 'up' || sub === 'run') o.only = rest.filter(a => !a.startsWith('-'));
     if (!sub) { io.out('Usage:  docker compose [OPTIONS] COMMAND\n\nCommands:\n  build, config, down, exec, logs, ps, restart, start, stop, up\n'); return 0; }
     const { doc, project } = loadProject(sh, o);
     const services = doc.services;
@@ -2132,8 +2188,20 @@
           try {
             c = createContainer(d, {
               image, imageRef: s.image || imageFor(svc), name, cmd, env, ports: (s.ports || []).map(p => parsePort(String(p))), mounts, workdir: s.working_dir, user: s.user,
-              networks: extraNets.length ? extraNets : [netName], entrypoint: entry, restart: s.restart, labels: { 'com.docker.compose.project': project, 'com.docker.compose.service': svc }, hostSh: sh, aliases: [svc], compose: { project, service: svc }, tty: s.tty, interactive: s.stdin_open
+              networks: extraNets.length ? extraNets : [netName], entrypoint: entry, restart: s.restart, labels: { 'com.docker.compose.project': project, 'com.docker.compose.service': svc }, hostSh: sh, aliases: [svc], compose: { project, service: svc }, tty: s.tty, interactive: s.stdin_open,
+              limits: (() => { const lim = ((s.deploy || {}).resources || {}).limits || {}; const res = ((s.deploy || {}).resources || {}).reservations || {}; return { memory: parseBytes(s.mem_limit || lim.memory), cpus: parseFloat(s.cpus || lim.cpus || 0) || 0, pids: parseInt(s.pids_limit || lim.pids || 0, 10) || 0, memRes: parseBytes(s.mem_reservation || res.memory) }; })(),
+              security: { readOnly: !!s.read_only, capDrop: [].concat(s.cap_drop || []).map(String), capAdd: [].concat(s.cap_add || []).map(String), secOpt: [].concat(s.security_opt || []).map(String), tmpfs: [].concat(s.tmpfs || []).map(String), privileged: false, init: !!s.init },
+              logDriver: (s.logging || {}).driver, logOpt: Object.entries((s.logging || {}).options || {}).map(([k, v]) => `${k}=${v}`)
             }, io);
+            for (const sec of [].concat(s.secrets || [])) {
+              const sname = typeof sec === 'string' ? sec : sec.source;
+              const def = (doc.secrets || {})[sname];
+              if (!def) throw new DockerError(`service "${svc}" refers to undefined secret ${sname}: invalid compose project`);
+              const content = def.file ? sh.readFile(def.file) : (def.environment ? (envObj(sh)[def.environment] || '') : null);
+              if (content === null) throw new DockerError(`secret "${sname}" file ${sh.abs(def.file || '')} not found`);
+              writeFile(c.fs, '/run/secrets/' + (typeof sec === 'object' && sec.target ? sec.target : sname), content);
+            }
+            for (const h of [].concat(s.extra_hosts || [])) { const [hn, ip] = String(h).split(/[:=]/); c.extraHosts = (c.extraHosts || []).concat([[hn, ip === 'host-gateway' ? '172.17.0.1' : ip]]); }
             if (s.healthcheck && s.healthcheck.test) c.healthcheck = { Test: Array.isArray(s.healthcheck.test) ? s.healthcheck.test.map(String) : ['CMD-SHELL', String(s.healthcheck.test)] };
             progress.push(status('Created', name));
             startContainer(d, c, io);
@@ -2268,6 +2336,44 @@
         case 'port': return portCmd(d, rest, io);
         case 'top': return topCmd(d, rest, io);
         case 'stats': return statsCmd(d, rest, io);
+        case 'update': {
+          const { o, pos } = parseOpts(rest, { bool: {}, val: { '-m': 'memory', '--memory': 'memory', '--cpus': 'cpus', '--pids-limit': 'pids', '--restart': 'restart', '--memory-reservation': 'memRes' } });
+          if (!pos.length) throw new DockerError('"docker update" requires at least 1 argument.');
+          for (const n of pos) {
+            const c = needContainer(d, n);
+            c.limits = c.limits || { memory: 0, cpus: 0, pids: 0, memRes: 0 };
+            if (o.memory) c.limits.memory = parseBytes(o.memory);
+            if (o.memRes) c.limits.memRes = parseBytes(o.memRes);
+            if (o.cpus) c.limits.cpus = parseFloat(o.cpus);
+            if (o.pids) c.limits.pids = parseInt(o.pids, 10);
+            if (o.restart) c.restart = o.restart;
+            io.out(n + '\n');
+          }
+          return 0;
+        }
+        case 'save': {
+          const { o, pos } = parseOpts(rest, { bool: {}, val: { '-o': 'output', '--output': 'output' } });
+          if (!pos.length) throw new DockerError('"docker save" requires at least 1 argument.');
+          if (!o.output) throw new DockerError('cowardly refusing to save to a terminal. Use the -o flag or redirect');
+          const imgs = pos.map(r => { const i = d.image(r); if (!i) throw new DockerError(`reference does not exist: ${r}`); return i; });
+          d.archives = d.archives || {};
+          const key = digest('save' + imgs.map(i => i.id).join(','));
+          d.archives[key] = imgs.map(i => Object.assign({}, i, { fs: i.fs.clone(), tags: i.tags.slice() }));
+          sh.writeFile(o.output, `DOCKER-IMAGE-ARCHIVE ${key}\n` + imgs.map(i => i.tags.join(' ')).join('\n') + '\n', false);
+          return 0;
+        }
+        case 'load': {
+          const { o } = parseOpts(rest, { bool: { '-q': 'quiet' }, val: { '-i': 'input', '--input': 'input' } });
+          const txt = o.input ? sh.readFile(o.input) : null;
+          const m = txt && /^DOCKER-IMAGE-ARCHIVE (\w+)/.exec(txt);
+          if (!m || !(d.archives || {})[m[1]]) throw new DockerError('open /var/lib/docker/tmp/docker-import: archive/tar: invalid tar header');
+          for (const img of d.archives[m[1]]) {
+            let i = d.images.find(x => x.id === img.id);
+            if (!i) { i = Object.assign({}, img, { fs: img.fs.clone(), tags: [] }); d.images.push(i); }
+            for (const t of img.tags) { for (const other of d.images) if (other !== i) other.tags = other.tags.filter(x => x !== t); if (!i.tags.includes(t)) i.tags.push(t); io.out(`Loaded image: ${t}\n`); }
+          }
+          return 0;
+        }
         case 'push': return pushCmd(d, rest, io);
         case 'login': d.loggedIn = true; io.out('Login Succeeded\n'); return 0;
         case 'logout': d.loggedIn = false; io.out('Removing login credentials for https://index.docker.io/v1/\n'); return 0;

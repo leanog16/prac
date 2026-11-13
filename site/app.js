@@ -568,7 +568,11 @@
     fastapi: { glyph: '{}', blurb: 'HTTP and REST, path and query parameters, Pydantic models, validation, errors, dependency injection, databases, auth and testing.', how: 'requirement checker',
       pages: [['practice', 'Practice', '◎', 'Practice all exercises'], ['review', 'Review', '?', 'Review quiz'], ['cheatsheet', 'Cheat sheet', '≡', 'Cheat sheet']] },
     spring: { glyph: '@', blurb: 'Dependency injection, REST controllers, validation and error handling, Spring Data JPA, configuration and profiles, layering, testing.', how: 'requirement checker',
-      pages: [['practice', 'Practice', '◎', 'Practice all exercises'], ['review', 'Review', '?', 'Review quiz'], ['terminal', 'Terminal', '$', 'Maven terminal'], ['cheatsheet', 'Cheat sheet', '≡', 'Cheat sheet']] }
+      pages: [['practice', 'Practice', '◎', 'Practice all exercises'], ['review', 'Review', '?', 'Review quiz'], ['terminal', 'Terminal', '$', 'Maven terminal'], ['cheatsheet', 'Cheat sheet', '≡', 'Cheat sheet']] },
+    cicd: { glyph: '⟳', blurb: 'Continuous integration and delivery with GitHub Actions: triggers, jobs and matrices, caching, secrets and OIDC, building and publishing images, deployment strategies, reusable workflows.', how: 'requirement checker',
+      pages: [['practice', 'Practice', '◎', 'Practice all exercises'], ['review', 'Review', '?', 'Review quiz'], ['cheatsheet', 'Cheat sheet', '≡', 'Cheat sheet']] },
+    aws: { glyph: '☁', blurb: 'The AWS core for developers: IAM and policies, EC2, VPC networking, S3, RDS and DynamoDB, ECR and ECS, Lambda and messaging, CloudWatch, infrastructure as code and cost.', how: 'requirement checker',
+      pages: [['practice', 'Practice', '◎', 'Practice all exercises'], ['review', 'Review', '?', 'Review quiz'], ['cheatsheet', 'Cheat sheet', '≡', 'Cheat sheet']] }
   };
   const TRACK_IDS = PJ.tracks.map(t => t.id);
   let currentTrack = store.get('track', 'sql');
@@ -638,7 +642,7 @@
       <section class="hero">
         <div class="eyebrow">Study lab · ${PJ.tracks.length} tracks · ${total} graded exercises</div>
         <h1><span class="p">pr</span><span class="j">ac</span></h1>
-        <p class="lede">Lessons that teach the concepts, then graded exercises from warm-up to boss level. Queries run on a real SQLite database; shell and Docker commands run in simulators; FastAPI and Spring Boot code is checked against requirement lists. All in your browser.</p>
+        <p class="lede">Lessons that teach the concepts, then graded exercises from warm-up to boss level. Queries run on a real SQLite database; shell and Docker commands run in simulators; FastAPI, Spring Boot, CI/CD workflows and AWS configuration are checked against requirement lists. All in your browser.</p>
       </section>
       <div class="track-cards">${PJ.tracks.map(card).join('')}</div>
       <div class="section-head"><h2>How exercises work</h2></div>

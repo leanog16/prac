@@ -325,6 +325,7 @@ function fsSpec(dirName) {
     for (const e of ents) {
       const full = path.join(dir, e.name);
       const vpath = '/' + path.relative(base, full).split(path.sep).join('/');
+      if (e.name === '.keep') continue; // placeholder so git keeps empty directories
       if (e.isDirectory()) { spec[vpath] = { dir: true }; walk(full); }
       else spec[vpath] = { content: fs.readFileSync(full, 'utf8'), mode: (e.name.endsWith('.sh') && vpath.includes('/scripts/') && e.name !== 'hello.sh') || e.name === 'mvnw' ? 0o755 : 0o644 };
     }
@@ -442,6 +443,8 @@ async function main() {
     { id: 'docker', title: 'Docker', modules: [] },
     { id: 'fastapi', title: 'FastAPI', modules: [] },
     { id: 'spring', title: 'Spring Boot', modules: [] },
+    { id: 'cicd', title: 'CI/CD', modules: [] },
+    { id: 'aws', title: 'AWS', modules: [] },
   ];
   for (const t of tracks) {
     const dir = path.join(SRC, t.id);

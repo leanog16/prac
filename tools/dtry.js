@@ -3,7 +3,7 @@ const fs = require('fs'), path = require('path');
 const MB = require('./mb.js');
 function spec(base) {
   const out = {};
-  const walk = d => { for (const e of fs.readdirSync(d, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) { const full = path.join(d, e.name); const v = '/' + path.relative(base, full); if (e.isDirectory()) { out[v] = { dir: true }; walk(full); } else out[v] = { content: fs.readFileSync(full, 'utf8'), mode: e.name === 'mvnw' ? 0o755 : 0o644 }; } };
+  const walk = d => { for (const e of fs.readdirSync(d, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) { if (e.name === '.keep') continue; const full = path.join(d, e.name); const v = '/' + path.relative(base, full); if (e.isDirectory()) { out[v] = { dir: true }; walk(full); } else out[v] = { content: fs.readFileSync(full, 'utf8'), mode: e.name === 'mvnw' ? 0o755 : 0o644 }; } };
   walk(base); return out;
 }
 const sh = new MB.Shell({ fs: MB.VFS.fromSpec(spec(path.join(__dirname, '../src/fs-docker'))) });
