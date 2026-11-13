@@ -11,11 +11,22 @@
   const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   function el(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; }
   const LEVELS = { 1: 'Warm-up', 2: 'Practice', 3: 'Challenge', 4: 'Boss' };
+  // Pixel icons, drawn on an 8x8 grid so they share the progress cells' grain.
+  const ART = {
+    check: ['........', '.......#', '......##', '#....##.', '##..##..', '.####...', '..##....', '........'],
+    cross: ['........', '.##..##.', '..####..', '...##...', '..####..', '.##..##.', '........', '........'],
+    right: ['...##...', '....##..', '.....##.', '#######.', '#######.', '.....##.', '....##..', '...##...'],
+    left: ['...##...', '..##....', '.##.....', '.#######', '.#######', '.##.....', '..##....', '...##...'],
+    play: ['.##.....', '.###....', '.####...', '.#####..', '.#####..', '.####...', '.###....', '.##.....']
+  };
+  const ico = n => `<svg class="ico" viewBox="0 0 8 8" aria-hidden="true" shape-rendering="crispEdges">${ART[n].flatMap((row, y) => [...row].map((c, x) => c === '#' ? `<rect x="${x}" y="${y}" width="1" height="1"/>` : '')).join('')}</svg>`;
+  const pips = l => `<span class="pips" aria-hidden="true">${[1, 2, 3, 4].map(i => `<i${i <= l ? ' class="f"' : ''}></i>`).join('')}</span>`;
+  const lvlTag = l => `<span class="lvl lvl-${l}">${pips(l)}${LEVELS[l]}</span>`;
   const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
   let toastTimer;
-  function toast(msg) {
+  function toast(msg, icon) {
     const t = $('#toast');
-    t.textContent = msg; t.hidden = false;
+    t.innerHTML = (icon ? ico(icon) : '') + esc(msg); t.hidden = false;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { t.hidden = true; }, 1800);
   }
@@ -242,7 +253,7 @@
       blk.dataset.wired = '1';
       const lang = blk.dataset.lang;
       const src = $('textarea.code-src', blk).value;
-      const actions = el(`<div class="code-actions"><button type="button" class="edit">Edit</button><button type="button" class="run">Run ▸</button></div>`);
+      const actions = el(`<div class="code-actions"><button type="button" class="btn small edit">Edit</button><button type="button" class="btn small primary run">${ico('play')}Run</button></div>`);
       blk.appendChild(actions);
       let editor = null;
       const out = el('<div class="code-out" hidden></div>');
@@ -267,15 +278,15 @@
         editor.value = src;
         $('pre', blk).replaceWith(editor);
         wireEditor(editor, { onRun: run });
-        e.target.textContent = 'Editing';
+        e.currentTarget.textContent = 'Editing';
         editor.focus();
       });
     }
   }
 
   // --------------------------------------------------------------- quizzes
-  function renderQuiz(q, onAnswer) {
-    const node = el(`<div class="q"><p class="q-text">${q.q}</p>${q.code ? `<div class="codeblock"><pre><code>${q.code}</code></pre></div>` : ''}<div class="q-opts"></div><div class="why" hidden></div></div>`);
+  function renderQuiz(q, onAnswer, n) {
+    const node = el(`<div class="q">${n ? `<div class="q-n">${n}</div>` : ''}<p class="q-text">${q.q}</p>${q.code ? `<div class="codeblock"><pre><code>${q.code}</code></pre></div>` : ''}<div class="q-opts"></div><div class="why" hidden></div></div>`);
     const opts = $('.q-opts', node);
     const why = $('.why', node);
     const show = (picked) => {
@@ -310,25 +321,24 @@
     const code0 = drafts[ex.id] !== undefined ? drafts[ex.id] : starter;
     const node = el(`
       <article class="ex${solved ? ' solved' : ''}" id="ex-${ex.id}" data-level="${ex.level}">
-        <header class="ex-head">
-          <span class="lvl lvl-${ex.level}">${LEVELS[ex.level]}</span>${ex.project ? '<span class="lvl proj">Project</span>' : ''}
-          <h3 class="ex-title">${esc(ex.title)}</h3>
-          <span class="solved-tag">✓ Solved</span>
-          <span class="ex-num">${opts.showModule ? esc(ex.mod.title) + ' · ' : ''}#${ex.num}</span>
-        </header>
+        ${exHead(ex, opts)}
         <div class="ex-body">
           <div class="ex-prompt">${ex.prompt}</div>
           <div>
-            <div class="editor-label"><span>${isCode ? esc(ex.file || ex.lang) : 'your answer'}</span><span>${isCode ? `graded on ${ex.rules.length} requirement${ex.rules.length === 1 ? '' : 's'}` : 'type the exact result'}</span></div>
+            <div class="editor-label"><span>${isCode ? esc(ex.file || ex.lang) + ` · graded on ${ex.rules.length} requirement${ex.rules.length === 1 ? '' : 's'}` : 'Your answer · case and extra spaces are ignored'}</span>${isCode ? '<button type="button" class="btn quiet small b-reset">Reset</button>' : ''}</div>
             ${isCode ? `<textarea class="editor" spellcheck="false" autocapitalize="off" autocomplete="off" id="ed-${ex.id}" aria-label="Code for ${esc(ex.title)}"></textarea>`
               : `<input class="answer-input" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" id="ed-${ex.id}" aria-label="Answer for ${esc(ex.title)}" placeholder="${esc(ex.placeholder)}">`}
-            <div class="btns">
-              <button type="button" class="btn primary b-check">Check</button>
-              <button type="button" class="btn ghost b-hint"${ex.hints.length ? '' : ' hidden'}>Hint</button>
-              ${isCode ? '<button type="button" class="btn ghost b-reqs">Show requirements</button>' : ''}
-              <button type="button" class="btn ghost b-sol">${isCode ? 'Solution' : 'Answer'}</button>
-              ${isCode ? '<button type="button" class="btn ghost b-reset">Reset</button>' : ''}
-              ${isCode ? '<span class="kbd-hint"><kbd>⌘/Ctrl</kbd>+<kbd>Enter</kbd> check</span>' : ''}
+            <div class="actions">
+              <div class="btns">
+                <button type="button" class="btn primary b-check">${ico('check')}Check</button>
+                ${isCode ? '<span class="kbd-hint"><kbd>⌘/Ctrl</kbd> <kbd>Enter</kbd></span>' : '<span class="kbd-hint"><kbd>Enter</kbd></span>'}
+              </div>
+              <div class="stuck" role="group" aria-label="Help">
+                <span class="stuck-label">Stuck?</span>
+                <button type="button" class="btn quiet b-hint"${ex.hints.length ? '' : ' hidden'}>Hint</button>
+                ${isCode ? '<button type="button" class="btn quiet b-reqs">Requirements</button>' : ''}
+                <button type="button" class="btn quiet b-sol">${isCode ? 'Solution' : 'Answer'}</button>
+              </div>
             </div>
           </div>
           <div class="hints"></div>
@@ -355,33 +365,29 @@
       hintsEl.appendChild(el(`<div class="hint"><b>Hint ${hintN + 1}.</b> ${ex.hints[hintN].replace(/^<p>|<\/p>\s*$/g, '')}</div>`));
       hintN++; updateHintBtn();
     });
-    const markSolved = () => {
-      if (!progress.solved[ex.id]) { progress.solved[ex.id] = Date.now(); saveProgress(); toast('Solved ✓'); }
-      node.classList.add('solved');
-      refreshRail();
-    };
-    const checklist = (results, showAll) => `<ul class="checklist">${results.map(r => `<li class="${r.ok ? 'ok' : 'no'}">${r.ok ? '✓' : '✗'} <span>${r.msg}</span></li>`).filter((x, i) => showAll || !results[i].ok || true).join('')}</ul>`;
+    const markSolved = () => solvedNow(ex, node);
+    const checklist = results => `<ul class="checklist">${results.map(r => `<li class="${r.ok ? 'ok' : 'no'}">${ico(r.ok ? 'check' : 'cross')}<span class="sr">${r.ok ? 'Met:' : 'Not met:'}</span> <span>${r.msg}</span></li>`).join('')}</ul>`;
     function check() {
       const v = ta.value;
       if (!v.trim()) { fb.innerHTML = `<div class="feedback bad">${isCode ? 'Write your code first.' : 'Type an answer first.'}</div>`; return; }
       if (isCode) {
         const g = MB.gradeCode(v, ex.rules, ex.lang);
         if (g.ok) {
-          fb.innerHTML = `<div class="feedback ok">All ${g.results.length} requirements met. ${progress.solved[ex.id] ? '' : 'Nice work.'}</div>` + checklist(g.results) + (ex.explain ? `<div class="explain">${ex.explain}</div>` : '');
+          fb.innerHTML = `<div class="feedback ok">${ico('check')}All ${g.results.length} requirements met.</div>` + checklist(g.results) + (ex.explain ? `<div class="explain">${ex.explain}</div>` : '');
           markSolved();
         } else {
-          fb.innerHTML = `<div class="feedback bad"><strong>${g.passed} of ${g.results.length} requirements met.</strong><div class="detail">Fix the items marked ✗. The checks look at what your code declares, so names and structure matter more than exact spacing.</div></div>` + checklist(g.results);
+          fb.innerHTML = `<div class="feedback bad"><strong>${g.passed} of ${g.results.length} requirements met.</strong><div class="detail">Fix the items marked in red. The checks look at what your code declares, so names and structure matter more than exact spacing.</div></div>` + checklist(g.results);
         }
       } else {
         if (MB.matchAnswer(v, ex.answers)) {
-          fb.innerHTML = `<div class="feedback ok">Correct! ${progress.solved[ex.id] ? '' : 'Nice work.'}</div>` + (ex.explain ? `<div class="explain">${ex.explain}</div>` : '');
+          fb.innerHTML = `<div class="feedback ok">${ico('check')}Correct.</div>` + (ex.explain ? `<div class="explain">${ex.explain}</div>` : '');
           markSolved();
         } else fb.innerHTML = `<div class="feedback bad"><strong>Not quite.</strong><div class="detail">Trace through it once more${ex.hints.length && hintN < ex.hints.length ? ', or take a hint' : ''}. Answers ignore case and extra spaces.</div></div>`;
       }
     }
     $('.b-check', node).addEventListener('click', check);
     const reqBtn = $('.b-reqs', node);
-    if (reqBtn) reqBtn.addEventListener('click', () => { fb.innerHTML = `<div class="feedback"><strong>What the grader looks for</strong></div><ul class="checklist">${ex.rules.map(r => `<li class="todo">○ <span>${r.msg}</span></li>`).join('')}</ul>`; });
+    if (reqBtn) reqBtn.addEventListener('click', () => { fb.innerHTML = `<div class="feedback"><strong>What the grader looks for</strong></div><ul class="checklist">${ex.rules.map(r => `<li class="todo"><span>${r.msg}</span></li>`).join('')}</ul>`; });
     const resetBtn = $('.b-reset', node);
     if (resetBtn) resetBtn.addEventListener('click', () => { ta.value = starter; delete drafts[ex.id]; saveDrafts(); grow(); fb.innerHTML = ''; });
     $('.b-sol', node).addEventListener('click', () => {
@@ -395,7 +401,7 @@
         if (!isCode) $('code', solEl).textContent = ex.solution;
       };
       if (progress.solved[ex.id]) { reveal(); return; }
-      solEl.innerHTML = `<div class="confirm-row">Reveal the ${isCode ? 'solution' : 'answer'}?${hintN < ex.hints.length ? ' A hint might be enough.' : ''} <button type="button" class="btn small s-yes">Show it</button><button type="button" class="btn small ghost s-no">Keep trying</button></div>`;
+      solEl.innerHTML = `<div class="confirm-row">Reveal the ${isCode ? 'solution' : 'answer'}?${hintN < ex.hints.length ? ' A hint might be enough.' : ''} <button type="button" class="btn small s-yes">Show it</button><button type="button" class="btn small quiet s-no">Keep trying</button></div>`;
       $('.s-yes', solEl).addEventListener('click', reveal);
       $('.s-no', solEl).addEventListener('click', () => { solEl.innerHTML = ''; });
     });
@@ -415,27 +421,26 @@
       : isFile ? `<div class="tests"><div>the grader saves this as ${esc(ex.file)}, then runs:</div>${ex.run.split('\n').map(l => `<div>$ ${esc(l)}</div>`).join('')}</div>` : '';
     const node = el(`
       <article class="ex${solved ? ' solved' : ''}" id="ex-${ex.id}" data-level="${ex.level}">
-        <header class="ex-head">
-          <span class="lvl lvl-${ex.level}">${LEVELS[ex.level]}</span>${ex.project ? '<span class="lvl proj">Project</span>' : ''}
-          <h3 class="ex-title">${esc(ex.title)}</h3>
-          <span class="solved-tag">✓ Solved</span>
-          <span class="ex-num">${opts.showModule ? esc(ex.mod.title) + ' · ' : ''}#${ex.num}</span>
-        </header>
+        ${exHead(ex, opts)}
         <div class="ex-body">
           <div class="ex-prompt">${ex.prompt}</div>
           ${!isSql && (ex.cwd !== '/home/student' || ex.setup) ? `<div class="ex-meta">${ex.cwd !== '/home/student' ? `<span>starts in ${esc(ex.cwd)}</span>` : ''}${ex.setup ? '<span>some setup runs first</span>' : ''}</div>` : ''}
           <div>
-            <div class="editor-label"><span>${isSql ? 'your query' : ex.mode === 'script' || isFile ? esc(file) : 'your command(s)'}</span><span>${ex.compare === 'verify' ? 'graded on the resulting files' : ''}</span></div>
-            <textarea class="editor" spellcheck="false" autocapitalize="off" autocomplete="off" id="ed-${ex.id}" aria-label="Answer for ${esc(ex.title)}" placeholder="${isSql ? 'SELECT …' : ex.mode === 'script' ? '#!/bin/bash' : isFile ? (ex.file === 'Dockerfile' ? 'FROM …' : 'services:') : 'type a command…'}"></textarea>
+            <div class="editor-label"><span>${isSql ? 'Your query' : ex.mode === 'script' || isFile ? esc(file) : 'Your command(s)'}${ex.compare === 'verify' ? ' · graded on the resulting files' : ''}</span><button type="button" class="btn quiet small b-reset">Reset</button></div>
+            <textarea class="editor" spellcheck="false" autocapitalize="off" autocomplete="off" id="ed-${ex.id}" aria-label="Answer for ${esc(ex.title)}" placeholder="${isSql ? 'SELECT …' : ex.mode === 'script' ? '#!/bin/bash' : isFile ? (ex.file === 'Dockerfile' ? 'FROM …' : 'services:') : 'Type a command…'}"></textarea>
             ${testsHTML}
-            <div class="btns">
-              <button type="button" class="btn primary b-check">Check</button>
-              <button type="button" class="btn b-run">Run</button>
-              <button type="button" class="btn ghost b-hint"${ex.hints.length ? '' : ' hidden'}>Hint</button>
-              <button type="button" class="btn ghost b-exp">Expected output</button>
-              <button type="button" class="btn ghost b-sol">Solution</button>
-              <button type="button" class="btn ghost b-reset">Reset</button>
-              <span class="kbd-hint"><kbd>⌘/Ctrl</kbd>+<kbd>Enter</kbd> run · +<kbd>Shift</kbd> check</span>
+            <div class="actions">
+              <div class="btns">
+                <button type="button" class="btn primary b-check">${ico('check')}Check</button>
+                <button type="button" class="btn b-run">${ico('play')}Run</button>
+                <span class="kbd-hint"><kbd>⌘/Ctrl</kbd> <kbd>Enter</kbd> runs, add <kbd>Shift</kbd> to check</span>
+              </div>
+              <div class="stuck" role="group" aria-label="Help">
+                <span class="stuck-label">Stuck?</span>
+                <button type="button" class="btn quiet b-hint"${ex.hints.length ? '' : ' hidden'}>Hint</button>
+                <button type="button" class="btn quiet b-exp">Expected output</button>
+                <button type="button" class="btn quiet b-sol">Solution</button>
+              </div>
             </div>
           </div>
           <div class="hints"></div>
@@ -461,11 +466,7 @@
       hintsEl.appendChild(el(`<div class="hint"><b>Hint ${hintN + 1}.</b> ${ex.hints[hintN].replace(/^<p>|<\/p>\s*$/g, '')}</div>`));
       hintN++; updateHintBtn();
     });
-    const markSolved = () => {
-      if (!progress.solved[ex.id]) { progress.solved[ex.id] = Date.now(); saveProgress(); toast('Solved ✓'); }
-      node.classList.add('solved');
-      refreshRail();
-    };
+    const markSolved = () => solvedNow(ex, node);
     async function run(check) {
       const code = ta.value;
       if (!code.trim() || (ex.mode === 'script' && !code.replace(/^#!.*$/m, '').trim())) { fb.innerHTML = `<div class="feedback bad">Write ${isSql ? 'a query' : ex.mode === 'script' ? 'your script' : isFile ? 'the file' : 'a command'} first.</div>`; return; }
@@ -505,7 +506,7 @@
           const exp = bashRun(ex, ex.solution, x.t);
           const cmp = compareText(bashTarget(ex, x.run), bashTarget(ex, exp), ex.unordered);
           const tag = $(`.res-tag[data-i="${i}"]`, out);
-          if (tag) tag.innerHTML = cmp.ok ? ' <span class="pass">✓ pass</span>' : ' <span class="fail">✗ fail</span>';
+          if (tag) tag.innerHTML = cmp.ok ? ` <span class="pass">${ico('check')} pass</span>` : ` <span class="fail">${ico('cross')} fail</span>`;
           if (cmp.note) note = cmp.note;
           if (!cmp.ok) { allOk = false; if (!firstBad) { firstBad = cmp; if (x.t) firstBad.msg = `Test ${i + 1} (${x.t.args || 'no args'}): ${cmp.msg}`; } }
         });
@@ -514,7 +515,7 @@
     }
     function showVerdict(cmp, extra = '') {
       if (cmp.ok) {
-        fb.innerHTML = `<div class="feedback ok">${cmp.note || 'Correct!'} ${progress.solved[ex.id] ? '' : 'Nice work.'}</div>` + (ex.explain ? `<div class="explain">${ex.explain}</div>` : '');
+        fb.innerHTML = `<div class="feedback ok">${ico('check')}${cmp.note || 'Correct.'}</div>` + (ex.explain ? `<div class="explain">${ex.explain}</div>` : '');
         markSolved();
       } else {
         fb.innerHTML = `<div class="feedback bad"><strong>${esc(cmp.msg)}</strong>${cmp.detail ? `<div class="${cmp.pre ? 'diffline' : 'detail'}">${esc(cmp.detail)}</div>` : ''}${extra ? `<div class="detail">${extra}</div>` : ''}</div>`;
@@ -524,9 +525,10 @@
     $('.b-check', node).addEventListener('click', () => run(true));
     $('.b-reset', node).addEventListener('click', () => { ta.value = starter; delete drafts[ex.id]; saveDrafts(); grow(); fb.innerHTML = ''; out.innerHTML = ''; });
     $('.b-exp', node).addEventListener('click', async (e) => {
-      if (!expEl.hidden) { expEl.hidden = true; e.target.textContent = 'Expected output'; return; }
+      const b = e.currentTarget;
+      if (!expEl.hidden) { expEl.hidden = true; b.textContent = 'Expected output'; b.setAttribute('aria-expanded', 'false'); return; }
       expEl.hidden = false;
-      e.target.textContent = 'Hide expected';
+      b.textContent = 'Hide expected'; b.setAttribute('aria-expanded', 'true');
       if (isSql) {
         expEl.innerHTML = '<div class="res-meta">Computing…</div>';
         try { await sqlReady; } catch (err) { expEl.innerHTML = `<div class="err-box">${esc(sqlErr.message)}</div>`; return; }
@@ -549,7 +551,7 @@
         $('.s-copy', solEl).addEventListener('click', () => copyText(ex.solution));
       };
       if (progress.solved[ex.id]) { reveal(); return; }
-      solEl.innerHTML = `<div class="confirm-row">Reveal the solution?${hintN < ex.hints.length ? ' A hint might be enough.' : ''} <button type="button" class="btn small s-yes">Show it</button><button type="button" class="btn small ghost s-no">Keep trying</button></div>`;
+      solEl.innerHTML = `<div class="confirm-row">Reveal the solution?${hintN < ex.hints.length ? ' A hint might be enough.' : ''} <button type="button" class="btn small s-yes">Show it</button><button type="button" class="btn small quiet s-no">Keep trying</button></div>`;
       $('.s-yes', solEl).addEventListener('click', reveal);
       $('.s-no', solEl).addEventListener('click', () => { solEl.innerHTML = ''; });
     });
@@ -559,143 +561,234 @@
 
   // ---------------------------------------------------------------- chrome
   const TRACK_META = {
-    sql: { glyph: '⋈', blurb: 'From SELECT to window functions: filtering, NULL logic, aggregation, every kind of join, subqueries, CTEs, data modification, schema design.', how: 'real SQLite database',
-      pages: [['practice', 'Practice', '◎', 'Practice all exercises'], ['review', 'Review', '?', 'Review quiz'], ['playground', 'Playground', '▸', 'SQL playground'], ['schema', 'Schema', '⋈', 'Database schema'], ['cheatsheet', 'Cheat sheet', '≡', 'Cheat sheet']] },
-    bash: { glyph: '$_', blurb: 'From navigating the filesystem to real scripts: quoting, redirection, pipelines, grep, sed, awk, find, variables, loops, functions.', how: 'bash simulator',
-      pages: [['practice', 'Practice', '◎', 'Practice all exercises'], ['review', 'Review', '?', 'Review quiz'], ['terminal', 'Terminal', '$', 'Terminal'], ['fs', 'Files', '/', 'Practice files'], ['cheatsheet', 'Cheat sheet', '≡', 'Cheat sheet']] },
-    docker: { glyph: '▣', blurb: 'Images, containers, Dockerfiles and layer caching, multi-stage builds, volumes, networks and Compose, all against a simulated Docker engine you can poke at.', how: 'Docker simulator',
-      pages: [['practice', 'Practice', '◎', 'Practice all exercises'], ['review', 'Review', '?', 'Review quiz'], ['terminal', 'Terminal', '▣', 'Docker terminal'], ['fs', 'Files', '/', 'Practice files'], ['cheatsheet', 'Cheat sheet', '≡', 'Cheat sheet']] },
-    fastapi: { glyph: '{}', blurb: 'HTTP and REST, path and query parameters, Pydantic models, validation, errors, dependency injection, databases, auth and testing.', how: 'requirement checker',
-      pages: [['practice', 'Practice', '◎', 'Practice all exercises'], ['review', 'Review', '?', 'Review quiz'], ['cheatsheet', 'Cheat sheet', '≡', 'Cheat sheet']] },
-    spring: { glyph: '@', blurb: 'Dependency injection, REST controllers, validation and error handling, Spring Data JPA, configuration and profiles, layering, testing.', how: 'requirement checker',
-      pages: [['practice', 'Practice', '◎', 'Practice all exercises'], ['review', 'Review', '?', 'Review quiz'], ['terminal', 'Terminal', '$', 'Maven terminal'], ['cheatsheet', 'Cheat sheet', '≡', 'Cheat sheet']] },
-    cicd: { glyph: '⟳', blurb: 'Continuous integration and delivery with GitHub Actions: triggers, jobs and matrices, caching, secrets and OIDC, building and publishing images, deployment strategies, reusable workflows.', how: 'requirement checker',
-      pages: [['practice', 'Practice', '◎', 'Practice all exercises'], ['review', 'Review', '?', 'Review quiz'], ['cheatsheet', 'Cheat sheet', '≡', 'Cheat sheet']] },
-    aws: { glyph: '☁', blurb: 'The AWS core for developers: IAM and policies, EC2, VPC networking, S3, RDS and DynamoDB, ECR and ECS, Lambda and messaging, CloudWatch, infrastructure as code and cost.', how: 'requirement checker',
-      pages: [['practice', 'Practice', '◎', 'Practice all exercises'], ['review', 'Review', '?', 'Review quiz'], ['cheatsheet', 'Cheat sheet', '≡', 'Cheat sheet']] },
-    java: { glyph: 'J', blurb: 'Object-oriented programming in Java from the ground up: classes and objects, encapsulation, inheritance, interfaces, polymorphism, collections, generics, exceptions, SOLID and design patterns.', how: 'requirement checker',
-      pages: [['practice', 'Practice', '◎', 'Practice all exercises'], ['review', 'Review', '?', 'Review quiz'], ['cheatsheet', 'Cheat sheet', '≡', 'Cheat sheet']] },
-    design: { glyph: '◇', blurb: 'System design and architecture: requirements and estimation, APIs, databases and scaling, caching, queues, consistency, reliability, architectural styles and full case studies.', how: 'requirement checker',
-      pages: [['practice', 'Practice', '◎', 'Practice all exercises'], ['review', 'Review', '?', 'Review quiz'], ['cheatsheet', 'Cheat sheet', '≡', 'Cheat sheet']] }
+    sql: { blurb: 'From SELECT to window functions: filtering, NULL logic, aggregation, every kind of join, subqueries, CTEs, data changes and schema design.',
+      pages: [['practice', 'All exercises'], ['review', 'Review quiz'], ['playground', 'SQL playground'], ['schema', 'Database schema'], ['cheatsheet', 'Cheat sheet']] },
+    bash: { blurb: 'From moving around the filesystem to real scripts: quoting, redirection, pipelines, grep, sed, awk, find, variables, loops and functions.',
+      pages: [['practice', 'All exercises'], ['review', 'Review quiz'], ['terminal', 'Terminal'], ['fs', 'Practice files'], ['cheatsheet', 'Cheat sheet']] },
+    docker: { blurb: 'Images, containers, Dockerfiles and layer caching, multi-stage builds, volumes, networks and Compose, against a simulated Docker engine.',
+      pages: [['practice', 'All exercises'], ['review', 'Review quiz'], ['terminal', 'Docker terminal'], ['fs', 'Practice files'], ['cheatsheet', 'Cheat sheet']] },
+    fastapi: { blurb: 'HTTP and REST, path and query parameters, Pydantic models, validation, errors, dependency injection, databases, auth and testing.',
+      pages: [['practice', 'All exercises'], ['review', 'Review quiz'], ['cheatsheet', 'Cheat sheet']] },
+    spring: { blurb: 'Dependency injection, REST controllers, validation and error handling, Spring Data JPA, configuration and profiles, layering, testing.',
+      pages: [['practice', 'All exercises'], ['review', 'Review quiz'], ['terminal', 'Maven terminal'], ['cheatsheet', 'Cheat sheet']] },
+    cicd: { blurb: 'Continuous integration and delivery with GitHub Actions: triggers, jobs and matrices, caching, secrets and OIDC, building and publishing images, deployment strategies, reusable workflows.',
+      pages: [['practice', 'All exercises'], ['review', 'Review quiz'], ['cheatsheet', 'Cheat sheet']] },
+    aws: { blurb: 'The AWS core for developers: IAM and policies, EC2, VPC networking, S3, RDS and DynamoDB, ECR and ECS, Lambda and messaging, CloudWatch, infrastructure as code and cost.',
+      pages: [['practice', 'All exercises'], ['review', 'Review quiz'], ['cheatsheet', 'Cheat sheet']] },
+    java: { blurb: 'Object-oriented programming in Java from the ground up: classes and objects, encapsulation, inheritance, interfaces, polymorphism, collections, generics, exceptions, SOLID and design patterns.',
+      pages: [['practice', 'All exercises'], ['review', 'Review quiz'], ['cheatsheet', 'Cheat sheet']] },
+    design: { blurb: 'System design and architecture: requirements and estimation, APIs, databases and scaling, caching, queues, consistency, reliability, architectural styles and full case studies.',
+      pages: [['practice', 'All exercises'], ['review', 'Review quiz'], ['cheatsheet', 'Cheat sheet']] }
   };
   const TRACK_IDS = PJ.tracks.map(t => t.id);
   let currentTrack = store.get('track', 'sql');
   if (!TRACKS[currentTrack]) currentTrack = 'sql';
-  $('#track-switch').innerHTML = TRACK_IDS.map(id => `<a href="#${id}" id="sw-${id}" class="sw-${id}"><span class="glyph">${TRACK_META[id].glyph}</span>${esc(TRACKS[id].title)}</a>`).join('');
-  function setTrack(t) {
+  const pad = n => String(n).padStart(2, '0');
+
+  // One pixel per exercise. Boss exercises take a double-width cell.
+  const strip = (exs, label) => `<span class="strip"${label ? ` role="img" aria-label="${esc(label)}"` : ' aria-hidden="true"'}>${exs.map(e => `<i class="px${e.level === 4 ? ' boss' : ''}${progress.solved[e.id] ? ' on' : ''}" data-ex="${e.id}"></i>`).join('')}</span>`;
+  const bar = (solved, total) => { const n = 24, on = total ? Math.round(solved / total * n) : 0; return `<div class="bar" aria-hidden="true">${Array.from({ length: n }, (_, i) => `<i${i < on ? ' class="on"' : ''}></i>`).join('')}</div>`; };
+
+  function exHead(ex) {
+    return `<header class="ex-head">
+      <span class="ex-num" aria-hidden="true">${pad(ex.num)}</span>
+      <h3 class="ex-title">${esc(ex.title)}</h3>
+      ${lvlTag(ex.level)}${ex.project ? '<span class="proj">Project</span>' : ''}
+      <span class="solved-tag">${ico('check')}Solved</span>
+    </header>`;
+  }
+  function solvedNow(ex, node) {
+    const first = !progress.solved[ex.id];
+    if (first) { progress.solved[ex.id] = Date.now(); saveProgress(); toast('Solved', 'check'); }
+    node.classList.add('solved');
+    refreshRail();
+    if (first) $$(`[data-ex="${ex.id}"]`).forEach(c => c.classList.add('on', 'lit'));
+  }
+
+  $('#tracks').innerHTML = TRACK_IDS.map(id => `<a href="#${id}" id="sw-${id}" style="--c: var(--${id})"><i class="sw" aria-hidden="true"></i>${esc(TRACKS[id].title)}</a>`).join('');
+  $('#brand-mark').innerHTML = TRACK_IDS.concat(Array(9).fill('')).slice(0, 9).map(id => `<i style="background: ${id ? `var(--${id})` : 'var(--band-line)'}"></i>`).join('');
+  function setTrack(t, highlight) {
     currentTrack = t;
     store.set('track', t);
     for (const id of TRACK_IDS) {
       document.body.classList.toggle('t-' + id, t === id);
-      $('#sw-' + id).classList.toggle('on', t === id);
+      $('#sw-' + id).setAttribute('aria-current', String(highlight && t === id));
     }
   }
-  let activeTok = 'home';
-  function renderTopnav() {
-    const items = [[TRACKS[currentTrack].modules[0].id, 'Lessons']].concat(TRACK_META[currentTrack].pages.map(([k, label]) => [`${currentTrack}-${k}`, label]));
-    const onLessons = !!MODS[activeTok];
-    $('#topnav').innerHTML = items.map(([tok, label], i) => `<a href="#${tok}" class="${(i === 0 ? onLessons : activeTok === tok) ? 'on' : ''}">${label}</a>`).join('');
+  function showRail(on) {
+    $('#shell').classList.toggle('no-rail', !on);
+    document.body.classList.toggle('home-route', !on);
   }
+
+  // Where "SQL" (or any track) should take you: the last place you were, else the first unfinished module.
+  const lastByTrack = store.get('lastByTrack', {});
+  function remember(hash, tid) {
+    lastByTrack[tid] = hash;
+    store.set('lastByTrack', lastByTrack);
+    store.set('last', hash);
+  }
+  function resumeHash(tid) {
+    const h = lastByTrack[tid];
+    if (h && MODS[h.split('/')[0]]) return h;
+    const t = TRACKS[tid];
+    return (t.modules.find(m => modStats(m).solved < modStats(m).total) || t.modules[0]).id;
+  }
+
+  let activeTok = 'home';
   function refreshRail() {
     const t = TRACKS[currentTrack];
     const st = trackStats(t);
     const pct = st.total ? Math.round(st.solved / st.total * 100) : 0;
-    const extra = TRACK_META[currentTrack].pages.map(([k, , ico, label]) => [`${currentTrack}-${k}`, ico, label]);
+    const activeMod = activeTok.split('/')[0];
     $('#rail').innerHTML = `
       <div class="rail-head">
-        <div class="eyebrow">Track</div>
-        <p class="rail-title">${t.title}</p>
-        <div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="${st.total}" aria-valuenow="${st.solved}"><i style="width:${pct}%"></i></div>
-        <div class="meter-label">${st.solved} of ${st.total} exercises solved</div>
+        <p class="rail-title">${esc(t.title)}</p>
+        ${bar(st.solved, st.total)}
+        <div class="rail-stat"><span><b>${st.solved}</b> of ${st.total} solved</span><span>${pct}%</span></div>
       </div>
-      <ol class="mods">${t.modules.map((m, i) => { const s = modStats(m); return `<li><a href="#${m.id}" class="${activeTok === m.id ? 'on' : ''}"><span class="num">${String(i + 1).padStart(2, '0')}</span><span>${esc(m.title)}</span><span class="cnt${s.solved === s.total ? ' done' : ''}">${s.solved === s.total ? '✓' : `${s.solved}/${s.total}`}</span></a></li>`; }).join('')}</ol>
-      <div class="rail-sep"></div>
-      <div class="rail-links">${extra.map(([tok, ico, label]) => `<a href="#${tok}" class="${activeTok === tok ? 'on' : ''}"><span class="ico">${ico}</span>${label}</a>`).join('')}</div>`;
+      <nav class="rail-group" aria-label="${esc(t.title)} modules">
+        <div class="rail-label">Modules</div>
+        <ol class="mods">${t.modules.map((m, i) => { const s = modStats(m); return `<li><a href="#${m.id}"${activeMod === m.id ? ' aria-current="page"' : ''}><span class="num">${pad(i + 1)}</span><span class="mt">${esc(m.title)}</span>${strip(m.exercises, `${s.solved} of ${s.total} solved`)}</a></li>`; }).join('')}</ol>
+      </nav>
+      <nav class="rail-group" aria-label="${esc(t.title)} practice and reference">
+        <div class="rail-label">Practice and reference</div>
+        <ul class="tools">${TRACK_META[currentTrack].pages.map(([k, label]) => `<li><a href="#${currentTrack}-${k}"${activeTok === `${currentTrack}-${k}` ? ' aria-current="page"' : ''}>${label}</a></li>`).join('')}</ul>
+      </nav>`;
   }
-  function closeRail() { document.body.classList.remove('rail-open'); $('#menu-btn').setAttribute('aria-expanded', 'false'); }
-  $('#menu-btn').addEventListener('click', () => {
-    const open = !document.body.classList.contains('rail-open');
+  function setRailOpen(open) {
     document.body.classList.toggle('rail-open', open);
     $('#menu-btn').setAttribute('aria-expanded', String(open));
-  });
+    if (open) { const a = $('#rail a[aria-current]') || $('#rail a'); if (a) a.focus({ preventScroll: true }); }
+  }
+  const closeRail = () => setRailOpen(false);
+  $('#menu-btn').addEventListener('click', () => setRailOpen(!document.body.classList.contains('rail-open')));
+  $('#scrim').addEventListener('click', closeRail);
   $('#rail').addEventListener('click', e => { if (e.target.closest('a')) closeRail(); });
-  document.addEventListener('click', e => {
-    if (document.body.classList.contains('rail-open') && !e.target.closest('#rail') && !e.target.closest('#menu-btn')) closeRail();
-  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.body.classList.contains('rail-open')) { closeRail(); $('#menu-btn').focus(); } });
 
   // ----------------------------------------------------------------- pages
   const main = $('#main');
   function page(html, wide) { main.innerHTML = `<div class="page${wide ? ' wide' : ''}">${html}</div>`; return main.firstElementChild; }
 
   function renderHome() {
-    const card = (t) => {
+    const last = store.get('last', null);
+    const lastMod = last && MODS[last.split('/')[0]];
+    let resume;
+    if (lastMod) {
+      const [, stepKey, n] = last.split('/');
+      const s = modStats(lastMod);
+      const where = stepKey === 'exercises' ? (n && lastMod.exercises[n - 1] ? `Exercise ${n}: ${lastMod.exercises[n - 1].title}` : 'Exercises') : stepKey === 'quiz' ? 'Quick check' : 'Lesson';
+      resume = `<section class="resume t-${lastMod.track}" aria-labelledby="resume-h">
+        <div>
+          <h2 id="resume-h">Continue ${esc(lastMod.title)}</h2>
+          <p>${esc(lastMod.trackObj.title)}, module ${lastMod.index + 1} · ${esc(where)} · ${s.solved} of ${s.total} solved</p>
+          ${strip(lastMod.exercises)}
+        </div>
+        <a class="btn primary" href="#${last}">Continue ${ico('right')}</a>
+      </section>`;
+    } else {
+      const m = PJ.tracks[0].modules[0];
+      resume = `<section class="resume t-${m.track}" aria-labelledby="resume-h">
+        <div>
+          <h2 id="resume-h">Start with ${esc(m.trackObj.title)}: ${esc(m.title)}</h2>
+          <p>Every track starts with a short lesson. Or pick any track below; progress saves in this browser as you go.</p>
+        </div>
+        <a class="btn primary" href="#${m.id}">Start the first lesson ${ico('right')}</a>
+      </section>`;
+    }
+    const panel = (t) => {
       const st = trackStats(t);
-      const meta = TRACK_META[t.id];
-      const next = t.modules.find(m => modStats(m).solved < modStats(m).total) || t.modules[0];
-      return `<div class="tcard t-${t.id}">
-        <h2><span class="glyph">${meta.glyph}</span>${esc(t.title)}</h2>
-        <p>${meta.blurb}</p>
-        <div class="stats"><div><b>${t.modules.length}</b><span>modules</span></div><div><b>${st.total}</b><span>exercises</span></div><div><b>${st.quiz}</b><span>quiz qs</span></div><div><b>${st.solved}</b><span>solved</span></div></div>
-        <div class="meter"><i style="width:${st.total ? st.solved / st.total * 100 : 0}%"></i></div>
-        <details class="mod-details"><summary>${t.modules.length} modules</summary><ul class="mod-preview">${t.modules.map((m, i) => `<li><a href="#${m.id}">${String(i + 1).padStart(2, '0')} ${esc(m.title)}</a></li>`).join('')}</ul></details>
-        <div class="btns"><a class="btn primary" href="#${next.id}">${st.solved ? 'Continue' : 'Start'}</a><a class="btn" href="#${t.id}-practice">Practice</a><a class="btn" href="#${t.id}-review">Review</a></div>
-      </div>`;
+      return `<section class="tpanel t-${t.id}" aria-labelledby="tp-${t.id}">
+        <div class="tpanel-top"><h2 id="tp-${t.id}"><a href="#${t.id}">${esc(t.title)}</a></h2><span class="count"><b>${st.solved}</b> / ${st.total} solved</span></div>
+        <p>${TRACK_META[t.id].blurb}</p>
+        <div class="map">${t.modules.map((m, i) => { const s = modStats(m); return `<a href="#${m.id}"><span class="mn">${pad(i + 1)}</span>${strip(m.exercises)}<span class="mt">${esc(m.title)}<span class="sr">, ${s.solved} of ${s.total} solved</span></span></a>`; }).join('')}</div>
+        <div class="btns"><a class="btn primary" href="#${t.id}">${st.solved ? 'Continue' : 'Start'} ${ico('right')}</a><a class="btn quiet" href="#${t.id}-practice">All exercises</a><a class="btn quiet" href="#${t.id}-review">Review quiz</a></div>
+      </section>`;
     };
     const total = PJ.tracks.reduce((a, t) => a + trackStats(t).total, 0);
-    page(`
-      <section class="hero">
-        <div class="eyebrow">Study lab · ${PJ.tracks.length} tracks · ${total} graded exercises</div>
-        <h1><span class="p">pr</span><span class="j">ac</span></h1>
-        <p class="lede">Lessons that teach the concepts, then graded exercises from warm-up to boss level. Queries run on a real SQLite database; shell and Docker commands run in simulators; FastAPI, Spring Boot, Java, CI/CD workflows, AWS configuration and system designs are checked against requirement lists. Each track builds one project step by step. All in your browser.</p>
+    main.innerHTML = `<div class="home">
+      <section class="intro">
+        <h1>Learn it by doing it.</h1>
+        <p class="lede">${PJ.tracks.length} tracks, ${total} graded exercises. Read a short lesson, check yourself, then solve problems from warm-up to boss level while building one project per track. Queries run on a real SQLite database, shell and Docker commands in simulators, and code, workflows and designs are checked against requirements, all in your browser.</p>
       </section>
-      <div class="track-cards">${PJ.tracks.map(card).join('')}</div>
-      <div class="section-head"><h2>How exercises work</h2></div>
-      <div class="howto">
-        <div><b>Run</b><p>Executes your answer and shows the real output. Every run starts from a fresh database, filesystem or Docker engine.</p></div>
-        <div><b>Check</b><p>Compares with the reference solution, or checks your code against a list of requirements, and tells you specifically what's off.</p></div>
-        <div><b>Predict</b><p>Some exercises show code and a request and ask what comes back: status code, JSON body, or output.</p></div>
-        <div><b>Hints, then solution</b><p>Hints reveal one at a time. Progress, quiz answers and drafts are saved in this browser.</p></div>
-      </div>
-      <div class="section-head"><h2>Difficulty levels</h2></div>
-      <div class="legend">${[1, 2, 3, 4].map(l => `<span class="lvl lvl-${l}">${LEVELS[l]}</span>`).join('')}<span>Warm-ups check one idea. Practice combines two or three. Challenges need real thinking. Boss problems are exam- and interview-grade.</span></div>
-    `, true);
+      ${resume}
+      <div class="grid">${PJ.tracks.map(panel).join('')}</div>
+      <section class="section" aria-labelledby="how-h">
+        <div class="section-head"><h2 class="h2" id="how-h">How exercises work</h2><span class="aside">Each square on a map is one exercise. It fills when you solve it.</span></div>
+        <p class="howto"><b>Run</b> executes your answer and shows the real output, starting each time from a fresh database, filesystem or Docker engine. <b>Check</b> compares it with the reference solution, or a list of requirements, and says specifically what's off. If you're <b>stuck</b>, hints reveal one at a time, with expected output and the full solution behind them. Progress, quiz answers and drafts are <b>saved</b> in this browser, so you can stop anywhere.</p>
+        <div class="legend">${[1, 2, 3, 4].map(l => lvlTag(l)).join('')}<span><i class="px boss" style="display:inline-block;vertical-align:middle"></i> Boss problems are exam- and interview-grade and take a double square.</span></div>
+      </section>
+    </div>`;
   }
 
-  function renderModule(m) {
+  function renderModule(m, stepKey, exN) {
     const t = m.trackObj;
     const s = modStats(m);
     const prev = t.modules[m.index - 1], next = t.modules[m.index + 1];
-    const levels = [...new Set(m.exercises.map(e => e.level))].sort();
+    const hasQuiz = m.quiz.length > 0;
+    if (stepKey === 'quiz' && !hasQuiz) stepKey = 'exercises';
+    if (stepKey !== 'quiz' && stepKey !== 'exercises') stepKey = 'lesson';
+    const steps = [['lesson', 'Lesson', '', `#${m.id}`]];
+    if (hasQuiz) steps.push(['quiz', 'Quick check', `${m.quiz.length} questions`, `#${m.id}/quiz`]);
+    steps.push(['exercises', 'Exercises', `${s.solved}/${s.total}`, `#${m.id}/exercises`]);
+    const nextLink = (label, href, text) => `<div class="next-step"><p>${text}</p><a class="btn primary" href="${href}">${label} ${ico('right')}</a></div>`;
     const p = page(`
-      <div class="eyebrow"><span class="trk">${t.title}</span> · Module ${m.index + 1} of ${t.modules.length} · about ${m.minutes} min</div>
-      <h1 class="page-title">${esc(m.title)}</h1>
-      <p class="lede">${esc(m.summary)}</p>
-      <div class="chips"><span class="chip trk">${m.exercises.length} exercises</span>${m.quiz.length ? `<span class="chip">${m.quiz.length} quiz questions</span>` : ''}<span class="chip">${s.solved}/${s.total} solved</span></div>
-      <div class="chips" style="margin-top:6px"><a class="btn small ghost" href="#" data-jump="quiz">Jump to quick check ↓</a><a class="btn small ghost" href="#" data-jump="exercises">Jump to exercises ↓</a></div>
-      <article class="prose lesson">${m.lesson}</article>
-      ${m.quiz.length ? `<div class="section-head" id="sec-quiz"><h2>Quick check</h2><span class="aside">Click an answer to see why.</span></div><div class="quiz"></div>` : ''}
-      <div class="section-head" id="sec-exercises"><h2>Exercises</h2><div class="ex-filter" role="group" aria-label="Filter by level"><button type="button" class="on" data-l="all">All</button>${levels.map(l => `<button type="button" data-l="${l}">${LEVELS[l]}</button>`).join('')}<button type="button" data-l="open">Unsolved</button></div></div>
-      <div class="ex-list"></div>
-      <nav class="pager">${prev ? `<a href="#${prev.id}"><span>← Previous</span><b>${esc(prev.title)}</b></a>` : '<span></span>'}${next ? `<a class="next" href="#${next.id}"><span>Next →</span><b>${esc(next.title)}</b></a>` : `<a class="next" href="#${t.id}-practice"><span>Finished the track?</span><b>Mixed practice →</b></a>`}</nav>
+      <div class="mod-head">
+        <h1 class="page-title">${esc(m.title)}</h1>
+        <p class="lede">${esc(m.summary)}</p>
+        <div class="meta"><span>${esc(t.title)}, module <b>${m.index + 1}</b> of ${t.modules.length}</span><span>About ${m.minutes} min</span><span><b>${s.solved}</b> of ${s.total} exercises solved</span></div>
+      </div>
+      <div class="mod-strip" role="group" aria-label="Exercises: ${s.solved} of ${s.total} solved">${m.exercises.map((e, i) => `<a href="#${m.id}/exercises/${i + 1}" aria-label="Exercise ${i + 1}: ${esc(e.title)}${progress.solved[e.id] ? ', solved' : ''}"><i class="px${e.level === 4 ? ' boss' : ''}${progress.solved[e.id] ? ' on' : ''}" data-ex="${e.id}"></i></a>`).join('')}</div>
+      <nav class="steps" aria-label="Module steps">${steps.map(([k, label, c, href], i) => `<a href="${href}"${k === stepKey ? ' aria-current="page"' : ''}><span class="n">${i + 1}</span>${label}${c ? `<span class="c">${c}</span>` : ''}</a>`).join('')}</nav>
+      <div id="step"></div>
     `);
-    $$('[data-jump]', p).forEach(a => a.addEventListener('click', e => { e.preventDefault(); const target = $('#sec-' + a.dataset.jump); if (target) target.scrollIntoView({ behavior: 'smooth' }); }));
-    wireCodeBlocks($('.lesson', p), t.id);
-    const quiz = $('.quiz', p);
-    if (quiz) m.quiz.forEach(q => quiz.appendChild(renderQuiz(q)));
-    const list = $('.ex-list', p);
-    m.exercises.forEach(ex => list.appendChild(renderExercise(ex)));
-    $$('.ex-filter button', p).forEach(b => b.addEventListener('click', () => {
-      $$('.ex-filter button', p).forEach(x => x.classList.toggle('on', x === b));
-      const l = b.dataset.l;
-      $$('.ex', list).forEach(card => { card.hidden = l === 'all' ? false : l === 'open' ? card.classList.contains('solved') : card.dataset.level !== l; });
-    }));
-    if (!sqlErr && t.id === 'sql') sqlReady.catch(() => {});
+    p.classList.add('mod');
+    const box = $('#step', p);
+    if (stepKey === 'lesson') {
+      box.innerHTML = `<article class="prose lesson">${m.lesson}</article>` +
+        (hasQuiz ? nextLink('Quick check', `#${m.id}/quiz`, `Done reading? ${m.quiz.length} quick questions to check the ideas stuck.`)
+          : nextLink('Exercises', `#${m.id}/exercises`, `Done reading? Try the ${m.exercises.length} exercises.`));
+      wireCodeBlocks($('.lesson', box), t.id);
+    } else if (stepKey === 'quiz') {
+      const quiz = el('<div class="quiz"></div>');
+      m.quiz.forEach((q, i) => quiz.appendChild(renderQuiz(q, null, `${i + 1} of ${m.quiz.length}`)));
+      box.appendChild(quiz);
+      box.appendChild(el(nextLink('Exercises', `#${m.id}/exercises`, `Next: ${m.exercises.length} exercises, from ${LEVELS[Math.min(...m.exercises.map(e => e.level))].toLowerCase()} to ${LEVELS[Math.max(...m.exercises.map(e => e.level))].toLowerCase()}.`)));
+    } else {
+      const firstOpen = m.exercises.findIndex(e => !progress.solved[e.id]);
+      let cur = exN >= 1 && exN <= m.exercises.length ? exN - 1 : Math.max(firstOpen, 0);
+      box.innerHTML = `
+        <div class="stepper" role="group" aria-label="Exercises in this module">${m.exercises.map((e, i) => `<button type="button" data-i="${i}" data-ex="${e.id}" class="${e.level === 4 ? 'boss' : ''}${progress.solved[e.id] ? ' on' : ''}" aria-label="Exercise ${i + 1}: ${esc(e.title)}, ${LEVELS[e.level]}${progress.solved[e.id] ? ', solved' : ''}">${i + 1}</button>`).join('')}</div>
+        <div class="stepper-key" aria-hidden="true"><span><i class="px on"></i>Solved</span><span><i class="px"></i>Open</span><span><i class="px boss"></i>Boss</span></div>
+        <div class="ex-slot"></div>
+        <div class="ex-nav"><button type="button" class="btn ex-prev">${ico('left')}Previous exercise</button><button type="button" class="btn ex-next">Next exercise ${ico('right')}</button></div>
+        <nav class="pager" aria-label="Modules">${prev ? `<a href="#${prev.id}"><small>Previous module</small><b>${esc(prev.title)}</b></a>` : '<span></span>'}${next ? `<a class="next" href="#${next.id}"><small>Next module</small><b>${esc(next.title)}</b></a>` : `<a class="next" href="#${t.id}-practice"><small>Finished the track?</small><b>Mixed practice</b></a>`}</nav>`;
+      const slot = $('.ex-slot', box);
+      const nodes = m.exercises.map(ex => { const n = renderExercise(ex); n.hidden = true; slot.appendChild(n); return n; });
+      const btns = $$('.stepper button', box);
+      const prevB = $('.ex-prev', box), nextB = $('.ex-next', box);
+      const show = (i, focus) => {
+        cur = i;
+        nodes.forEach((n, j) => { n.hidden = j !== i; });
+        btns.forEach((b, j) => { if (j === i) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current'); });
+        prevB.disabled = i === 0;
+        nextB.disabled = i === nodes.length - 1;
+        const h = `${m.id}/exercises/${i + 1}`;
+        history.replaceState(null, '', '#' + h);
+        remember(h, t.id);
+        if (focus) { const ed = $('textarea, input', nodes[i]); nodes[i].scrollIntoView({ block: 'nearest' }); if (ed) ed.focus({ preventScroll: true }); }
+      };
+      btns.forEach((b, i) => b.addEventListener('click', () => show(i, true)));
+      prevB.addEventListener('click', () => show(cur - 1, true));
+      nextB.addEventListener('click', () => show(cur + 1, true));
+      show(cur, false);
+    }
+    if (stepKey !== 'exercises') remember(stepKey === 'quiz' ? `${m.id}/quiz` : m.id, t.id);
   }
 
   function renderPractice(tid) {
     const t = TRACKS[tid];
     const p = page(`
-      <div class="eyebrow"><span class="trk">${t.title}</span> · Practice</div>
       <h1 class="page-title">All ${t.title} exercises</h1>
       <p class="lede">Every exercise from every module in one place. Filter to what you need, or pull a random unsolved one for spaced review.</p>
       <div class="toolbar">
@@ -714,7 +807,7 @@
     const open = (ex) => {
       focus.innerHTML = '';
       focus.appendChild(renderExercise(ex, { showModule: true }));
-      focus.appendChild(el(`<div class="btns" style="margin:10px 0 26px"><a class="btn small" href="#${ex.mod.id}">Open the ${esc(ex.mod.title)} lesson</a><button type="button" class="btn small ghost pf-close">Close</button></div>`));
+      focus.appendChild(el(`<div class="btns" style="margin:12px 0 32px"><a class="btn small" href="#${ex.mod.id}">Open the ${esc(ex.mod.title)} lesson</a><button type="button" class="btn small quiet pf-close">Close</button></div>`));
       $('.pf-close', focus).addEventListener('click', () => { focus.innerHTML = ''; draw(); });
       focus.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
@@ -725,7 +818,7 @@
       const box = $('#pf-list', p);
       box.innerHTML = list.length ? '' : '<div class="empty">Nothing matches these filters.</div>';
       for (const e of list) {
-        const row = el(`<button type="button" class="ex-row"><span class="tick${progress.solved[e.id] ? '' : ' no'}">${progress.solved[e.id] ? '✓' : '○'}</span><span>${esc(e.title)}</span><span class="mod">${esc(e.mod.title)}</span><span class="lvl lvl-${e.level}">${LEVELS[e.level]}</span></button>`);
+        const row = el(`<button type="button" class="ex-row"><i class="px${progress.solved[e.id] ? ' on' : ''}" aria-hidden="true"></i><span>${esc(e.title)}${progress.solved[e.id] ? '<span class="sr">, solved</span>' : ''}</span><span class="mod">${esc(e.mod.title)}</span>${lvlTag(e.level)}</button>`);
         row.addEventListener('click', () => open(e));
         box.appendChild(row);
       }
@@ -745,7 +838,6 @@
     const t = TRACKS[tid];
     const all = t.modules.flatMap(m => m.quiz.map(q => Object.assign({ mod: m }, q)));
     const p = page(`
-      <div class="eyebrow"><span class="trk">${t.title}</span> · Review</div>
       <h1 class="page-title">${t.title} concept review</h1>
       <p class="lede">All ${all.length} quick-check questions from the ${t.title} modules, shuffled. Good for a final pass before an exam.</p>
       <div class="toolbar">
@@ -772,7 +864,7 @@
       box.innerHTML = `<div class="res-meta"><span>Question ${idx + 1} of ${deck.length}</span><span>${right} correct so far</span><span>from <a href="#${q.mod.id}">${esc(q.mod.title)}</a></span></div>`;
       const card = renderQuiz(q, ok => {
         if (ok) right++; else missed.push(q);
-        const nb = el(`<div class="btns"><button type="button" class="btn primary">${idx + 1 < deck.length ? 'Next question →' : 'See results'}</button></div>`);
+        const nb = el(`<div class="btns"><button type="button" class="btn primary">${idx + 1 < deck.length ? 'Next question ' + ico('right') : 'See results'}</button></div>`);
         $('button', nb).addEventListener('click', () => { idx++; show(); });
         card.appendChild(nb);
         $('button', nb).focus();
@@ -788,14 +880,13 @@
   async function renderPlayground() {
     const sample = '-- Try anything. Statements run against a persistent copy of the practice DB.\nSELECT d.name AS department, COUNT(e.emp_id) AS headcount, ROUND(AVG(e.salary)) AS avg_salary\nFROM departments d\nLEFT JOIN employees e ON e.dept_id = d.dept_id\nGROUP BY d.dept_id\nORDER BY headcount DESC;';
     const p = page(`
-      <div class="eyebrow"><span class="trk">SQL</span> · Playground</div>
       <h1 class="page-title">SQL playground</h1>
       <p class="lede">A scratch database that keeps your changes until you reset it. Create tables, insert rows, break things.</p>
       <div class="pg">
         <div>
           <div class="editor-label"><span>query</span><span>several statements are fine; each result is shown</span></div>
           <textarea class="editor" id="pg-ed" spellcheck="false" aria-label="SQL editor" style="min-height:160px"></textarea>
-          <div class="btns"><button type="button" class="btn primary" id="pg-run">Run ▸</button><button type="button" class="btn" id="pg-reset">Reset database</button><select id="pg-ex" aria-label="Example queries" class="btn"><option value="">Load an example…</option></select><span class="kbd-hint"><kbd>⌘/Ctrl</kbd>+<kbd>Enter</kbd> runs</span></div>
+          <div class="btns"><button type="button" class="btn primary" id="pg-run">${ico('play')}Run</button><button type="button" class="btn" id="pg-reset">Reset database</button><select id="pg-ex" aria-label="Example queries"><option value="">Load an example…</option></select><span class="kbd-hint"><kbd>⌘/Ctrl</kbd> <kbd>Enter</kbd> runs</span></div>
           <div id="pg-out" style="margin-top:16px"></div>
         </div>
         <aside><div class="editor-label"><span>tables</span><span>click a column (or double-click a table) to insert it</span></div><div class="schema-list" id="pg-schema">Loading…</div></aside>
@@ -864,7 +955,6 @@
   };
   async function renderSchema() {
     const p = page(`
-      <div class="eyebrow"><span class="trk">SQL</span> · Reference</div>
       <h1 class="page-title">The practice database</h1>
       <p class="lede">Ten tables in three little worlds. Keys are marked; arrows show foreign keys. The quirks noted under each table are deliberate: they're what the trickier exercises test.</p>
       <div class="schema-cards" id="sc">Loading…</div>`);
@@ -877,8 +967,8 @@
       const fkMap = {}; fks.forEach(f => { fkMap[f[3]] = `${f[2]}.${f[4]}`; });
       const n = execAll(db, `SELECT COUNT(*) FROM ${tn}`)[0].values[0][0];
       const sample = execAll(db, `SELECT * FROM ${tn} LIMIT 3`)[0];
-      return `<div class="schema-card"><div class="world-tag">${TABLE_INFO[tn][0]}</div><h3>${tn} <span class="chip">${n} rows</span></h3><p class="desc">${TABLE_INFO[tn][1]}</p>
-        <div class="table-wrap"><table class="md-table"><thead><tr><th>column</th><th>type</th><th>key</th></tr></thead><tbody>${cols.map(c => `<tr><td><code>${c[1]}</code></td><td>${c[2]}${c[3] ? ' NOT NULL' : ''}</td><td>${c[5] ? 'PK' : ''}${fkMap[c[1]] ? `<span class="fk">→ ${fkMap[c[1]]}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>
+      return `<div class="schema-card"><h3>${tn} <small>${TABLE_INFO[tn][0]} · ${n} rows</small></h3><p class="desc">${TABLE_INFO[tn][1]}</p>
+        <div class="table-wrap"><table class="md-table"><thead><tr><th>column</th><th>type</th><th>key</th></tr></thead><tbody>${cols.map(c => `<tr><td><code>${c[1]}</code></td><td>${c[2]}${c[3] ? ' NOT NULL' : ''}</td><td>${c[5] ? 'PK' : ''}${fkMap[c[1]] ? `<span class="fk">references ${fkMap[c[1]]}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>
         <div class="res-meta">first 3 rows</div>${tableHTML(sample)}</div>`;
     }).join('');
     db.close();
@@ -963,12 +1053,11 @@
   function renderTerminal(tid) {
     const T = TERMINALS[tid] || TERMINALS.bash;
     const p = page(`
-      <div class="eyebrow"><span class="trk">${esc(TRACKS[tid].title)}</span> · Terminal</div>
       <h1 class="page-title">${T.title}</h1>
       <p class="lede">${T.lede}</p>
       <div class="term-bar">
         <button type="button" class="btn" id="t-reset">Reset</button>
-        ${T.cmds.map(c => `<button type="button" class="btn small ghost t-cmd" data-c="${esc(c)}"><code>${esc(c)}</code></button>`).join('')}
+        ${T.cmds.map(c => `<button type="button" class="btn small quiet t-cmd" data-c="${esc(c)}"><code>${esc(c)}</code></button>`).join('')}
       </div>
       <div class="term" id="term"></div>
     `, true);
@@ -985,7 +1074,6 @@
     const tree = sh.run('tree -a', { tty: false }).stdout;
     const files = Object.keys(spec).filter(k => !spec[k].dir);
     const p = page(`
-      <div class="eyebrow"><span class="trk">${esc(TRACKS[tid].title)}</span> · Reference</div>
       <h1 class="page-title">Practice files</h1>
       <p class="lede">Every ${esc(TRACKS[tid].title)} exercise starts in <code>/home/student</code> with this exact set of files. Pick one to see its contents.</p>
       <div class="pg">
@@ -1006,33 +1094,37 @@
 
   function renderCheatsheet(tid) {
     const html = PJ.extra['cheatsheet-' + tid] || '<p>Coming soon.</p>';
-    const p = page(`<div class="eyebrow"><span class="trk">${TRACKS[tid].title}</span> · Reference</div><h1 class="page-title">${TRACKS[tid].title} cheat sheet</h1><p class="lede">The whole track on a few screens. Runnable examples work here too.</p><article class="prose lesson-wide">${html}</article>`);
     wireCodeBlocks(p, tid);
   }
 
   // ---------------------------------------------------------------- router
   function route() {
-    let tok = location.hash.replace(/^#/, '') || 'home';
-    if (TRACKS[tok]) tok = TRACKS[tok].modules[0].id;
-    if (tok.startsWith('ex-') && EXS[tok.slice(3)]) {
-      const ex = EXS[tok.slice(3)];
-      tok = ex.mod.id;
-      setTimeout(() => { const n = document.getElementById('ex-' + ex.id); if (n) n.scrollIntoView({ block: 'start' }); }, 50);
-    }
-    activeTok = tok;
+    const raw = decodeURIComponent(location.hash.replace(/^#/, '')) || 'home';
+    let [tok, stepKey, n] = raw.split('/');
+    if (TRACKS[tok]) { location.replace('#' + resumeHash(tok)); return; }
+    if (tok.startsWith('ex-') && EXS[tok.slice(3)]) { const ex = EXS[tok.slice(3)]; tok = ex.mod.id; stepKey = 'exercises'; n = ex.num; }
     const m = MODS[tok];
-    let trackOf = currentTrack, pageKey = null;
+    let pageKey = null, trackOf = currentTrack;
     if (m) trackOf = m.track;
     else {
       const dash = tok.indexOf('-');
       const tid = tok.slice(0, dash), key = tok.slice(dash + 1);
       if (TRACKS[tid] && TRACK_META[tid].pages.some(p => p[0] === key)) { trackOf = tid; pageKey = key; }
     }
-    setTrack(trackOf);
-    renderTopnav();
-    refreshRail();
     closeRail();
-    if (m) renderModule(m);
+    if (!m && !pageKey) {
+      activeTok = 'home';
+      setTrack(currentTrack, false);
+      showRail(false);
+      renderHome();
+      window.scrollTo(0, 0);
+      return;
+    }
+    activeTok = tok;
+    setTrack(trackOf, true);
+    showRail(true);
+    refreshRail();
+    if (m) renderModule(m, stepKey, +n);
     else if (pageKey === 'practice') renderPractice(trackOf);
     else if (pageKey === 'review') renderReview(trackOf);
     else if (pageKey === 'playground') renderPlayground();
@@ -1040,7 +1132,6 @@
     else if (pageKey === 'terminal') renderTerminal(trackOf);
     else if (pageKey === 'fs') renderFiles(trackOf);
     else if (pageKey === 'cheatsheet') renderCheatsheet(trackOf);
-    else { activeTok = 'home'; renderTopnav(); refreshRail(); renderHome(); }
     window.scrollTo(0, 0);
   }
   window.addEventListener('hashchange', route);

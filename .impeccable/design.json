@@ -1,0 +1,1000 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-13T22:49:52.870Z",
+  "title": "Design System: prac",
+  "extensions": {
+    "themes": {
+      "note": "Light values are canonical in the frontmatter. Dark values apply under prefers-color-scheme: dark (unless data-theme=\"light\") and under data-theme=\"dark\"; see colorMeta.<token>.dark. band-ink, band-muted, term-ink, term-dim, term-err and term-prompt do not change.",
+      "trackScope": ".t-sql | .t-bash | .t-docker | .t-fastapi | .t-spring set --trk and --trk-soft; components reference var(--trk) / var(--trk-soft), never a specific track."
+    },
+    "colorMeta": {
+      "ground": {
+        "role": "neutral",
+        "displayName": "Cool Ground",
+        "cssVar": "--ground",
+        "canonical": "#eceff2",
+        "oklch": "oklch(95.1% 0.005 248)",
+        "dark": "#0b0d10",
+        "tonalRamp": [
+          "oklch(15% 0.001 248)",
+          "oklch(26% 0.002 248)",
+          "oklch(38% 0.004 248)",
+          "oklch(49% 0.005 248)",
+          "oklch(61% 0.005 248)",
+          "oklch(72% 0.004 248)",
+          "oklch(84% 0.002 248)",
+          "oklch(95% 0.001 248)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Sheet White",
+        "cssVar": "--surface",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 90)",
+        "dark": "#13161a",
+        "tonalRamp": [
+          "oklch(15% 0.000 90)",
+          "oklch(26% 0.000 90)",
+          "oklch(38% 0.000 90)",
+          "oklch(49% 0.000 90)",
+          "oklch(61% 0.000 90)",
+          "oklch(72% 0.000 90)",
+          "oklch(84% 0.000 90)",
+          "oklch(95% 0.000 90)"
+        ]
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Pressed Grey",
+        "cssVar": "--surface-2",
+        "canonical": "#e2e6ea",
+        "oklch": "oklch(92.3% 0.007 248)",
+        "dark": "#1c2025",
+        "tonalRamp": [
+          "oklch(15% 0.001 248)",
+          "oklch(26% 0.003 248)",
+          "oklch(38% 0.005 248)",
+          "oklch(49% 0.007 248)",
+          "oklch(61% 0.007 248)",
+          "oklch(72% 0.005 248)",
+          "oklch(84% 0.003 248)",
+          "oklch(95% 0.001 248)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "cssVar": "--ink",
+        "canonical": "#0f1216",
+        "oklch": "oklch(18.1% 0.010 256)",
+        "dark": "#e9ecef",
+        "tonalRamp": [
+          "oklch(15% 0.001 256)",
+          "oklch(26% 0.004 256)",
+          "oklch(38% 0.007 256)",
+          "oklch(49% 0.009 256)",
+          "oklch(61% 0.009 256)",
+          "oklch(72% 0.007 256)",
+          "oklch(84% 0.004 256)",
+          "oklch(95% 0.001 256)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Slate",
+        "cssVar": "--muted",
+        "canonical": "#545d68",
+        "oklch": "oklch(47.5% 0.021 253)",
+        "dark": "#9ba5b0",
+        "tonalRamp": [
+          "oklch(15% 0.003 253)",
+          "oklch(26% 0.009 253)",
+          "oklch(38% 0.015 253)",
+          "oklch(49% 0.021 253)",
+          "oklch(61% 0.021 253)",
+          "oklch(72% 0.015 253)",
+          "oklch(84% 0.009 253)",
+          "oklch(95% 0.003 253)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "cssVar": "--line",
+        "canonical": "#d3d8de",
+        "oklch": "oklch(88.0% 0.010 253)",
+        "dark": "#262b31",
+        "tonalRamp": [
+          "oklch(15% 0.001 253)",
+          "oklch(26% 0.004 253)",
+          "oklch(38% 0.007 253)",
+          "oklch(49% 0.010 253)",
+          "oklch(61% 0.010 253)",
+          "oklch(72% 0.007 253)",
+          "oklch(84% 0.004 253)",
+          "oklch(95% 0.001 253)"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Strong Hairline",
+        "cssVar": "--line-strong",
+        "canonical": "#b5bcc5",
+        "oklch": "oklch(79.2% 0.015 255)",
+        "dark": "#3a414a",
+        "tonalRamp": [
+          "oklch(15% 0.002 255)",
+          "oklch(26% 0.006 255)",
+          "oklch(38% 0.010 255)",
+          "oklch(49% 0.015 255)",
+          "oklch(61% 0.015 255)",
+          "oklch(72% 0.010 255)",
+          "oklch(84% 0.006 255)",
+          "oklch(95% 0.002 255)"
+        ]
+      },
+      "band": {
+        "role": "neutral",
+        "displayName": "Band Black",
+        "cssVar": "--band",
+        "canonical": "#0f1216",
+        "oklch": "oklch(18.1% 0.010 256)",
+        "dark": "#050607",
+        "tonalRamp": [
+          "oklch(15% 0.001 256)",
+          "oklch(26% 0.004 256)",
+          "oklch(38% 0.007 256)",
+          "oklch(49% 0.009 256)",
+          "oklch(61% 0.009 256)",
+          "oklch(72% 0.007 256)",
+          "oklch(84% 0.004 256)",
+          "oklch(95% 0.001 256)"
+        ]
+      },
+      "band-ink": {
+        "role": "neutral",
+        "displayName": "Band Ink",
+        "cssVar": "--band-ink",
+        "canonical": "#f1f3f5",
+        "oklch": "oklch(96.3% 0.003 248)",
+        "dark": "#f1f3f5",
+        "tonalRamp": [
+          "oklch(15% 0.001 248)",
+          "oklch(26% 0.001 248)",
+          "oklch(38% 0.002 248)",
+          "oklch(49% 0.003 248)",
+          "oklch(61% 0.003 248)",
+          "oklch(72% 0.002 248)",
+          "oklch(84% 0.001 248)",
+          "oklch(95% 0.001 248)"
+        ]
+      },
+      "band-muted": {
+        "role": "neutral",
+        "displayName": "Band Muted",
+        "cssVar": "--band-muted",
+        "canonical": "#a3acb6",
+        "oklch": "oklch(74.0% 0.018 251)",
+        "dark": "#a3acb6",
+        "tonalRamp": [
+          "oklch(15% 0.003 251)",
+          "oklch(26% 0.007 251)",
+          "oklch(38% 0.012 251)",
+          "oklch(49% 0.017 251)",
+          "oklch(61% 0.017 251)",
+          "oklch(72% 0.012 251)",
+          "oklch(84% 0.007 251)",
+          "oklch(95% 0.003 251)"
+        ]
+      },
+      "band-line": {
+        "role": "neutral",
+        "displayName": "Band Line",
+        "cssVar": "--band-line",
+        "canonical": "#262b31",
+        "oklch": "oklch(28.7% 0.013 253)",
+        "dark": "#1f242a",
+        "tonalRamp": [
+          "oklch(15% 0.002 253)",
+          "oklch(26% 0.005 253)",
+          "oklch(38% 0.009 253)",
+          "oklch(49% 0.013 253)",
+          "oklch(61% 0.013 253)",
+          "oklch(72% 0.009 253)",
+          "oklch(84% 0.005 253)",
+          "oklch(95% 0.002 253)"
+        ]
+      },
+      "code-bg": {
+        "role": "neutral",
+        "displayName": "Code Paper",
+        "cssVar": "--code-bg",
+        "canonical": "#f5f7f9",
+        "oklch": "oklch(97.5% 0.003 248)",
+        "dark": "#0f1215",
+        "tonalRamp": [
+          "oklch(15% 0.001 248)",
+          "oklch(26% 0.001 248)",
+          "oklch(38% 0.002 248)",
+          "oklch(49% 0.003 248)",
+          "oklch(61% 0.003 248)",
+          "oklch(72% 0.002 248)",
+          "oklch(84% 0.001 248)",
+          "oklch(95% 0.001 248)"
+        ]
+      },
+      "term-bg": {
+        "role": "neutral",
+        "displayName": "Terminal Black",
+        "cssVar": "--term-bg",
+        "canonical": "#0f1216",
+        "oklch": "oklch(18.1% 0.010 256)",
+        "dark": "#07090b",
+        "tonalRamp": [
+          "oklch(15% 0.001 256)",
+          "oklch(26% 0.004 256)",
+          "oklch(38% 0.007 256)",
+          "oklch(49% 0.009 256)",
+          "oklch(61% 0.009 256)",
+          "oklch(72% 0.007 256)",
+          "oklch(84% 0.004 256)",
+          "oklch(95% 0.001 256)"
+        ]
+      },
+      "term-ink": {
+        "role": "neutral",
+        "displayName": "Terminal Ink",
+        "cssVar": "--term-ink",
+        "canonical": "#dfe5ea",
+        "oklch": "oklch(91.9% 0.009 243)",
+        "dark": "#dfe5ea",
+        "tonalRamp": [
+          "oklch(15% 0.001 243)",
+          "oklch(26% 0.004 243)",
+          "oklch(38% 0.007 243)",
+          "oklch(49% 0.009 243)",
+          "oklch(61% 0.009 243)",
+          "oklch(72% 0.007 243)",
+          "oklch(84% 0.004 243)",
+          "oklch(95% 0.001 243)"
+        ]
+      },
+      "term-dim": {
+        "role": "neutral",
+        "displayName": "Terminal Dim",
+        "cssVar": "--term-dim",
+        "canonical": "#8592a0",
+        "oklch": "oklch(65.4% 0.026 250)",
+        "dark": "#8592a0",
+        "tonalRamp": [
+          "oklch(15% 0.004 250)",
+          "oklch(26% 0.011 250)",
+          "oklch(38% 0.018 250)",
+          "oklch(49% 0.025 250)",
+          "oklch(61% 0.025 250)",
+          "oklch(72% 0.018 250)",
+          "oklch(84% 0.011 250)",
+          "oklch(95% 0.004 250)"
+        ]
+      },
+      "term-err": {
+        "role": "status",
+        "displayName": "Terminal Error",
+        "cssVar": "--term-err",
+        "canonical": "#ff8a80",
+        "oklch": "oklch(75.9% 0.144 26)",
+        "dark": "#ff8a80",
+        "tonalRamp": [
+          "oklch(15% 0.022 26)",
+          "oklch(26% 0.059 26)",
+          "oklch(38% 0.100 26)",
+          "oklch(49% 0.141 26)",
+          "oklch(61% 0.141 26)",
+          "oklch(72% 0.100 26)",
+          "oklch(84% 0.059 26)",
+          "oklch(95% 0.022 26)"
+        ]
+      },
+      "term-prompt": {
+        "role": "status",
+        "displayName": "Terminal Prompt",
+        "cssVar": "--term-prompt",
+        "canonical": "#7fd6a8",
+        "oklch": "oklch(80.8% 0.108 160)",
+        "dark": "#7fd6a8",
+        "tonalRamp": [
+          "oklch(15% 0.016 160)",
+          "oklch(26% 0.044 160)",
+          "oklch(38% 0.075 160)",
+          "oklch(49% 0.106 160)",
+          "oklch(61% 0.106 160)",
+          "oklch(72% 0.075 160)",
+          "oklch(84% 0.044 160)",
+          "oklch(95% 0.016 160)"
+        ]
+      },
+      "sql": {
+        "role": "primary",
+        "displayName": "SQL Teal",
+        "cssVar": "--sql",
+        "canonical": "#0b7a6f",
+        "oklch": "oklch(52.2% 0.090 184)",
+        "dark": "#3dc9b5",
+        "tonalRamp": [
+          "oklch(15% 0.014 184)",
+          "oklch(26% 0.037 184)",
+          "oklch(38% 0.063 184)",
+          "oklch(49% 0.089 184)",
+          "oklch(61% 0.089 184)",
+          "oklch(72% 0.063 184)",
+          "oklch(84% 0.037 184)",
+          "oklch(95% 0.014 184)"
+        ]
+      },
+      "bash": {
+        "role": "primary",
+        "displayName": "Bash Orange",
+        "cssVar": "--bash",
+        "canonical": "#c2410c",
+        "oklch": "oklch(55.3% 0.174 38)",
+        "dark": "#ff8b4f",
+        "tonalRamp": [
+          "oklch(15% 0.026 38)",
+          "oklch(26% 0.071 38)",
+          "oklch(38% 0.121 38)",
+          "oklch(49% 0.171 38)",
+          "oklch(61% 0.171 38)",
+          "oklch(72% 0.121 38)",
+          "oklch(84% 0.071 38)",
+          "oklch(95% 0.026 38)"
+        ]
+      },
+      "docker": {
+        "role": "primary",
+        "displayName": "Docker Blue",
+        "cssVar": "--docker",
+        "canonical": "#1d5fd0",
+        "oklch": "oklch(51.4% 0.187 261)",
+        "dark": "#74a9ff",
+        "tonalRamp": [
+          "oklch(15% 0.028 261)",
+          "oklch(26% 0.077 261)",
+          "oklch(38% 0.130 261)",
+          "oklch(49% 0.184 261)",
+          "oklch(61% 0.184 261)",
+          "oklch(72% 0.130 261)",
+          "oklch(84% 0.077 261)",
+          "oklch(95% 0.028 261)"
+        ]
+      },
+      "fastapi": {
+        "role": "primary",
+        "displayName": "FastAPI Violet",
+        "cssVar": "--fastapi",
+        "canonical": "#8b3fb0",
+        "oklch": "oklch(51.8% 0.180 313)",
+        "dark": "#cd93f7",
+        "tonalRamp": [
+          "oklch(15% 0.027 313)",
+          "oklch(26% 0.074 313)",
+          "oklch(38% 0.125 313)",
+          "oklch(49% 0.177 313)",
+          "oklch(61% 0.177 313)",
+          "oklch(72% 0.125 313)",
+          "oklch(84% 0.074 313)",
+          "oklch(95% 0.027 313)"
+        ]
+      },
+      "spring": {
+        "role": "primary",
+        "displayName": "Spring Green",
+        "cssVar": "--spring",
+        "canonical": "#3f7a1f",
+        "oklch": "oklch(52.0% 0.137 137)",
+        "dark": "#93d468",
+        "tonalRamp": [
+          "oklch(15% 0.021 137)",
+          "oklch(26% 0.056 137)",
+          "oklch(38% 0.096 137)",
+          "oklch(49% 0.135 137)",
+          "oklch(61% 0.135 137)",
+          "oklch(72% 0.096 137)",
+          "oklch(84% 0.056 137)",
+          "oklch(95% 0.021 137)"
+        ]
+      },
+      "sql-soft": {
+        "role": "primary",
+        "displayName": "SQL Wash",
+        "cssVar": "--sql-soft",
+        "canonical": "#dcefec",
+        "oklch": "oklch(93.7% 0.020 185)",
+        "dark": "#10302c",
+        "tonalRamp": [
+          "oklch(15% 0.003 185)",
+          "oklch(26% 0.008 185)",
+          "oklch(38% 0.014 185)",
+          "oklch(49% 0.020 185)",
+          "oklch(61% 0.020 185)",
+          "oklch(72% 0.014 185)",
+          "oklch(84% 0.008 185)",
+          "oklch(95% 0.003 185)"
+        ]
+      },
+      "bash-soft": {
+        "role": "primary",
+        "displayName": "Bash Wash",
+        "cssVar": "--bash-soft",
+        "canonical": "#f9e4d9",
+        "oklch": "oklch(93.3% 0.027 50)",
+        "dark": "#3a1f12",
+        "tonalRamp": [
+          "oklch(15% 0.004 50)",
+          "oklch(26% 0.011 50)",
+          "oklch(38% 0.019 50)",
+          "oklch(49% 0.027 50)",
+          "oklch(61% 0.027 50)",
+          "oklch(72% 0.019 50)",
+          "oklch(84% 0.011 50)",
+          "oklch(95% 0.004 50)"
+        ]
+      },
+      "docker-soft": {
+        "role": "primary",
+        "displayName": "Docker Wash",
+        "cssVar": "--docker-soft",
+        "canonical": "#dfe8f9",
+        "oklch": "oklch(92.9% 0.025 263)",
+        "dark": "#142642",
+        "tonalRamp": [
+          "oklch(15% 0.004 263)",
+          "oklch(26% 0.010 263)",
+          "oklch(38% 0.017 263)",
+          "oklch(49% 0.025 263)",
+          "oklch(61% 0.025 263)",
+          "oklch(72% 0.017 263)",
+          "oklch(84% 0.010 263)",
+          "oklch(95% 0.004 263)"
+        ]
+      },
+      "fastapi-soft": {
+        "role": "primary",
+        "displayName": "FastAPI Wash",
+        "cssVar": "--fastapi-soft",
+        "canonical": "#f0e4f6",
+        "oklch": "oklch(93.4% 0.027 315)",
+        "dark": "#2e1a3b",
+        "tonalRamp": [
+          "oklch(15% 0.004 315)",
+          "oklch(26% 0.011 315)",
+          "oklch(38% 0.019 315)",
+          "oklch(49% 0.027 315)",
+          "oklch(61% 0.027 315)",
+          "oklch(72% 0.019 315)",
+          "oklch(84% 0.011 315)",
+          "oklch(95% 0.004 315)"
+        ]
+      },
+      "spring-soft": {
+        "role": "primary",
+        "displayName": "Spring Wash",
+        "cssVar": "--spring-soft",
+        "canonical": "#e3efda",
+        "oklch": "oklch(93.7% 0.031 132)",
+        "dark": "#1c3012",
+        "tonalRamp": [
+          "oklch(15% 0.005 132)",
+          "oklch(26% 0.013 132)",
+          "oklch(38% 0.021 132)",
+          "oklch(49% 0.030 132)",
+          "oklch(61% 0.030 132)",
+          "oklch(72% 0.021 132)",
+          "oklch(84% 0.013 132)",
+          "oklch(95% 0.005 132)"
+        ]
+      },
+      "on-trk": {
+        "role": "primary",
+        "displayName": "On-Track",
+        "cssVar": "--on-trk",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 90)",
+        "dark": "#0b0d10",
+        "tonalRamp": [
+          "oklch(15% 0.000 90)",
+          "oklch(26% 0.000 90)",
+          "oklch(38% 0.000 90)",
+          "oklch(49% 0.000 90)",
+          "oklch(61% 0.000 90)",
+          "oklch(72% 0.000 90)",
+          "oklch(84% 0.000 90)",
+          "oklch(95% 0.000 90)"
+        ]
+      },
+      "ok": {
+        "role": "status",
+        "displayName": "Pass Green",
+        "cssVar": "--ok",
+        "canonical": "#1a7a45",
+        "oklch": "oklch(51.3% 0.120 154)",
+        "dark": "#57c98a",
+        "tonalRamp": [
+          "oklch(15% 0.018 154)",
+          "oklch(26% 0.049 154)",
+          "oklch(38% 0.083 154)",
+          "oklch(49% 0.118 154)",
+          "oklch(61% 0.118 154)",
+          "oklch(72% 0.083 154)",
+          "oklch(84% 0.049 154)",
+          "oklch(95% 0.018 154)"
+        ]
+      },
+      "ok-soft": {
+        "role": "status",
+        "displayName": "Pass Wash",
+        "cssVar": "--ok-soft",
+        "canonical": "#dcf0e3",
+        "oklch": "oklch(93.7% 0.027 157)",
+        "dark": "#10301e",
+        "tonalRamp": [
+          "oklch(15% 0.004 157)",
+          "oklch(26% 0.011 157)",
+          "oklch(38% 0.019 157)",
+          "oklch(49% 0.027 157)",
+          "oklch(61% 0.027 157)",
+          "oklch(72% 0.019 157)",
+          "oklch(84% 0.011 157)",
+          "oklch(95% 0.004 157)"
+        ]
+      },
+      "bad": {
+        "role": "status",
+        "displayName": "Fault Red",
+        "cssVar": "--bad",
+        "canonical": "#b3261e",
+        "oklch": "oklch(50.1% 0.178 29)",
+        "dark": "#ff7d72",
+        "tonalRamp": [
+          "oklch(15% 0.027 29)",
+          "oklch(26% 0.073 29)",
+          "oklch(38% 0.124 29)",
+          "oklch(49% 0.175 29)",
+          "oklch(61% 0.175 29)",
+          "oklch(72% 0.124 29)",
+          "oklch(84% 0.073 29)",
+          "oklch(95% 0.027 29)"
+        ]
+      },
+      "bad-soft": {
+        "role": "status",
+        "displayName": "Fault Wash",
+        "cssVar": "--bad-soft",
+        "canonical": "#f8e0dd",
+        "oklch": "oklch(92.5% 0.027 26)",
+        "dark": "#3a1614",
+        "tonalRamp": [
+          "oklch(15% 0.004 26)",
+          "oklch(26% 0.011 26)",
+          "oklch(38% 0.019 26)",
+          "oklch(49% 0.026 26)",
+          "oklch(61% 0.026 26)",
+          "oklch(72% 0.019 26)",
+          "oklch(84% 0.011 26)",
+          "oklch(95% 0.004 26)"
+        ]
+      },
+      "warn": {
+        "role": "status",
+        "displayName": "Hint Amber",
+        "cssVar": "--warn",
+        "canonical": "#8a5a00",
+        "oklch": "oklch(50.8% 0.108 73)",
+        "dark": "#e6b45c",
+        "tonalRamp": [
+          "oklch(15% 0.016 73)",
+          "oklch(26% 0.044 73)",
+          "oklch(38% 0.075 73)",
+          "oklch(49% 0.106 73)",
+          "oklch(61% 0.106 73)",
+          "oklch(72% 0.075 73)",
+          "oklch(84% 0.044 73)",
+          "oklch(95% 0.016 73)"
+        ]
+      },
+      "warn-soft": {
+        "role": "status",
+        "displayName": "Hint Wash",
+        "cssVar": "--warn-soft",
+        "canonical": "#f6ecd6",
+        "oklch": "oklch(94.5% 0.031 86)",
+        "dark": "#33260d",
+        "tonalRamp": [
+          "oklch(15% 0.005 86)",
+          "oklch(26% 0.013 86)",
+          "oklch(38% 0.022 86)",
+          "oklch(49% 0.030 86)",
+          "oklch(61% 0.030 86)",
+          "oklch(72% 0.022 86)",
+          "oklch(84% 0.013 86)",
+          "oklch(95% 0.005 86)"
+        ]
+      },
+      "syntax-keyword": {
+        "role": "syntax",
+        "displayName": "Keyword Violet",
+        "cssVar": "--tk-k",
+        "canonical": "#8a2fa8",
+        "oklch": "oklch(49.3% 0.193 316)",
+        "dark": "#d38cf0",
+        "tonalRamp": [
+          "oklch(15% 0.029 316)",
+          "oklch(26% 0.079 316)",
+          "oklch(38% 0.134 316)",
+          "oklch(49% 0.189 316)",
+          "oklch(61% 0.189 316)",
+          "oklch(72% 0.134 316)",
+          "oklch(84% 0.079 316)",
+          "oklch(95% 0.029 316)"
+        ]
+      },
+      "syntax-string": {
+        "role": "syntax",
+        "displayName": "String Green",
+        "cssVar": "--tk-s",
+        "canonical": "#1f7a3a",
+        "oklch": "oklch(51.2% 0.129 149)",
+        "dark": "#7fd18f",
+        "tonalRamp": [
+          "oklch(15% 0.019 149)",
+          "oklch(26% 0.053 149)",
+          "oklch(38% 0.090 149)",
+          "oklch(49% 0.127 149)",
+          "oklch(61% 0.127 149)",
+          "oklch(72% 0.090 149)",
+          "oklch(84% 0.053 149)",
+          "oklch(95% 0.019 149)"
+        ]
+      },
+      "syntax-number": {
+        "role": "syntax",
+        "displayName": "Number Amber",
+        "cssVar": "--tk-n",
+        "canonical": "#a35200",
+        "oklch": "oklch(52.8% 0.131 55)",
+        "dark": "#f0a868",
+        "tonalRamp": [
+          "oklch(15% 0.020 55)",
+          "oklch(26% 0.054 55)",
+          "oklch(38% 0.091 55)",
+          "oklch(49% 0.129 55)",
+          "oklch(61% 0.129 55)",
+          "oklch(72% 0.091 55)",
+          "oklch(84% 0.054 55)",
+          "oklch(95% 0.020 55)"
+        ]
+      },
+      "syntax-comment": {
+        "role": "syntax",
+        "displayName": "Comment Grey",
+        "cssVar": "--tk-c",
+        "canonical": "#6b7783",
+        "oklch": "oklch(56.3% 0.024 248)",
+        "dark": "#7c8b98",
+        "tonalRamp": [
+          "oklch(15% 0.004 248)",
+          "oklch(26% 0.010 248)",
+          "oklch(38% 0.016 248)",
+          "oklch(49% 0.023 248)",
+          "oklch(61% 0.023 248)",
+          "oklch(72% 0.016 248)",
+          "oklch(84% 0.010 248)",
+          "oklch(95% 0.004 248)"
+        ]
+      },
+      "syntax-function": {
+        "role": "syntax",
+        "displayName": "Function Blue",
+        "cssVar": "--tk-f",
+        "canonical": "#0e5fb0",
+        "oklch": "oklch(48.7% 0.147 254)",
+        "dark": "#6cb4ff",
+        "tonalRamp": [
+          "oklch(15% 0.022 254)",
+          "oklch(26% 0.061 254)",
+          "oklch(38% 0.103 254)",
+          "oklch(49% 0.145 254)",
+          "oklch(61% 0.145 254)",
+          "oklch(72% 0.103 254)",
+          "oklch(84% 0.061 254)",
+          "oklch(95% 0.022 254)"
+        ]
+      },
+      "syntax-variable": {
+        "role": "syntax",
+        "displayName": "Variable Rust",
+        "cssVar": "--tk-v",
+        "canonical": "#a33a1f",
+        "oklch": "oklch(49.4% 0.145 35)",
+        "dark": "#ff9b7a",
+        "tonalRamp": [
+          "oklch(15% 0.022 35)",
+          "oklch(26% 0.059 35)",
+          "oklch(38% 0.101 35)",
+          "oklch(49% 0.142 35)",
+          "oklch(61% 0.142 35)",
+          "oklch(72% 0.101 35)",
+          "oklch(84% 0.059 35)",
+          "oklch(95% 0.022 35)"
+        ]
+      },
+      "syntax-operator": {
+        "role": "syntax",
+        "displayName": "Operator Slate",
+        "cssVar": "--tk-o",
+        "canonical": "#4f5b67",
+        "oklch": "oklch(46.5% 0.025 248)",
+        "dark": "#a9b6c2",
+        "tonalRamp": [
+          "oklch(15% 0.004 248)",
+          "oklch(26% 0.010 248)",
+          "oklch(38% 0.017 248)",
+          "oklch(49% 0.024 248)",
+          "oklch(61% 0.024 248)",
+          "oklch(72% 0.017 248)",
+          "oklch(84% 0.010 248)",
+          "oklch(95% 0.004 248)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Home intro headline only."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Page titles for modules and tool pages; 36px on phones."
+      },
+      "title-pixel": {
+        "displayName": "Pixel Title",
+        "purpose": "Section headings and lesson h2s (28px), track panel names (40px), rail track title (34px)."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Exercise titles (20px) and the Continue heading (clamp 22px to 30px, -0.015em)."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running text; lessons at 16.5px, 70ch measure."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Buttons (14.5px), level tags, rail labels, table headers; sentence case."
+      },
+      "numeral": {
+        "displayName": "Numeral",
+        "purpose": "Solved counts, rail stats (18px), review scores (40px)."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Code, editors, terminal, and all index numbers."
+      }
+    },
+    "shadows": [
+      {
+        "name": "current-indicator",
+        "value": "inset 2px 0 0 var(--ink)",
+        "purpose": "Left bar on the current module in the rail. An indicator, not elevation; the system is otherwise flat."
+      }
+    ],
+    "motion": [
+      {
+        "name": "pixel-light",
+        "value": "lightup .36s steps(4, end) both (clip-path inset 100% top to 0)",
+        "purpose": "Fills a pixel or stepper cell bottom-to-top when its exercise is solved."
+      },
+      {
+        "name": "drawer",
+        "value": "transform .24s steps(4, end)",
+        "purpose": "Mobile rail drawer slide."
+      },
+      {
+        "name": "control-state",
+        "value": "background-color .12s steps(2, end), border-color .12s steps(2, end)",
+        "purpose": "Button hover state change."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "transition: none; animation: none",
+        "purpose": "All motion removed under prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "intro-stack",
+        "value": "1100px"
+      },
+      {
+        "name": "rail-drawer",
+        "value": "900px"
+      },
+      {
+        "name": "phone",
+        "value": "640px"
+      }
+    ],
+    "pixelScale": [
+      {
+        "name": "rail",
+        "cell": "6px",
+        "gap": "2px"
+      },
+      {
+        "name": "default",
+        "cell": "10px",
+        "gap": "3px"
+      },
+      {
+        "name": "map",
+        "cell": "12px",
+        "gap": "3px"
+      },
+      {
+        "name": "module-strip",
+        "cell": "14px",
+        "gap": "3px"
+      },
+      {
+        "name": "stepper",
+        "cell": "34px",
+        "gap": "4px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one coloured control per view: Continue, Check, Run, Next.",
+      "html": "<button class=\"ds-btn ds-btn-primary\"><svg class=\"ds-ico\" viewBox=\"0 0 8 8\" shape-rendering=\"crispEdges\" aria-hidden=\"true\"><rect x=\"3\" y=\"0\" width=\"2\" height=\"1\"/><rect x=\"4\" y=\"1\" width=\"2\" height=\"1\"/><rect x=\"5\" y=\"2\" width=\"2\" height=\"1\"/><rect x=\"0\" y=\"3\" width=\"7\" height=\"2\"/><rect x=\"5\" y=\"5\" width=\"2\" height=\"1\"/><rect x=\"4\" y=\"6\" width=\"2\" height=\"1\"/><rect x=\"3\" y=\"7\" width=\"2\" height=\"1\"/></svg>Continue</button>",
+      "css": ".ds-btn { border: 1px solid var(--line-strong, #b5bcc5); background: var(--surface, #fff); color: var(--ink, #0f1216); padding: 8px 16px; font: 600 14.5px/1.3 var(--f-ui, Geist, system-ui, sans-serif); border-radius: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; flex-direction: row-reverse; transition: background-color .12s steps(2, end), border-color .12s steps(2, end); } .ds-btn-primary { background: var(--trk, #0b7a6f); color: var(--on-trk, #fff); border-color: var(--trk, #0b7a6f); } .ds-btn-primary:hover { background: color-mix(in srgb, var(--trk, #0b7a6f) 86%, var(--ink, #0f1216)); } .ds-btn:focus-visible { outline: 2px solid var(--trk, #0b7a6f); outline-offset: 2px; } .ds-ico { width: 1em; height: 1em; fill: currentColor; }"
+    },
+    {
+      "name": "Default Button",
+      "kind": "button",
+      "refersTo": "button-default",
+      "description": "Secondary actions: Run beside Check, Previous/Next exercise, Reset.",
+      "html": "<button class=\"ds-btn-default\">Previous exercise</button>",
+      "css": ".ds-btn-default { border: 1px solid var(--line-strong, #b5bcc5); background: var(--surface, #fff); color: var(--ink, #0f1216); padding: 8px 16px; font: 600 14.5px/1.3 var(--f-ui, Geist, system-ui, sans-serif); border-radius: 0; cursor: pointer; transition: background-color .12s steps(2, end), border-color .12s steps(2, end); } .ds-btn-default:hover { border-color: var(--ink, #0f1216); } .ds-btn-default:focus-visible { outline: 2px solid var(--trk, #0b7a6f); outline-offset: 2px; } .ds-btn-default[disabled] { opacity: .45; cursor: default; }"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Tertiary links and the stuck-ladder (hints, expected output, solution).",
+      "html": "<button class=\"ds-btn-quiet\">All exercises</button>",
+      "css": ".ds-btn-quiet { border: 1px solid transparent; background: transparent; color: var(--muted, #545d68); padding: 8px 10px; font: 600 14.5px/1.3 var(--f-ui, Geist, system-ui, sans-serif); border-radius: 0; cursor: pointer; transition: background-color .12s steps(2, end); } .ds-btn-quiet:hover { color: var(--ink, #0f1216); background: var(--surface-2, #e2e6ea); } .ds-btn-quiet:focus-visible { outline: 2px solid var(--trk, #0b7a6f); outline-offset: 2px; }"
+    },
+    {
+      "name": "Pixel Strip",
+      "kind": "custom",
+      "refersTo": "pixel-lit",
+      "description": "Signature progress map: one square per exercise, lit when solved, boss cells double width.",
+      "html": "<div class=\"ds-strip\"><i class=\"ds-px on\"></i><i class=\"ds-px on\"></i><i class=\"ds-px on\"></i><i class=\"ds-px lit\"></i><i class=\"ds-px\"></i><i class=\"ds-px\"></i><i class=\"ds-px boss\"></i></div>",
+      "css": ".ds-strip { --cell: 12px; --gap: 3px; display: flex; gap: var(--gap); } .ds-px { width: var(--cell); height: var(--cell); border: 1px solid var(--line-strong, #b5bcc5); display: block; position: relative; } .ds-px.boss { width: calc(var(--cell) * 2 + var(--gap)); } .ds-px.on { background: var(--trk, #0b7a6f); border-color: var(--trk, #0b7a6f); } .ds-px.lit::after { content: \"\"; position: absolute; inset: -1px; background: var(--trk, #0b7a6f); animation: ds-lightup .36s steps(4, end) both; } .ds-strip:hover .ds-px:not(.on) { border-color: var(--ink, #0f1216); } @keyframes ds-lightup { from { clip-path: inset(100% 0 0 0); } to { clip-path: inset(0 0 0 0); } }"
+    },
+    {
+      "name": "Exercise Stepper",
+      "kind": "custom",
+      "refersTo": "stepper-cell",
+      "description": "One square numbered button per exercise; solved cells fill, current cell gets an ink outline.",
+      "html": "<div class=\"ds-stepper\"><button class=\"on\">1</button><button class=\"on\">2</button><button aria-current=\"true\">3</button><button>4</button><button class=\"boss\">5</button></div>",
+      "css": ".ds-stepper { display: flex; gap: 4px; } .ds-stepper button { height: 34px; min-width: 34px; padding: 0 6px; border: 1px solid var(--line-strong, #b5bcc5); background: var(--surface, #fff); color: var(--muted, #545d68); font: 600 14px var(--f-mono, \"Geist Mono\", ui-monospace, monospace); font-variant-numeric: tabular-nums; border-radius: 0; cursor: pointer; } .ds-stepper button.boss { min-width: 72px; } .ds-stepper button:hover { border-color: var(--ink, #0f1216); color: var(--ink, #0f1216); } .ds-stepper button.on { background: var(--trk, #0b7a6f); border-color: var(--trk, #0b7a6f); color: var(--on-trk, #fff); } .ds-stepper button[aria-current=\"true\"] { outline: 2px solid var(--ink, #0f1216); outline-offset: 2px; color: var(--ink, #0f1216); } .ds-stepper button:focus-visible { outline: 2px solid var(--trk, #0b7a6f); outline-offset: 2px; }"
+    },
+    {
+      "name": "Track Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Home card per track: pixel-face name, tabular count, module map, actions.",
+      "html": "<section class=\"ds-panel\"><div class=\"ds-panel-top\"><h2>SQL</h2><span><b>12</b> / 64 solved</span></div><p>Query a real SQLite database.</p><div class=\"ds-panel-row\"><span>01</span><span class=\"ds-cells\"><i class=\"on\"></i><i class=\"on\"></i><i></i><i></i></span><span>Selecting rows</span></div></section>",
+      "css": ".ds-panel { background: var(--surface, #fff); border: 1px solid var(--line, #d3d8de); padding: 24px 26px 26px; display: grid; gap: 16px; border-radius: 0; color: var(--ink, #0f1216); font-family: var(--f-ui, Geist, system-ui, sans-serif); } .ds-panel-top { display: flex; justify-content: space-between; align-items: baseline; } .ds-panel h2 { margin: 0; font: 500 40px/1 var(--f-pixel, \"Pixelify Sans\", Geist, sans-serif); } .ds-panel-top span { font-size: 14px; color: var(--muted, #545d68); } .ds-panel-top b { font: 500 22px var(--f-pixel, \"Pixelify Sans\", sans-serif); color: var(--ink, #0f1216); } .ds-panel p { margin: 0; color: var(--muted, #545d68); font-size: 15px; } .ds-panel-row { display: flex; gap: 12px; align-items: center; font-size: 13.5px; color: var(--muted, #545d68); } .ds-panel-row > span:first-child { font: 12px var(--f-mono, \"Geist Mono\", monospace); } .ds-cells { display: flex; gap: 3px; } .ds-cells i { width: 12px; height: 12px; border: 1px solid var(--line-strong, #b5bcc5); } .ds-cells i.on { background: var(--trk, #0b7a6f); border-color: var(--trk, #0b7a6f); }"
+    },
+    {
+      "name": "Code Editor",
+      "kind": "input",
+      "refersTo": "input-editor",
+      "description": "Answer editor on code paper with track-hue caret and inset focus outline.",
+      "html": "<textarea class=\"ds-editor\" spellcheck=\"false\">SELECT name FROM users;</textarea>",
+      "css": ".ds-editor { display: block; width: 100%; min-height: 72px; border: 1px solid var(--line-strong, #b5bcc5); border-radius: 0; padding: 12px 14px; background: var(--code-bg, #f5f7f9); color: var(--ink, #0f1216); font: 14px/1.6 var(--f-mono, \"Geist Mono\", ui-monospace, monospace); caret-color: var(--trk, #0b7a6f); resize: vertical; } .ds-editor:focus { outline: 2px solid var(--trk, #0b7a6f); outline-offset: -2px; }"
+    },
+    {
+      "name": "Band",
+      "kind": "nav",
+      "refersTo": "band",
+      "description": "Ink top band: pixel brand mark, wordmark, track tabs with own-hue current bar.",
+      "html": "<nav class=\"ds-band\"><span class=\"ds-brand\">prac</span><a href=\"#\" style=\"--c:#0b7a6f\" aria-current=\"true\"><i></i>SQL</a><a href=\"#\" style=\"--c:#c2410c\"><i></i>Bash</a><a href=\"#\" style=\"--c:#1d5fd0\"><i></i>Docker</a></nav>",
+      "css": ".ds-band { display: flex; align-items: stretch; height: 56px; padding: 0 16px; background: var(--band, #0f1216); color: var(--band-ink, #f1f3f5); border-bottom: 1px solid var(--band-line, #262b31); } .ds-brand { display: flex; align-items: center; font: 500 24px var(--f-pixel, \"Pixelify Sans\", sans-serif); padding-right: 22px; margin-right: 6px; border-right: 1px solid var(--band-line, #262b31); } .ds-band a { position: relative; display: flex; align-items: center; gap: 9px; padding: 0 16px; color: var(--band-muted, #a3acb6); text-decoration: none; font: 600 14.5px var(--f-ui, Geist, sans-serif); } .ds-band a i { width: 8px; height: 8px; background: var(--c); } .ds-band a:hover, .ds-band a[aria-current=\"true\"] { color: var(--band-ink, #f1f3f5); } .ds-band a[aria-current=\"true\"]::after { content: \"\"; position: absolute; left: 16px; right: 16px; bottom: 0; height: 4px; background: var(--c); } .ds-band a:focus-visible { outline: 2px solid var(--c); outline-offset: -2px; }"
+    },
+    {
+      "name": "Step Tabs",
+      "kind": "nav",
+      "description": "Sticky Lesson / Quick check / Exercises bar; current tab carries a 4px track-hue bar.",
+      "html": "<nav class=\"ds-steps\"><a href=\"#\"><span>01</span>Lesson</a><a href=\"#\"><span>02</span>Quick check</a><a href=\"#\" aria-current=\"page\"><span>03</span>Exercises</a></nav>",
+      "css": ".ds-steps { display: flex; border-bottom: 1px solid var(--ink, #0f1216); background: var(--ground, #eceff2); } .ds-steps a { position: relative; display: flex; align-items: baseline; gap: 8px; padding: 14px 18px 12px 0; margin-right: 18px; color: var(--muted, #545d68); text-decoration: none; font: 600 15px var(--f-ui, Geist, sans-serif); } .ds-steps a span { font: 13px var(--f-mono, \"Geist Mono\", monospace); } .ds-steps a:hover, .ds-steps a[aria-current=\"page\"] { color: var(--ink, #0f1216); } .ds-steps a[aria-current=\"page\"]::after { content: \"\"; position: absolute; left: 0; right: 0; bottom: -1px; height: 4px; background: var(--trk, #0b7a6f); } .ds-steps a:focus-visible { outline: 2px solid var(--trk, #0b7a6f); outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Progress Map",
+    "overview": "Swiss Design grid discipline fused with Pixel Art. The progress you have made is the map: every exercise is one square pixel, a module is a row of pixels, a track is a grid of rows. The pixels are not ornament; they are the record of what you solved, and they double as the navigation to what you have not. Around them sits a strict, flush-left Swiss page: square corners, 1px hairlines, large jumps between a pixel display face and a quiet grotesque.\n\nThe world is cool and nearly colourless at rest. An ink-black band sits over a light-grey ground (near-black in dark mode), panels are white sheets on that ground, and the only saturated colour is the current track's hue, which is spent exclusively on things you can act on and on pixels you have lit. Density is that of a working tool: comfortable reading measure for lessons, compact tabular rows for indexes, one exercise on screen at a time.\n\nMotion is stepped. Solving an exercise fills its pixel bottom-to-top in four discrete frames; drawers and button states also move in steps, never on smooth curves.",
+    "keyCharacteristics": [
+      "One pixel per exercise; boss exercises are double-width cells, so size carries hierarchy.",
+      "Five track hues (SQL teal, Bash orange, Docker blue, FastAPI violet, Spring green), one per surface, scoped by a track class.",
+      "Square corners everywhere; hairline borders; no drop shadows.",
+      "Pixelify Sans for display and big numerals, Geist for UI and reading, Geist Mono for code and indices.",
+      "All motion uses `steps()` timing; reduced-motion removes it entirely.",
+      "Full light and dark themes from the same token names (system preference, overridable by `data-theme`)."
+    ],
+    "rules": [
+      {
+        "name": "The Lit Pixel Rule",
+        "body": "Track hue appears only on what you can act on (primary buttons, focus, link underlines, the active tab bar) and on pixels you have lit. Headings, panels, borders and body text stay ink and grey. If something is coloured and you cannot click it or did not earn it, it is wrong.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Track Rule",
+        "body": "A surface takes its hue from the track scope it sits in. One panel, one hue; the home grid gives each track panel its own scope rather than mixing hues inside a panel.",
+        "section": "colors"
+      },
+      {
+        "name": "The Pixel Voice Rule",
+        "body": "Pixelify Sans is for display headings and big numerals only. Body, buttons, labels and form controls are Geist; never set running text or a control in the pixel face.",
+        "section": "typography"
+      },
+      {
+        "name": "The Mono Index Rule",
+        "body": "Ordinals and indices are Geist Mono with tabular figures, so columns of numbers line up like a register.",
+        "section": "typography"
+      },
+      {
+        "name": "The Visible Armature Rule",
+        "body": "The grid is drawn, not implied: track panels and the pager sit in a 1px-gutter grid whose gutters show the hairline colour, sections open on a full-width ink rule, and the step bar is underlined in ink.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat Plane Rule",
+        "body": "Nothing floats. No drop shadows, blurs or glows; hierarchy is carried by tone, line weight and size.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Square Corner Rule",
+        "body": "Radius is zero, everywhere. The pixel is the only shape.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Double Square Rule",
+        "body": "A boss exercise occupies two cells plus the gap. Importance is expressed by size, never by a different colour.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "**Do** spend track hue only on primary buttons, lit pixels, solved stepper cells, active tab bars, focus outlines, link underlines and the caret (The Lit Pixel Rule).",
+      "**Do** scope every track surface with its track class so one hue governs the whole panel or page.",
+      "**Do** keep every corner at 0px and every structural border at 1px.",
+      "**Do** express importance by size: boss exercises take a double cell, display type jumps straight from 84px to body.",
+      "**Do** time every transition and animation with `steps()`: 4 steps over 360ms for lighting a pixel, 4 steps over 240ms for the drawer, 2 steps over 120ms for button states.",
+      "**Do** draw icons on the 8 by 8 pixel grid as crisp-edged SVG rectangles in the current text colour.",
+      "**Do** set indices and code in Geist Mono with tabular figures.",
+      "**Do** define every colour for both themes through the shared token names."
+    ],
+    "donts": [
+      "**Don't** colour headings, panel backgrounds, borders or decorative marks with a track hue.",
+      "**Don't** add drop shadows, blurs, glows or rounded corners.",
+      "**Don't** use smooth easing curves for motion.",
+      "**Don't** set body copy, buttons, labels or inputs in Pixelify Sans.",
+      "**Don't** mix two track hues inside one panel.",
+      "**Don't** use emoji or font glyphs as icons."
+    ]
+  }
+}

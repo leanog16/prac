@@ -159,7 +159,19 @@ function md(src) {
     if (/^\|/.test(line)) {
       const rows = [];
       while (i < lines.length && /^\|/.test(lines[i])) rows.push(lines[i++]);
-      const cells = r => r.replace(/^\||\|$/g, '').split(/(?<!\\)\|/).map(c => c.trim().replace(/\\\|/g, '|'));
+      const cells = r => {
+        const s = r.trim().replace(/^\|/, '').replace(/\|$/, '');
+        const out = []; let cur = '', code = false;
+        for (let k = 0; k < s.length; k++) {
+          const ch = s[k];
+          if (ch === '\\' && s[k + 1] === '|') { cur += '|'; k++; continue; }
+          if (ch === '`') code = !code;
+          if (ch === '|' && !code) { out.push(cur.trim()); cur = ''; continue; }
+          cur += ch;
+        }
+        out.push(cur.trim());
+        return out;
+      };
       const head = cells(rows[0]);
       const bodyRows = rows.slice(2).map(cells);
       html += `<div class="table-wrap"><table class="md-table"><thead><tr>${head.map(h => `<th>${inline(h)}</th>`).join('')}</tr></thead><tbody>` +
