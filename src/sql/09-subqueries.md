@@ -4,6 +4,9 @@ title: Subqueries
 summary: Queries inside queries — scalar subqueries, IN and EXISTS, correlated subqueries, and derived tables in FROM.
 minutes: 35
 ---
+> [!project] Desk & Co, step 9: above-average customers
+> "Who spends more than a typical customer?" needs two answers in one query: the average, and each customer's total. Subqueries let one query use another's result.
+
 ## A query is a value
 
 Any `SELECT` in parentheses can be used inside another query. What it can stand in for depends on its shape:
@@ -115,6 +118,72 @@ Many questions can be answered either way. Rules of thumb:
 - Need columns from the other table in the output? **Join.**
 - Only testing whether related rows exist? **EXISTS / IN** (no duplicate rows to clean up).
 - Comparing against an aggregate (average, max)? **Scalar subquery**, or a window function.
+
+## Worked example: inside-out
+
+Write the inner question first, run it alone, then wrap it.
+
+**Inner: what does each customer spend?**
+
+```sql run
+SELECT o.customer_id, SUM(oi.quantity * oi.unit_price) AS spent
+FROM orders o JOIN order_items oi ON oi.order_id = o.order_id
+WHERE o.status <> 'cancelled'
+GROUP BY o.customer_id;
+```
+
+**Middle: the average of those totals.** Use the inner query as a *derived table*:
+
+```sql run
+SELECT ROUND(AVG(spent), 2) AS avg_spent
+FROM (
+  SELECT o.customer_id, SUM(oi.quantity * oi.unit_price) AS spent
+  FROM orders o JOIN order_items oi ON oi.order_id = o.order_id
+  WHERE o.status <> 'cancelled'
+  GROUP BY o.customer_id
+) AS totals;
+```
+
+**Outer: customers above it.** The repetition is getting painful, which is exactly what CTEs fix two lessons from now. For now, it works:
+
+```sql run
+SELECT customer_id, ROUND(spent, 2) AS spent
+FROM (
+  SELECT o.customer_id, SUM(oi.quantity * oi.unit_price) AS spent
+  FROM orders o JOIN order_items oi ON oi.order_id = o.order_id
+  WHERE o.status <> 'cancelled'
+  GROUP BY o.customer_id
+) AS t
+WHERE spent > (
+  SELECT AVG(spent) FROM (
+    SELECT SUM(oi.quantity * oi.unit_price) AS spent
+    FROM orders o JOIN order_items oi ON oi.order_id = o.order_id
+    WHERE o.status <> 'cancelled'
+    GROUP BY o.customer_id
+  )
+)
+ORDER BY spent DESC;
+```
+
+> [!plain] In plain English
+> A subquery is a query in parentheses used where a value or a table is expected. A **scalar** subquery returns one value; an `IN` subquery returns a list; a subquery in `FROM` returns a whole table you can query again.
+
+## Correlated subqueries, step by step
+
+A **correlated** subquery refers to the outer row, so it conceptually runs once per row:
+
+```sql run
+SELECT p.name, p.price
+FROM products p
+WHERE p.price > (SELECT AVG(p2.price) FROM products p2 WHERE p2.category = p.category);
+```
+
+Read it as: "for this product, compute the average price **of its own category**, and keep the product if it's above that".
+
+## Common mistakes
+
+> [!mistake] A "scalar" subquery that returns several rows
+> `WHERE price = (SELECT price FROM products WHERE category = 'Home')` is an error in most databases (SQLite quietly uses the first row, which is worse). Use `IN`, or make sure the subquery is aggregated.
 
 :::quiz
 q: A subquery used as `WHERE salary > (SELECT …)` must return…
@@ -320,4 +389,24 @@ WHERE NOT EXISTS (
 );
 ---explain
 The count-based alternative: `SELECT e.student_id FROM enrollments e JOIN courses c USING (course_id) WHERE c.dept = 'MA' GROUP BY e.student_id HAVING COUNT(DISTINCT c.course_id) = (SELECT COUNT(*) FROM courses WHERE dept = 'MA')`. Both are worth knowing.
+:::
+
+:::exercise
+id: proj-sql-09-above-avg-price
+level: 2
+title: "Project 9: pricier than the category average"
+---
+List each product's `name`, `category` and `price` where the price is **above the average price of its own category**.
+---solution
+SELECT p.name, p.category, p.price FROM products p WHERE p.price > (SELECT AVG(p2.price) FROM products p2 WHERE p2.category = p.category);
+:::
+
+:::exercise
+id: proj-sql-09-big-spenders
+level: 3
+title: "Project 9b: above-average spenders"
+---
+Show `customer_id` and `spent` (rounded to 2 decimals) for customers whose total spend on **non-cancelled** orders is greater than the average total spend per customer.
+---solution
+SELECT customer_id, ROUND(spent, 2) AS spent FROM (SELECT o.customer_id, SUM(oi.quantity * oi.unit_price) AS spent FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status <> 'cancelled' GROUP BY o.customer_id) t WHERE spent > (SELECT AVG(spent) FROM (SELECT SUM(oi.quantity * oi.unit_price) AS spent FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status <> 'cancelled' GROUP BY o.customer_id));
 :::

@@ -4,6 +4,9 @@ title: Aggregation & GROUP BY
 summary: COUNT, SUM, AVG, MIN, MAX; grouping rows; HAVING vs WHERE; the "every selected column must be grouped" rule; conditional aggregation.
 minutes: 35
 ---
+> [!project] Desk & Co, step 6: what's selling?
+> This is where the report becomes useful: **totals**. You'll count orders by status and find the best-selling products by units and revenue.
+
 ## Aggregate functions collapse rows
 
 An **aggregate function** computes one value from many rows.
@@ -112,6 +115,45 @@ SELECT dept_id, GROUP_CONCAT(first_name, ', ') AS people
 FROM employees
 GROUP BY dept_id;
 ```
+
+## Worked example: turning a question into GROUP BY
+
+Question: *"How many units of each product have we sold, and for how much?"*
+
+1. **What is one output row?** One per product. So `GROUP BY product_id`.
+2. **Which table has the facts?** `order_items` (one row per product per order).
+3. **What do we compute per group?** `SUM(quantity)` and `SUM(quantity * unit_price)`.
+
+```sql run
+SELECT product_id,
+       SUM(quantity)                       AS units,
+       ROUND(SUM(quantity * unit_price), 2) AS revenue
+FROM order_items
+GROUP BY product_id
+ORDER BY revenue DESC;
+```
+
+Picture it in two phases. First the rows are sorted into buckets, one bucket per `product_id`. Then each bucket is squashed into one row by the aggregate functions. Any column you `SELECT` must either be the bucket label (in `GROUP BY`) or be squashed by an aggregate. That's the golden rule from earlier.
+
+Adding a filter on the **groups** uses `HAVING`:
+
+```sql run
+SELECT product_id, SUM(quantity) AS units
+FROM order_items
+GROUP BY product_id
+HAVING SUM(quantity) >= 10;
+```
+
+> [!plain] In plain English
+> `WHERE` filters rows **before** grouping; `HAVING` filters groups **after**. "Only delivered orders" is a WHERE. "Only products that sold at least 10" is a HAVING.
+
+## Common mistakes
+
+> [!mistake] Averaging an average
+> The average of per-month averages isn't the overall average unless every month has the same number of rows. Compute `SUM(x) / COUNT(*)` over the base rows instead.
+
+> [!mistake] Counting the wrong thing
+> `COUNT(*)` counts rows, `COUNT(col)` counts non-NULL values, `COUNT(DISTINCT col)` counts different values. "How many customers ordered?" is `COUNT(DISTINCT customer_id)`, not `COUNT(*)`.
 
 :::quiz
 q: Which clause can filter on `COUNT(*) > 5`?
@@ -348,4 +390,25 @@ FROM enrollments
 WHERE grade IS NOT NULL
 GROUP BY letter
 ORDER BY letter;
+:::
+
+:::exercise
+id: proj-sql-06-status
+level: 1
+title: "Project 6: orders by status"
+---
+Count the orders in each `status`, as columns `status` and `orders`.
+---solution
+SELECT status, COUNT(*) AS orders FROM orders GROUP BY status;
+:::
+
+:::exercise
+id: proj-sql-06-bestsellers
+level: 3
+title: "Project 6b: best sellers"
+ordered: true
+---
+For each `product_id` in `order_items`, show total `units` sold and `revenue` (sum of quantity × unit price, rounded to 2 decimals). Keep only products with **at least 5 units** sold, highest revenue first (ties by `product_id`).
+---solution
+SELECT product_id, SUM(quantity) AS units, ROUND(SUM(quantity * unit_price), 2) AS revenue FROM order_items GROUP BY product_id HAVING SUM(quantity) >= 5 ORDER BY revenue DESC, product_id;
 :::

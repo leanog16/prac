@@ -4,6 +4,9 @@ title: Set operations
 summary: Stacking result sets with UNION and UNION ALL, and comparing them with INTERSECT and EXCEPT.
 minutes: 15
 ---
+> [!project] Desk & Co, step 10: one contact list
+> Maya's newsletter goes to customers **and** to her staff, and she wants to know which products are stocked but never sold. Set operations stack and compare whole result sets.
+
 ## Combining results vertically
 
 Joins combine tables *side by side* (more columns). Set operations stack results *on top of each other* (more rows), or compare them.
@@ -71,6 +74,40 @@ UNION ALL
 SELECT name, 'stock', stock FROM products WHERE category = 'Furniture'
 ORDER BY name, metric;
 ```
+
+## Worked example: stacking two different tables
+
+`UNION` needs the same **number** of columns, with compatible types, in the same **order**. Column names come from the first query. Label each source so the merged list stays understandable:
+
+```sql run
+SELECT name, email, 'customer' AS kind FROM customers WHERE email IS NOT NULL
+UNION ALL
+SELECT first_name || ' ' || last_name, email, 'staff' FROM employees WHERE email IS NOT NULL
+ORDER BY kind, name
+LIMIT 10;
+```
+
+- `UNION ALL` keeps every row (fast, no duplicate check).
+- `UNION` removes duplicate rows (it has to sort or hash everything to find them).
+- `ORDER BY` goes **once, at the very end**, and applies to the combined result.
+
+## EXCEPT as "in A but not in B"
+
+```sql run
+SELECT product_id FROM products
+EXCEPT
+SELECT product_id FROM order_items;
+```
+
+Compared with the anti-join from lesson 8, `EXCEPT` is shorter but compares **whole rows**: you can only return columns that exist in both queries. When you need extra columns, use `NOT EXISTS`.
+
+> [!plain] In plain English
+> Joins glue tables **side by side** (more columns). Set operations stack results **on top of each other** (more rows) or compare them.
+
+## Common mistakes
+
+> [!mistake] Columns in the wrong order
+> `SELECT name, email … UNION SELECT email, name …` runs without error and produces garbage: names and emails swapped in half the rows. SQL matches columns by **position**, not by name.
 
 :::quiz
 q: `SELECT a, b FROM t1 UNION SELECT c FROM t2` fails because…
@@ -200,4 +237,24 @@ Return the cities that appear in **exactly one** of `customers.city` or `employe
 SELECT city FROM (SELECT city FROM customers EXCEPT SELECT city FROM employees)
 UNION
 SELECT city FROM (SELECT city FROM employees WHERE city IS NOT NULL EXCEPT SELECT city FROM customers);
+:::
+
+:::exercise
+id: proj-sql-10-contacts
+level: 2
+title: "Project 10: the newsletter list"
+---
+Produce one list with columns `name` and `email`: customers (their `name`) and employees (`first_name || ' ' || last_name`), only where the email isn't NULL. Remove duplicates.
+---solution
+SELECT name, email FROM customers WHERE email IS NOT NULL UNION SELECT first_name || ' ' || last_name, email FROM employees WHERE email IS NOT NULL;
+:::
+
+:::exercise
+id: proj-sql-10-never-sold
+level: 2
+title: "Project 10b: never sold, with EXCEPT"
+---
+Using `EXCEPT`, return the `product_id`s of products that have never been ordered.
+---solution
+SELECT product_id FROM products EXCEPT SELECT product_id FROM order_items;
 :::

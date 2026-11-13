@@ -4,6 +4,9 @@ title: Keys & normalization
 summary: Candidate, primary, foreign, natural and surrogate keys; one-to-many and many-to-many relationships; functional dependencies; 1NF, 2NF, 3NF and BCNF; when to denormalize.
 minutes: 35
 ---
+> [!project] Desk & Co, step 15: why the tables look the way they do
+> Before Desk & Co had a database, Maya tracked orders in one big spreadsheet. In this lesson you'll take that spreadsheet apart and see why it became the four tables you've been querying all along.
+
 ## Why design matters
 
 A badly designed table works fine on day one and then quietly corrupts itself. Consider a single "everything" table:
@@ -100,6 +103,40 @@ That's exactly the store schema you've been querying. Note that `order_items.uni
 ## Denormalization
 
 Normalized schemas are best for writes and integrity. Read-heavy systems (reporting, analytics) sometimes deliberately **denormalize** (store a precomputed total, copy a name into a log table) to avoid expensive joins. That's a trade-off you make on purpose, with a plan to keep copies in sync, not an accident.
+
+## Worked example: from Maya's spreadsheet to tables
+
+Her original sheet had one row per **order line**:
+
+| order_no | date | customer | customer_email | customer_city | product | category | price | qty |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 2025-01-08 | Ana Silva | ana@silva.example | Raleigh | Mechanical Keyboard | Electronics | 89.99 | 1 |
+| 1 | 2025-01-08 | Ana Silva | ana@silva.example | Raleigh | Wireless Mouse | Electronics | 24.99 | 2 |
+| 2 | 2025-01-15 | Ben Ford | ben.ford@example.com | Durham | Mechanical Keyboard | Electronics | 89.99 | 1 |
+
+What goes wrong:
+
+- **Update anomaly**: Ana moves to Cary. Her city appears on every line she ever ordered; miss one and the data contradicts itself.
+- **Insert anomaly**: Maya can't add a new product to the catalog until somebody orders it, because a row needs an order.
+- **Delete anomaly**: delete Ben's only order and Ben disappears completely.
+
+The fix is to ask, for every column, **"what does this fact depend on?"**
+
+| Column | Depends on | Goes in |
+|---|---|---|
+| customer_email, customer_city | the customer | `customers` |
+| category, price (catalog price) | the product | `products` |
+| date, which customer | the order | `orders` |
+| qty, the price actually charged | order **and** product together | `order_items` |
+
+That's exactly Desk & Co's schema. Note one deliberate duplication: `order_items.unit_price` copies the price at the time of sale. That isn't a normalization failure, because it's a **different fact**: the price charged, which must not change when the catalog price does.
+
+> [!plain] In plain English
+> Normalization means "store each fact once, in the table about the thing it describes". You then use joins to put the facts back together for reports.
+
+## When to denormalize on purpose
+
+Reporting databases and caches often store pre-joined or pre-aggregated data (an `order_totals` table refreshed nightly) because reads vastly outnumber writes. That's fine when it's a **conscious, documented** choice with a clear source of truth.
 
 :::quiz
 q: A table keyed by `(student_id, course_id)` has a column `student_name`. Which normal form does it violate?
@@ -255,4 +292,47 @@ title: Through the junction
 The `enrollments` table is a junction between students and courses. Return each course `code` and the number of **distinct students** who have ever taken it as `students`, including courses nobody took (0).
 ---solution
 SELECT c.code, COUNT(DISTINCT e.student_id) AS students FROM courses c LEFT JOIN enrollments e ON e.course_id = c.course_id GROUP BY c.course_id, c.code;
+:::
+
+:::exercise
+id: proj-sql-15-which-table
+level: 2
+title: "Project 15: where does it belong?"
+mode: answer
+---
+Maya wants to start recording each customer's **phone number**. Which Desk & Co table should the new column go in?
+---answer
+customers
+---solution
+customers
+:::
+
+:::exercise
+id: proj-sql-15-gift-wrap
+level: 3
+title: "Project 15b: a fact about two things"
+mode: answer
+---
+Customers can now ask for **gift wrap on individual items** within an order (one item wrapped, another not). Which table should a `gift_wrap` column go in?
+---answer
+order_items
+---solution
+order_items
+---explain
+Whether an item is wrapped depends on the order **and** the product together, which is exactly the grain of `order_items`.
+:::
+
+:::exercise
+id: proj-sql-15-anomaly
+level: 2
+title: "Project 15c: name the anomaly"
+mode: answer
+---
+In the one-big-spreadsheet design, Maya can't add a newly arrived product to her catalog until someone orders it. What kind of anomaly is that: **insert**, **update** or **delete**?
+---answer
+insert
+---answer
+insert anomaly
+---solution
+insert
 :::

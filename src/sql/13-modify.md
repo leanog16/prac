@@ -4,6 +4,9 @@ title: INSERT, UPDATE, DELETE
 summary: Changing data safely — inserting rows (including from a SELECT), updating with conditions and subqueries, deleting, upserts, and transactions.
 minutes: 30
 ---
+> [!project] Desk & Co, step 13: running the shop, not just reading it
+> So far you've only read data. Now Maya needs changes: record a new order, adjust prices, update stock. Each change must leave the data consistent, which is what transactions are for.
+
 ## Data Manipulation Language
 
 `SELECT` reads; **DML** statements change data. Exercises in this module are graded by running a *check query* against the database after your statements, so you'll see the resulting state. Every run starts from a fresh copy: nothing you do here is permanent.
@@ -140,6 +143,45 @@ SELECT COUNT(*) AS after_rollback FROM order_items;
 ```
 
 Transactions provide the **ACID** guarantees: **A**tomicity (all or nothing), **C**onsistency (constraints hold before and after), **I**solation (concurrent transactions don't see each other's partial work), **D**urability (committed data survives crashes).
+
+## Worked example: placing an order safely
+
+A new order touches **three** tables: a row in `orders`, rows in `order_items`, and lower `stock` in `products`. If the program crashed halfway, you'd have an order without lines, or lines without the stock reduction. Wrap the steps in a transaction so they happen all together or not at all:
+
+```sql
+BEGIN;
+INSERT INTO orders (order_id, customer_id, order_date, status) VALUES (41, 3, '2025-11-20', 'pending');
+INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (41, 2, 2, 24.99);
+UPDATE products SET stock = stock - 2 WHERE product_id = 2;
+COMMIT;
+```
+
+If anything fails before `COMMIT`, run `ROLLBACK` and the database looks as if nothing happened.
+
+> [!plain] In plain English
+> A transaction is a promise: "these statements count as **one** change". Other users never see the half-finished state.
+
+## Write the SELECT first
+
+Before an `UPDATE` or `DELETE`, run the same `WHERE` as a `SELECT` and look at what you're about to change:
+
+```sql run
+SELECT product_id, name, price FROM products WHERE category = 'Stationery';
+```
+
+Only when those are exactly the right rows, turn it into:
+
+```sql
+UPDATE products SET price = ROUND(price * 1.05, 2) WHERE category = 'Stationery';
+```
+
+## Common mistakes
+
+> [!mistake] UPDATE or DELETE without WHERE
+> `UPDATE products SET price = 0` changes **every** row. Many teams require a `WHERE` in review, and some clients refuse to run one without it.
+
+> [!mistake] Copying the current price into order lines incorrectly
+> Notice `order_items` stores `unit_price` separately from `products.price`. That's deliberate: prices change, but an old order must keep the price the customer actually paid. Never "fix" old order lines when you change the catalog.
 
 :::quiz
 q: What does `UPDATE products SET price = 0;` do?
@@ -359,4 +401,44 @@ CREATE TABLE leads (id INTEGER PRIMARY KEY, name TEXT, city TEXT);
 INSERT INTO leads (name, city) VALUES
  ('Ana','Raleigh'),('Bo','Durham'),('Ana','Raleigh'),('Cy','Cary'),('Bo','Durham'),('Bo','Durham'),('Di','Raleigh');
 DELETE FROM leads WHERE id NOT IN (SELECT MIN(id) FROM leads GROUP BY name, city);
+:::
+
+:::exercise
+id: proj-sql-13-place-order
+level: 3
+title: "Project 13: place an order"
+---
+Record a new order in one transaction: order **41** for customer **3** on `2025-11-20` with status `pending`, containing **2 × product 2** at the unit price of `24.99`, and reduce product 2's stock by 2.
+---check
+SELECT o.order_id, o.customer_id, o.status, oi.product_id, oi.quantity, oi.unit_price, p.stock FROM orders o JOIN order_items oi ON oi.order_id = o.order_id JOIN products p ON p.product_id = oi.product_id WHERE o.order_id = 41;
+---solution
+BEGIN;
+INSERT INTO orders (order_id, customer_id, order_date, status) VALUES (41, 3, '2025-11-20', 'pending');
+INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (41, 2, 2, 24.99);
+UPDATE products SET stock = stock - 2 WHERE product_id = 2;
+COMMIT;
+:::
+
+:::exercise
+id: proj-sql-13-reprice
+level: 2
+title: "Project 13b: a price increase"
+---
+Raise the price of every `Stationery` product by **5%**, rounded to 2 decimals. Leave other categories alone.
+---check
+SELECT name, category, price FROM products ORDER BY product_id;
+---solution
+UPDATE products SET price = ROUND(price * 1.05, 2) WHERE category = 'Stationery';
+:::
+
+:::exercise
+id: proj-sql-13-ship
+level: 2
+title: "Project 13c: ship the backlog"
+---
+Every `pending` order placed **before** `2025-10-01` has now shipped. Update their status to `shipped`.
+---check
+SELECT order_id, order_date, status FROM orders WHERE status IN ('pending', 'shipped') ORDER BY order_id;
+---solution
+UPDATE orders SET status = 'shipped' WHERE status = 'pending' AND order_date < '2025-10-01';
 :::

@@ -4,6 +4,9 @@ title: Sorting & limiting
 summary: ORDER BY with multiple keys and directions, where NULLs land, LIMIT/OFFSET pagination, and top-N queries.
 minutes: 20
 ---
+> [!project] Desk & Co, step 3: the price list
+> Reports need a predictable order. In this lesson you'll sort Maya's catalog and produce her "premium picks" shortlist.
+
 ## ORDER BY
 
 Rows come back in no guaranteed order unless you ask. `ORDER BY` sorts the result:
@@ -77,6 +80,41 @@ SELECT name FROM products ORDER BY name LIMIT 5 OFFSET 5;
 > "Top 3 salaries" with `LIMIT 3` gives exactly 3 rows even if the 3rd and 4th tie. If ties should all be included, you need a window function (`RANK()`), covered later. Also: `LIMIT` without `ORDER BY` gives you *some* rows, not the "first" ones.
 
 Other databases spell it differently: `SELECT TOP 3` (SQL Server), `FETCH FIRST 3 ROWS ONLY` (standard SQL, PostgreSQL, Oracle 12c+).
+
+## Worked example: a sort that's fully determined
+
+Sorting by price alone looks fine until two products share a price. Then the database may return them in **any** order, and the order can change from run to run. That makes reports flicker and tests flaky.
+
+```sql run
+SELECT name, category, price FROM products ORDER BY category;
+```
+
+Several products share each category, so the order *within* a category is arbitrary. Add a **tie-breaker**:
+
+```sql run
+SELECT name, category, price FROM products ORDER BY category, price DESC, name;
+```
+
+Read it as: "by category A→Z; inside a category, most expensive first; if prices tie, alphabetical by name". The last key should be something unique (a name or an id), so no two rows ever tie completely.
+
+> [!plain] In plain English
+> `ORDER BY` runs near the very end, after filtering, so it can use aliases from `SELECT`. `LIMIT` then keeps the first N rows of that sorted result. LIMIT without ORDER BY means "any N rows".
+
+## Pagination, the right way
+
+`LIMIT 10 OFFSET 20` gives "page 3" of 10 rows. It's simple, but the database still reads and throws away the first 20 rows, so deep pages get slow on big tables. Production APIs often use **keyset pagination** instead: remember the last value you showed and ask for rows after it:
+
+```sql run
+SELECT product_id, name FROM products WHERE product_id > 5 ORDER BY product_id LIMIT 5;
+```
+
+## Common mistakes
+
+> [!mistake] `DESC` applies to one column only
+> `ORDER BY price, stock DESC` sorts price **ascending** and stock descending. Write `DESC` after every key that should be descending.
+
+> [!mistake] LIMIT without a total order
+> "Top 3 most expensive" with ties at third place returns an arbitrary winner. Decide the tie-breaker deliberately.
 
 :::quiz
 q: `ORDER BY dept_id, salary DESC` sorts…
@@ -218,4 +256,26 @@ Return the **second-highest distinct salary** in the company as a single value. 
 `SELECT DISTINCT salary … ORDER BY … LIMIT 1 OFFSET 1`
 ---solution
 SELECT DISTINCT salary FROM employees ORDER BY salary DESC LIMIT 1 OFFSET 1;
+:::
+
+:::exercise
+id: proj-sql-03-premium
+level: 2
+title: "Project 3: premium picks"
+ordered: true
+---
+Show the `name`, `category` and `price` of the **5 most expensive** products, most expensive first. Break price ties alphabetically by name.
+---solution
+SELECT name, category, price FROM products ORDER BY price DESC, name LIMIT 5;
+:::
+
+:::exercise
+id: proj-sql-03-catalog-order
+level: 2
+title: "Project 3b: the printed catalog"
+ordered: true
+---
+Sort the whole catalog (`name`, `category`, `price`) by category A→Z, then by price **low to high** within each category, then by name.
+---solution
+SELECT name, category, price FROM products ORDER BY category, price, name;
 :::

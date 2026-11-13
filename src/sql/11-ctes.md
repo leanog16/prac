@@ -4,6 +4,9 @@ title: CTEs & recursive queries
 summary: Naming intermediate results with WITH, chaining steps into readable pipelines, and walking hierarchies and sequences with recursive CTEs.
 minutes: 30
 ---
+> [!project] Desk & Co, step 11: monthly revenue, readably
+> Remember the triple-nested subquery from step 9? CTEs turn it into a sequence of named steps. You'll also build Maya's monthly revenue table, the backbone of the final report.
+
 ## WITH: name your subqueries
 
 A **Common Table Expression** defines a named, temporary result at the top of a query. It reads top-to-bottom like a recipe instead of inside-out like nested subqueries.
@@ -116,6 +119,53 @@ FROM months
 LEFT JOIN orders o ON STRFTIME('%Y-%m', o.order_date) = STRFTIME('%Y-%m', m)
 GROUP BY m;
 ```
+
+## Worked example: refactor the nested query
+
+The "above-average spenders" query rewritten as named steps:
+
+```sql run
+WITH spend AS (
+  SELECT o.customer_id, SUM(oi.quantity * oi.unit_price) AS spent
+  FROM orders o JOIN order_items oi ON oi.order_id = o.order_id
+  WHERE o.status <> 'cancelled'
+  GROUP BY o.customer_id
+),
+avg_spend AS (
+  SELECT AVG(spent) AS avg_spent FROM spend
+)
+SELECT c.name, ROUND(s.spent, 2) AS spent
+FROM spend s
+JOIN customers c ON c.customer_id = s.customer_id
+CROSS JOIN avg_spend a
+WHERE s.spent > a.avg_spent
+ORDER BY s.spent DESC;
+```
+
+Each CTE is a small, testable query with a name that explains its purpose. To debug, temporarily change the final `SELECT` to `SELECT * FROM spend` and look at the intermediate result.
+
+> [!plain] In plain English
+> `WITH name AS (query)` creates a temporary, named result that only exists while this one statement runs. Later CTEs and the final query can use it like a table.
+
+## A practical recursive CTE: filling gaps in a calendar
+
+Reports should show months with **zero** sales, not skip them. Generate every month in a range, then LEFT JOIN the data onto it:
+
+```sql run
+WITH RECURSIVE months(m) AS (
+  SELECT '2025-01-01'
+  UNION ALL
+  SELECT date(m, '+1 month') FROM months WHERE m < '2025-12-01'
+)
+SELECT strftime('%Y-%m', m) AS month FROM months;
+```
+
+## Common mistakes
+
+> [!mistake] Recursion without a stop condition
+> A recursive CTE needs a `WHERE` in the recursive part that eventually returns no rows, or it runs until the database gives up.
+
+- CTEs improve readability; they don't automatically make queries faster. Some databases inline them, others materialize them.
 
 :::quiz
 q: In `WITH a AS (…), b AS (…) SELECT …`, can `b` reference `a`?
@@ -305,4 +355,26 @@ WITH RECURSIVE tree(emp_id, root, salary) AS (
 SELECT l.first_name AS leader, SUM(t.salary) AS org_payroll
 FROM tree t JOIN employees l ON l.emp_id = t.root
 GROUP BY t.root, l.first_name;
+:::
+
+:::exercise
+id: proj-sql-11-monthly
+level: 3
+title: "Project 11: monthly revenue"
+ordered: true
+---
+With a CTE named `lines` that joins `orders` to `order_items` (non-cancelled orders only) and exposes `month` (`YYYY-MM`) and `amount` (quantity × unit price), return each `month` and its `revenue` (rounded to 2 decimals), in month order.
+---solution
+WITH lines AS (SELECT strftime('%Y-%m', o.order_date) AS month, oi.quantity * oi.unit_price AS amount FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status <> 'cancelled') SELECT month, ROUND(SUM(amount), 2) AS revenue FROM lines GROUP BY month ORDER BY month;
+:::
+
+:::exercise
+id: proj-sql-11-top-customers
+level: 3
+title: "Project 11b: top 3 customers by name"
+ordered: true
+---
+Using a CTE `spend` (total non-cancelled spend per `customer_id`), return the `name` and `spent` (rounded to 2 decimals) of the **3** biggest spenders, biggest first.
+---solution
+WITH spend AS (SELECT o.customer_id, SUM(oi.quantity * oi.unit_price) AS spent FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status <> 'cancelled' GROUP BY o.customer_id) SELECT c.name, ROUND(s.spent, 2) AS spent FROM spend s JOIN customers c ON c.customer_id = s.customer_id ORDER BY s.spent DESC LIMIT 3;
 :::

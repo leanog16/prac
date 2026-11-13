@@ -30,6 +30,10 @@
   --cicd-soft: #f8e2ec;
   --aws: #8a6400;
   --aws-soft: #f6edd2;
+  --java: #b4441e;
+  --java-soft: #f8e3da;
+  --design: #3d55b8;
+  --design-soft: #e2e7f8;
   --ok: #1d7f47;
   --ok-soft: #dcf2e4;
   --bad: #b7322b;
@@ -55,7 +59,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0e1419; --surface: #151d24; --surface-2: #1c262f; --ink: #e1e8ee; --muted: #93a3b2; --line: #26323d;
-    --sql: #43c2b8; --sql-soft: #12302e; --bash: #f0905a; --bash-soft: #3a2316; --docker: #6aa8f0; --docker-soft: #132a45; --fastapi: #d38cf0; --fastapi-soft: #33183d; --spring: #8bcf5f; --spring-soft: #1d3112; --cicd: #f08fbf; --cicd-soft: #3a1527; --aws: #e8c15a; --aws-soft: #33280c;
+    --sql: #43c2b8; --sql-soft: #12302e; --bash: #f0905a; --bash-soft: #3a2316; --docker: #6aa8f0; --docker-soft: #132a45; --fastapi: #d38cf0; --fastapi-soft: #33183d; --spring: #8bcf5f; --spring-soft: #1d3112; --cicd: #f08fbf; --cicd-soft: #3a1527; --aws: #e8c15a; --aws-soft: #33280c; --java: #f59872; --java-soft: #3b1d12; --design: #8fa3f5; --design-soft: #1b2347;
     --ok: #4cc27f; --ok-soft: #12301f; --bad: #ff7b72; --bad-soft: #3a1714; --warn: #e3b05b; --warn-soft: #34270f;
     --code-bg: #111920; --term-bg: #0a0f14;
     --tk-k: #d38cf0; --tk-s: #7fd18f; --tk-n: #f0a868; --tk-c: #6f7f8d; --tk-f: #6cb4ff; --tk-v: #ff9b7a; --tk-o: #9fb0bf;
@@ -66,7 +70,7 @@
 }
 :root[data-theme="dark"] {
   --bg: #0e1419; --surface: #151d24; --surface-2: #1c262f; --ink: #e1e8ee; --muted: #93a3b2; --line: #26323d;
-  --sql: #43c2b8; --sql-soft: #12302e; --bash: #f0905a; --bash-soft: #3a2316; --docker: #6aa8f0; --docker-soft: #132a45; --fastapi: #d38cf0; --fastapi-soft: #33183d; --spring: #8bcf5f; --spring-soft: #1d3112; --cicd: #f08fbf; --cicd-soft: #3a1527; --aws: #e8c15a; --aws-soft: #33280c;
+  --sql: #43c2b8; --sql-soft: #12302e; --bash: #f0905a; --bash-soft: #3a2316; --docker: #6aa8f0; --docker-soft: #132a45; --fastapi: #d38cf0; --fastapi-soft: #33183d; --spring: #8bcf5f; --spring-soft: #1d3112; --cicd: #f08fbf; --cicd-soft: #3a1527; --aws: #e8c15a; --aws-soft: #33280c; --java: #f59872; --java-soft: #3b1d12; --design: #8fa3f5; --design-soft: #1b2347;
   --ok: #4cc27f; --ok-soft: #12301f; --bad: #ff7b72; --bad-soft: #3a1714; --warn: #e3b05b; --warn-soft: #34270f;
   --code-bg: #111920; --term-bg: #0a0f14;
   --tk-k: #d38cf0; --tk-s: #7fd18f; --tk-n: #f0a868; --tk-c: #6f7f8d; --tk-f: #6cb4ff; --tk-v: #ff9b7a; --tk-o: #9fb0bf;
@@ -81,6 +85,8 @@
 .t-spring { --trk: var(--spring); --trk-soft: var(--spring-soft); }
 .t-cicd { --trk: var(--cicd); --trk-soft: var(--cicd-soft); }
 .t-aws { --trk: var(--aws); --trk-soft: var(--aws-soft); }
+.t-java { --trk: var(--java); --trk-soft: var(--java-soft); }
+.t-design { --trk: var(--design); --trk-soft: var(--design-soft); }
 
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -105,7 +111,7 @@ h1, h2, h3, h4 { font-family: var(--f-display); line-height: 1.2; text-wrap: bal
 .track-switch a { text-decoration: none; color: var(--muted); padding: 5px 14px; border-radius: 999px; font-weight: 700; font-size: 14px; display: inline-flex; gap: 6px; align-items: center; }
 .track-switch a .glyph { font-family: var(--f-mono); }
 .track-switch a.on { background: var(--surface); color: var(--trk); box-shadow: var(--shadow); }
-.track-switch a.on.sw-sql { color: var(--sql); } .track-switch a.on.sw-bash { color: var(--bash); } .track-switch a.on.sw-docker { color: var(--docker); } .track-switch a.on.sw-fastapi { color: var(--fastapi); } .track-switch a.on.sw-spring { color: var(--spring); } .track-switch a.on.sw-cicd { color: var(--cicd); } .track-switch a.on.sw-aws { color: var(--aws); }
+.track-switch a.on.sw-sql { color: var(--sql); } .track-switch a.on.sw-bash { color: var(--bash); } .track-switch a.on.sw-docker { color: var(--docker); } .track-switch a.on.sw-fastapi { color: var(--fastapi); } .track-switch a.on.sw-spring { color: var(--spring); } .track-switch a.on.sw-cicd { color: var(--cicd); } .track-switch a.on.sw-aws { color: var(--aws); } .track-switch a.on.sw-java { color: var(--java); } .track-switch a.on.sw-design { color: var(--design); }
 .track-switch { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 .track-switch::-webkit-scrollbar { display: none; }
 .track-switch a { white-space: nowrap; }
@@ -174,6 +180,10 @@ main { min-width: 0; padding-block: 28px 80px; padding-left: max(16px, env(safe-
 .callout-warn { background: var(--warn-soft); border-color: transparent; } .callout-warn .callout-title { color: var(--warn); }
 .callout-exam { background: var(--trk-soft); border-color: transparent; } .callout-exam .callout-title { color: var(--trk); }
 .callout-note .callout-title { color: var(--muted); }
+.callout-project { background: var(--trk-soft); border-color: var(--trk); border-left-width: 4px; } .callout-project .callout-title { color: var(--trk); }
+.callout-plain .callout-title { color: var(--lv2); }
+.callout-mistake { background: var(--bad-soft); border-color: transparent; } .callout-mistake .callout-title { color: var(--bad); }
+.lvl.proj { color: var(--trk); background: var(--trk-soft); margin-left: 6px; }
 .callout-why .callout-title { color: var(--lv3); }
 
 /* ---------- code blocks ---------- */

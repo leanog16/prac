@@ -4,6 +4,9 @@ title: Tables, constraints & indexes
 summary: CREATE TABLE with types and constraints (PRIMARY KEY, NOT NULL, UNIQUE, CHECK, DEFAULT, FOREIGN KEY), ALTER and DROP, indexes and when they help, and views.
 minutes: 35
 ---
+> [!project] Desk & Co, step 14: product reviews
+> Maya wants customers to leave reviews. That's a new table, and getting its constraints right means bad data can't get in, no matter which app writes to it.
+
 ## Data Definition Language
 
 **DDL** statements define structure: `CREATE`, `ALTER`, `DROP`. Constraints are rules the database enforces on every insert and update, so bad data can't get in no matter which program writes it.
@@ -151,6 +154,50 @@ SELECT * FROM dept_payroll WHERE headcount > 2;
 ```
 
 Views simplify repeated queries, hide complexity, and can restrict which columns a user sees.
+
+## Worked example: designing a table from requirements
+
+Requirements: "A customer can review a product once, with a rating from 1 to 5 and an optional comment. We need to know when it was written."
+
+Translate each sentence into a constraint:
+
+| Requirement | Constraint |
+|---|---|
+| a review belongs to a real customer and product | `REFERENCES customers`, `REFERENCES products` |
+| once per customer per product | `UNIQUE (customer_id, product_id)` |
+| rating 1–5, required | `NOT NULL CHECK (rating BETWEEN 1 AND 5)` |
+| optional comment | nullable `TEXT` |
+| when it was written | `NOT NULL DEFAULT (date('now'))` |
+
+```sql
+CREATE TABLE reviews (
+  review_id   INTEGER PRIMARY KEY,
+  customer_id INTEGER NOT NULL REFERENCES customers(customer_id),
+  product_id  INTEGER NOT NULL REFERENCES products(product_id),
+  rating      INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  comment     TEXT,
+  created_on  TEXT NOT NULL DEFAULT (date('now')),
+  UNIQUE (customer_id, product_id)
+);
+CREATE INDEX idx_reviews_product ON reviews(product_id);
+```
+
+The index on `product_id` makes "show all reviews for this product" fast. Every product page will run that query.
+
+> [!plain] In plain English
+> Constraints are rules the **database** enforces. Application code has bugs and there's often more than one app; a `CHECK` constraint can't be forgotten.
+
+## When to add an index
+
+Add an index for columns you frequently **filter**, **join** or **sort** on, like foreign keys and lookup columns such as `email`. Every index speeds up reads but slows down writes slightly and uses space, so don't index everything. Primary keys and `UNIQUE` columns are indexed automatically.
+
+## Common mistakes
+
+> [!mistake] Foreign keys that aren't enforced
+> SQLite only enforces `REFERENCES` after `PRAGMA foreign_keys = ON;`, per connection. PostgreSQL and MySQL (InnoDB) always enforce them.
+
+> [!mistake] Storing money as floating point
+> `REAL` can't represent 0.1 exactly, so sums drift by fractions of a cent. Production systems store money as `NUMERIC(10,2)` or as integer **cents**.
 
 :::quiz
 q: A column is declared `UNIQUE` but not `NOT NULL`. Can two rows have NULL there?
@@ -366,4 +413,29 @@ CREATE TABLE loans (
   returned_on TEXT,
   CHECK (due_on > loaned_on)
 );
+:::
+
+:::exercise
+id: proj-sql-14-reviews
+level: 3
+title: "Project 14: the reviews table"
+---
+Create the `reviews` table: `review_id` integer primary key; `customer_id` and `product_id`, both required and referencing their tables; `rating`, a required integer that must be between 1 and 5; an optional `comment`; and a `UNIQUE` constraint on `(customer_id, product_id)`. Then insert one review: customer 1 rates product 5 with **4** and the comment `Bright and sturdy`.
+---check
+SELECT customer_id, product_id, rating, comment FROM reviews;
+---solution
+CREATE TABLE reviews (review_id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL REFERENCES customers(customer_id), product_id INTEGER NOT NULL REFERENCES products(product_id), rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5), comment TEXT, UNIQUE (customer_id, product_id));
+INSERT INTO reviews (customer_id, product_id, rating, comment) VALUES (1, 5, 4, 'Bright and sturdy');
+:::
+
+:::exercise
+id: proj-sql-14-view
+level: 3
+title: "Project 14b: a reusable view"
+---
+Create a view `order_totals` with one row per order: `order_id`, `customer_id`, `status` and `total` (sum of quantity × unit price, rounded to 2 decimals). Then query it for the **delivered** orders with a total over 300.
+---check
+SELECT order_id, customer_id, total FROM order_totals WHERE status = 'delivered' AND total > 300 ORDER BY order_id;
+---solution
+CREATE VIEW order_totals AS SELECT o.order_id, o.customer_id, o.status, ROUND(SUM(oi.quantity * oi.unit_price), 2) AS total FROM orders o JOIN order_items oi ON oi.order_id = o.order_id GROUP BY o.order_id, o.customer_id, o.status;
 :::

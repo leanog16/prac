@@ -152,7 +152,7 @@ function md(src) {
       let kind = 'note', title = '';
       const km = /^\[!(\w+)\]\s*(.*)$/.exec(body[0] || '');
       if (km) { kind = km[1].toLowerCase(); title = km[2]; body.shift(); }
-      const titles = { tip: 'Tip', warn: 'Watch out', note: 'Note', exam: 'Exam focus', why: 'Why it works' };
+      const titles = { tip: 'Tip', warn: 'Watch out', note: 'Note', exam: 'Exam focus', why: 'Why it works', project: 'Project', plain: 'In plain English', mistake: 'Common mistake' };
       html += `<aside class="callout callout-${kind}"><div class="callout-title">${inline(title || titles[kind] || 'Note')}</div>${md(body.join('\n'))}</aside>\n`;
       continue;
     }
@@ -219,7 +219,7 @@ function parseModule(file, track) {
     lesson.push(l);
     i++;
   }
-  exercises.sort((a, b) => a.level - b.level);
+  exercises.sort((a, b) => (a.project ? 1 : 0) - (b.project ? 1 : 0) || a.level - b.level);
   return { id: meta.id, title: meta.title, summary: meta.summary || '', minutes: +(meta.minutes || 20), track, lesson: md(lesson.join('\n')), exercises, quiz };
 }
 function parseExercise(blk, file, track, modId) {
@@ -247,6 +247,7 @@ function parseExercise(blk, file, track, modId) {
     explain: sec('explain').length ? md(sec('explain')[0]) : '',
     starter: sec('starter')[0] || '',
   };
+  if (f.project === 'true' || /^proj-/.test(f.id)) out.project = true;
   if (!out.solution) throw new Error(`${file}: exercise ${f.id} has no solution`);
   const mode = f.mode || (track === 'sql' ? 'sql' : 'cmd');
   if (mode === 'code') {
@@ -445,6 +446,8 @@ async function main() {
     { id: 'spring', title: 'Spring Boot', modules: [] },
     { id: 'cicd', title: 'CI/CD', modules: [] },
     { id: 'aws', title: 'AWS', modules: [] },
+    { id: 'java', title: 'Java OOP', modules: [] },
+    { id: 'design', title: 'System Design', modules: [] },
   ];
   for (const t of tracks) {
     const dir = path.join(SRC, t.id);

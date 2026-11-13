@@ -4,6 +4,9 @@ title: NULL & three-valued logic
 summary: Why NULL isn't a value, how TRUE/FALSE/UNKNOWN combine, and the classic traps with NOT IN, COUNT and DISTINCT.
 minutes: 20
 ---
+> [!project] Desk & Co, step 5: the mailing list
+> Two of Maya's customers never gave an email address. Her mailing tool chokes on blanks, and a naive query silently drops or miscounts those people. This lesson's project builds a mailing list that handles them.
+
 ## NULL means "unknown"
 
 `NULL` is not zero, not an empty string, and not false. It's a marker meaning "no value here / unknown". Because the value is unknown, almost every operation involving NULL produces NULL:
@@ -101,6 +104,44 @@ SELECT major, COUNT(*) FROM students GROUP BY major;
 ```sql run
 SELECT NULL IS NULL, 1 IS 1, NULL IS 1, 1 IS NOT NULL;
 ```
+
+## Worked example: finding where NULLs hide
+
+Before trusting any report, check which columns contain NULLs. One query per table answers it, because `COUNT(column)` skips NULLs while `COUNT(*)` counts rows:
+
+```sql run
+SELECT COUNT(*)            AS customers,
+       COUNT(email)        AS with_email,
+       COUNT(*) - COUNT(email) AS missing_email
+FROM customers;
+```
+
+Now see how a "simple" filter goes wrong:
+
+```sql run
+SELECT COUNT(*) FROM customers WHERE email LIKE '%@example.com';
+```
+
+```sql run
+SELECT COUNT(*) FROM customers WHERE NOT (email LIKE '%@example.com');
+```
+
+The two counts don't add up to the total. The customers with a NULL email are in **neither** result, because `NULL LIKE …` is *unknown*, and so is `NOT unknown`. When you need them, ask for them explicitly with `OR email IS NULL`.
+
+> [!plain] In plain English
+> NULL isn't zero and isn't an empty string. It means "we don't know". Any comparison with something unknown is itself unknown, and `WHERE` only keeps rows where the test is definitely true.
+
+## Choosing a replacement value
+
+`COALESCE(column, fallback)` replaces NULL for **display**. Pick fallbacks that can't be mistaken for real data: `'(no email)'` is clearly a placeholder; `''` or `0` might be real values.
+
+## Common mistakes
+
+> [!mistake] `AVG` and NULLs
+> `AVG(gpa)` averages only the non-NULL values. That's usually right, but if NULL really means 0 in your business, write `AVG(COALESCE(gpa, 0))`, and say so in the report.
+
+> [!mistake] `NOT IN` with a NULL in the list
+> `x NOT IN (1, 2, NULL)` is never true. Prefer `NOT EXISTS` for "rows with no match".
 
 :::quiz
 q: `TRUE OR UNKNOWN` evaluates to…
@@ -246,4 +287,24 @@ Without any table, return one row with these columns, letting SQLite compute eac
 `NULL AND 0` is 0 (false), `NULL OR 1` is 1 (true), `NULL AND 1` is NULL (unknown), `NOT NULL` is NULL, and `NULL IS NULL` is 1.
 ---solution
 SELECT NULL AND 0 AS a, NULL OR 1 AS b, NULL AND 1 AS c, NOT NULL AS d, NULL IS NULL AS e;
+:::
+
+:::exercise
+id: proj-sql-05-mailing
+level: 2
+title: "Project 5: the mailing list"
+---
+Build Maya's mailing list: every customer's `name`, `city`, and `contact`, which is their email, or the text `(no email)` when it's missing.
+---solution
+SELECT name, city, COALESCE(email, '(no email)') AS contact FROM customers;
+:::
+
+:::exercise
+id: proj-sql-05-follow-up
+level: 2
+title: "Project 5b: who needs a follow-up call?"
+---
+List the `name` and `city` of customers who have **no** email address, so Maya can phone them.
+---solution
+SELECT name, city FROM customers WHERE email IS NULL;
 :::

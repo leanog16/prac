@@ -311,7 +311,7 @@
     const node = el(`
       <article class="ex${solved ? ' solved' : ''}" id="ex-${ex.id}" data-level="${ex.level}">
         <header class="ex-head">
-          <span class="lvl lvl-${ex.level}">${LEVELS[ex.level]}</span>
+          <span class="lvl lvl-${ex.level}">${LEVELS[ex.level]}</span>${ex.project ? '<span class="lvl proj">Project</span>' : ''}
           <h3 class="ex-title">${esc(ex.title)}</h3>
           <span class="solved-tag">✓ Solved</span>
           <span class="ex-num">${opts.showModule ? esc(ex.mod.title) + ' · ' : ''}#${ex.num}</span>
@@ -416,7 +416,7 @@
     const node = el(`
       <article class="ex${solved ? ' solved' : ''}" id="ex-${ex.id}" data-level="${ex.level}">
         <header class="ex-head">
-          <span class="lvl lvl-${ex.level}">${LEVELS[ex.level]}</span>
+          <span class="lvl lvl-${ex.level}">${LEVELS[ex.level]}</span>${ex.project ? '<span class="lvl proj">Project</span>' : ''}
           <h3 class="ex-title">${esc(ex.title)}</h3>
           <span class="solved-tag">✓ Solved</span>
           <span class="ex-num">${opts.showModule ? esc(ex.mod.title) + ' · ' : ''}#${ex.num}</span>
@@ -572,6 +572,10 @@
     cicd: { glyph: '⟳', blurb: 'Continuous integration and delivery with GitHub Actions: triggers, jobs and matrices, caching, secrets and OIDC, building and publishing images, deployment strategies, reusable workflows.', how: 'requirement checker',
       pages: [['practice', 'Practice', '◎', 'Practice all exercises'], ['review', 'Review', '?', 'Review quiz'], ['cheatsheet', 'Cheat sheet', '≡', 'Cheat sheet']] },
     aws: { glyph: '☁', blurb: 'The AWS core for developers: IAM and policies, EC2, VPC networking, S3, RDS and DynamoDB, ECR and ECS, Lambda and messaging, CloudWatch, infrastructure as code and cost.', how: 'requirement checker',
+      pages: [['practice', 'Practice', '◎', 'Practice all exercises'], ['review', 'Review', '?', 'Review quiz'], ['cheatsheet', 'Cheat sheet', '≡', 'Cheat sheet']] },
+    java: { glyph: 'J', blurb: 'Object-oriented programming in Java from the ground up: classes and objects, encapsulation, inheritance, interfaces, polymorphism, collections, generics, exceptions, SOLID and design patterns.', how: 'requirement checker',
+      pages: [['practice', 'Practice', '◎', 'Practice all exercises'], ['review', 'Review', '?', 'Review quiz'], ['cheatsheet', 'Cheat sheet', '≡', 'Cheat sheet']] },
+    design: { glyph: '◇', blurb: 'System design and architecture: requirements and estimation, APIs, databases and scaling, caching, queues, consistency, reliability, architectural styles and full case studies.', how: 'requirement checker',
       pages: [['practice', 'Practice', '◎', 'Practice all exercises'], ['review', 'Review', '?', 'Review quiz'], ['cheatsheet', 'Cheat sheet', '≡', 'Cheat sheet']] }
   };
   const TRACK_IDS = PJ.tracks.map(t => t.id);
@@ -642,7 +646,7 @@
       <section class="hero">
         <div class="eyebrow">Study lab · ${PJ.tracks.length} tracks · ${total} graded exercises</div>
         <h1><span class="p">pr</span><span class="j">ac</span></h1>
-        <p class="lede">Lessons that teach the concepts, then graded exercises from warm-up to boss level. Queries run on a real SQLite database; shell and Docker commands run in simulators; FastAPI, Spring Boot, CI/CD workflows and AWS configuration are checked against requirement lists. All in your browser.</p>
+        <p class="lede">Lessons that teach the concepts, then graded exercises from warm-up to boss level. Queries run on a real SQLite database; shell and Docker commands run in simulators; FastAPI, Spring Boot, Java, CI/CD workflows, AWS configuration and system designs are checked against requirement lists. Each track builds one project step by step. All in your browser.</p>
       </section>
       <div class="track-cards">${PJ.tracks.map(card).join('')}</div>
       <div class="section-head"><h2>How exercises work</h2></div>

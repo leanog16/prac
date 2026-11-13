@@ -4,6 +4,9 @@ title: Outer, self & cross joins
 summary: LEFT/RIGHT/FULL joins that keep unmatched rows, the anti-join pattern, ON-vs-WHERE with outer joins, self-joins for hierarchies, and CROSS joins.
 minutes: 35
 ---
+> [!project] Desk & Co, step 8: the things that *didn't* happen
+> Inner joins only show what exists. Maya also needs the gaps: products nobody has bought and customers who signed up but never ordered. Outer joins find them.
+
 ## LEFT JOIN keeps every left row
 
 An inner join drops rows with no partner. A **LEFT (OUTER) JOIN** keeps every row from the left table; where no right row matches, the right side's columns are filled with **NULL**.
@@ -121,6 +124,53 @@ GROUP BY a.emp_id, a.first_name
 ORDER BY hired_earlier
 LIMIT 6;
 ```
+
+## Worked example: zero is a real answer
+
+"How many orders has each customer placed?" With an inner join, customers with no orders simply vanish, and the report claims everyone ordered at least once:
+
+```sql run
+SELECT c.name, COUNT(*) AS orders
+FROM customers c JOIN orders o ON o.customer_id = c.customer_id
+GROUP BY c.customer_id, c.name
+ORDER BY orders, c.name;
+```
+
+Switch to `LEFT JOIN` and count a column from the **right** table, so the unmatched rows count as 0, not 1:
+
+```sql run
+SELECT c.name, COUNT(o.order_id) AS orders
+FROM customers c LEFT JOIN orders o ON o.customer_id = c.customer_id
+GROUP BY c.customer_id, c.name
+ORDER BY orders, c.name;
+```
+
+`COUNT(*)` would count the single all-NULL row that the LEFT JOIN produces for a customer with no orders, and report 1. `COUNT(o.order_id)` skips that NULL and reports 0.
+
+> [!plain] In plain English
+> `LEFT JOIN` means "keep **every** row on the left; fill in the right side when there's a match, and with NULLs when there isn't".
+
+## The anti-join pattern
+
+"Rows in A with no match in B" is so common it has a name. Two standard spellings:
+
+```sql run
+SELECT p.name FROM products p
+LEFT JOIN order_items oi ON oi.product_id = p.product_id
+WHERE oi.product_id IS NULL;
+```
+
+```sql run
+SELECT p.name FROM products p
+WHERE NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.product_id = p.product_id);
+```
+
+Both are correct and safe with NULLs. `NOT IN (subquery)` isn't, if the subquery can return a NULL.
+
+## Common mistakes
+
+> [!mistake] Filtering the right table in WHERE
+> `LEFT JOIN orders o ON … WHERE o.status = 'delivered'` throws away the customers with no orders (their `o.status` is NULL), which silently turns your LEFT JOIN back into an inner join. Put conditions on the right table **in the ON clause**: `LEFT JOIN orders o ON o.customer_id = c.customer_id AND o.status = 'delivered'`.
 
 :::quiz
 q: `departments LEFT JOIN employees` — what happens to a department with no employees?
@@ -335,4 +385,27 @@ LEFT JOIN (SELECT p.category, o.status, oi.quantity
            JOIN orders o ON o.order_id = oi.order_id) f
   ON f.category = g.category AND f.status = g.status
 GROUP BY g.category, g.status;
+:::
+
+:::exercise
+id: proj-sql-08-dead-stock
+level: 2
+title: "Project 8: dead stock"
+---
+List the `name` and `stock` of products that have **never** appeared in any order.
+---solution
+SELECT p.name, p.stock FROM products p LEFT JOIN order_items oi ON oi.product_id = p.product_id WHERE oi.product_id IS NULL;
+:::
+
+:::exercise
+id: proj-sql-08-delivered-count
+level: 3
+title: "Project 8b: delivered orders per customer, zeros included"
+ordered: true
+---
+For **every** customer show `name` and `delivered`, the number of their orders with status `delivered` (0 if none). Sort by `delivered` descending, then `name`.
+---hint
+Put the status condition in the `ON` clause of a LEFT JOIN, and count a column from `orders`.
+---solution
+SELECT c.name, COUNT(o.order_id) AS delivered FROM customers c LEFT JOIN orders o ON o.customer_id = c.customer_id AND o.status = 'delivered' GROUP BY c.customer_id, c.name ORDER BY delivered DESC, c.name;
 :::

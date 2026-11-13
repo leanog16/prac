@@ -4,6 +4,9 @@ title: Tables & SELECT
 summary: How relational data is shaped, and how to pull columns, expressions and distinct values out of a table.
 minutes: 25
 ---
+> [!project] Track project: the Desk & Co sales report
+> Maya runs **Desk & Co**, a small online shop for desk gear. Her data lives in four tables you'll meet in this lesson: `customers`, `products`, `orders` and `order_items`. Over the 16 lessons of this track you'll build, one query at a time, the sales report she reads every Monday: what sells, what's running out, who her best customers are, and how revenue moves month to month. Each lesson ends with a **Project** exercise that adds the next piece.
+
 ## The relational model in five minutes
 
 A relational database stores data in **tables** (formally, *relations*). Every table has a fixed set of named **columns**, each with a type, and any number of **rows**. A row is one fact: one employee, one order, one enrollment.
@@ -101,6 +104,42 @@ Even though you *write* `SELECT` first, the database logically processes clauses
 
 > [!exam] Why this matters
 > Because `WHERE` runs before `SELECT`, you can't use a column alias in `WHERE` (in standard SQL). But `ORDER BY` runs after, so aliases work there.
+
+## Worked example: reading a table you've never seen
+
+When you open an unfamiliar database, don't guess. Ask it. Three small queries tell you almost everything:
+
+```sql run
+SELECT * FROM order_items LIMIT 5;
+```
+
+Read the result column by column and say out loud what one row **means**: "order 1 contained 1 unit of product 1, sold at 89.99 each." That sentence is the table's *grain*: one row per product per order. Knowing the grain stops you from double counting later.
+
+```sql run
+SELECT COUNT(*) FROM order_items;
+```
+
+```sql run
+SELECT order_id, product_id, quantity, unit_price, quantity * unit_price AS line_total
+FROM order_items
+LIMIT 5;
+```
+
+That last query is the first real piece of analysis: a **computed column**. SQL calculates `quantity * unit_price` for every row and the alias `line_total` gives the result a readable name.
+
+> [!plain] In plain English
+> `SELECT` picks **columns** (what you want to see), `FROM` names the **table** (where it lives). Everything after that just narrows, sorts or reshapes those rows.
+
+## Common mistakes
+
+> [!mistake] Forgetting commas, or adding one too many
+> `SELECT name price FROM products` is valid SQL, but it shows one column called `price` that contains the **name**. A missing comma turns the second word into an alias. And a trailing comma (`SELECT name, price, FROM products`) is a syntax error.
+
+> [!mistake] Using `SELECT *` in real code
+> `*` is perfect for exploring. In a report or an application it returns columns you don't need, and the output silently changes when someone adds a column. Name the columns you want.
+
+- Text values use **single quotes**: `'Electronics'`. Double quotes mean an identifier (a column or table name).
+- SQL keywords aren't case-sensitive (`select` = `SELECT`), but writing them in capitals makes queries easier to scan.
 
 :::quiz
 q: A table is best described as…
@@ -238,4 +277,28 @@ title: SQL as a calculator
 Without using any table, return a single row with three columns: `a` = 17 divided by 5 (integer division), `b` = 17 divided by 5 as a decimal (3.4), and `c` = the remainder of 17 divided by 5.
 ---solution
 SELECT 17 / 5 AS a, 17 / 5.0 AS b, 17 % 5 AS c;
+:::
+
+:::exercise
+id: proj-sql-01-lines
+level: 2
+title: "Project 1: order lines with totals"
+---
+Start Maya's report with the raw material: every row of `order_items` showing `order_id`, `product_id`, `quantity`, `unit_price`, and a computed column `line_total` equal to quantity times unit price.
+---hint
+A computed column is an expression with an alias: `quantity * unit_price AS line_total`.
+---solution
+SELECT order_id, product_id, quantity, unit_price, quantity * unit_price AS line_total FROM order_items;
+:::
+
+:::exercise
+id: proj-sql-01-catalog
+level: 2
+title: "Project 1b: the catalog sheet"
+---
+Maya also wants a catalog sheet: each product's `name`, `category`, `price`, and a column `price_with_tax` that adds 7% sales tax, rounded to 2 decimals.
+---hint
+`ROUND(price * 1.07, 2) AS price_with_tax`
+---solution
+SELECT name, category, price, ROUND(price * 1.07, 2) AS price_with_tax FROM products;
 :::

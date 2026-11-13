@@ -4,6 +4,9 @@ title: Boss round: mixed problems
 summary: Interview- and exam-style problems that combine everything. Read the problem, sketch the steps, then build the query one CTE at a time.
 minutes: 60
 ---
+> [!project] Desk & Co, final step: Maya's Monday dashboard
+> Everything comes together here. The last project exercises combine joins, aggregation, CTEs and window functions into the queries that power Maya's dashboard.
+
 ## How to attack a hard query
 
 Hard SQL problems are rarely about obscure syntax. They're about breaking the question into steps. A reliable method:
@@ -45,6 +48,41 @@ ORDER BY pct_electronics DESC;
 ```
 
 Every problem below has a reference solution, hints, and an "Expected output" button. Try each one fully before peeking.
+
+## Worked example: planning a big query
+
+For any hard query, write the plan in plain words **before** any SQL:
+
+1. **Output**: what does one row of the answer represent? (one per customer? per month? per category-and-month?)
+2. **Sources**: which tables hold the facts, and at what grain?
+3. **Steps**: what intermediate results do I need? Each becomes a CTE.
+4. **Checks**: what would a wrong answer look like? (row counts that are too high from fan-out, missing zero rows, ties.)
+
+Example: "For each customer, their first order date, last order date, number of non-cancelled orders and lifetime value, best customers first."
+
+- One row per **customer**, including customers with no orders → start from `customers`, LEFT JOIN.
+- Order dates come from `orders`; money comes from `order_items` → aggregate lines to **order totals** first, to avoid fan-out when counting orders.
+- Steps: `order_totals` (per order) → per-customer aggregation → join to customers.
+
+```sql run
+WITH order_totals AS (
+  SELECT o.order_id, o.customer_id, o.order_date, SUM(oi.quantity * oi.unit_price) AS total
+  FROM orders o JOIN order_items oi ON oi.order_id = o.order_id
+  WHERE o.status <> 'cancelled'
+  GROUP BY o.order_id, o.customer_id, o.order_date
+),
+per_customer AS (
+  SELECT customer_id, MIN(order_date) AS first_order, MAX(order_date) AS last_order,
+         COUNT(*) AS orders, SUM(total) AS lifetime_value
+  FROM order_totals GROUP BY customer_id
+)
+SELECT c.name, pc.first_order, pc.last_order, COALESCE(pc.orders, 0) AS orders,
+       ROUND(COALESCE(pc.lifetime_value, 0), 2) AS lifetime_value
+FROM customers c LEFT JOIN per_customer pc ON pc.customer_id = c.customer_id
+ORDER BY lifetime_value DESC, c.name;
+```
+
+Check: 15 rows (one per customer), and customers without orders show `0`.
 
 :::exercise
 id: boss-second-dept-salary
@@ -249,4 +287,39 @@ Bucket salaries into bands of 25,000 (`50000-74999`, `75000-99999`, …). Return
 SELECT (salary / 25000) * 25000 AS band_start, COUNT(*) AS employees,
        SUBSTR('************************', 1, COUNT(*)) AS bar
 FROM employees GROUP BY band_start ORDER BY band_start;
+:::
+
+:::exercise
+id: proj-sql-16-lifetime
+level: 4
+title: "Project 16: customer lifetime value"
+ordered: true
+---
+One row per customer (**all** customers): `name`, `orders` (number of non-cancelled orders, 0 if none) and `lifetime_value` (their total spend on non-cancelled orders, rounded to 2 decimals, 0 if none). Sort by `lifetime_value` descending, then `name`. Watch out for fan-out when counting orders.
+---solution
+WITH order_totals AS (SELECT o.order_id, o.customer_id, SUM(oi.quantity * oi.unit_price) AS total FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status <> 'cancelled' GROUP BY o.order_id, o.customer_id), per_customer AS (SELECT customer_id, COUNT(*) AS orders, SUM(total) AS lifetime_value FROM order_totals GROUP BY customer_id) SELECT c.name, COALESCE(pc.orders, 0) AS orders, ROUND(COALESCE(pc.lifetime_value, 0), 2) AS lifetime_value FROM customers c LEFT JOIN per_customer pc ON pc.customer_id = c.customer_id ORDER BY lifetime_value DESC, c.name;
+:::
+
+:::exercise
+id: proj-sql-16-category-share
+level: 4
+title: "Project 16b: category share of revenue"
+ordered: true
+---
+For non-cancelled orders, show each `category`, its `revenue` (rounded to 2 decimals), and `pct`, its percentage of total revenue rounded to 1 decimal, biggest first.
+---hint
+`SUM(revenue) OVER ()` is the grand total on every row.
+---solution
+WITH cat AS (SELECT p.category, SUM(oi.quantity * oi.unit_price) AS revenue FROM order_items oi JOIN products p ON p.product_id = oi.product_id JOIN orders o ON o.order_id = oi.order_id WHERE o.status <> 'cancelled' GROUP BY p.category) SELECT category, ROUND(revenue, 2) AS revenue, ROUND(100.0 * revenue / SUM(revenue) OVER (), 1) AS pct FROM cat ORDER BY revenue DESC;
+:::
+
+:::exercise
+id: proj-sql-16-best-month
+level: 4
+title: "Project 16c: each category's best month"
+ordered: true
+---
+For each category, the month (`YYYY-MM`) with its highest revenue from non-cancelled orders: columns `category`, `month`, `revenue` (rounded to 2 decimals), sorted by category. Break ties by the earlier month.
+---solution
+WITH cm AS (SELECT p.category, strftime('%Y-%m', o.order_date) AS month, SUM(oi.quantity * oi.unit_price) AS revenue FROM order_items oi JOIN products p ON p.product_id = oi.product_id JOIN orders o ON o.order_id = oi.order_id WHERE o.status <> 'cancelled' GROUP BY p.category, month), ranked AS (SELECT category, month, revenue, ROW_NUMBER() OVER (PARTITION BY category ORDER BY revenue DESC, month) AS rn FROM cm) SELECT category, month, ROUND(revenue, 2) AS revenue FROM ranked WHERE rn = 1 ORDER BY category;
 :::

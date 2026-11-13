@@ -4,6 +4,9 @@ title: Filtering with WHERE
 summary: Comparison operators, AND/OR/NOT and their precedence, IN, BETWEEN, LIKE, and testing for NULL.
 minutes: 30
 ---
+> [!project] Desk & Co, step 2: the restock list
+> Maya's first real question: *which products are about to run out?* Filtering with `WHERE` answers it. At the end of this lesson you'll write the restock list she sends to her supplier.
+
 ## WHERE keeps rows that are true
 
 `WHERE` takes a condition and keeps only the rows where it evaluates to **true**. (Not "not false": that distinction matters once NULL shows up.)
@@ -133,6 +136,51 @@ WHERE price * stock > 5000;
 ```
 
 Notice we repeated `price * stock` rather than writing `WHERE value > 5000`. That's because `WHERE` runs before `SELECT` computes the alias. (SQLite actually tolerates the alias as an extension, but most databases reject it.)
+
+## Worked example: building a filter one condition at a time
+
+Write complex filters **incrementally** and run each step. Suppose Maya asks for "Electronics or Accessories that cost under $50 and have fewer than 50 in stock".
+
+Step 1, the category part:
+
+```sql run
+SELECT name, category, price, stock FROM products
+WHERE category IN ('Electronics', 'Accessories');
+```
+
+Step 2, add the price. Check the row count drops the way you expect:
+
+```sql run
+SELECT name, category, price, stock FROM products
+WHERE category IN ('Electronics', 'Accessories')
+  AND price < 50;
+```
+
+Step 3, add the stock condition:
+
+```sql run
+SELECT name, category, price, stock FROM products
+WHERE category IN ('Electronics', 'Accessories')
+  AND price < 50
+  AND stock < 50;
+```
+
+Putting each condition on its own line makes the query read like the requirement, and it's easy to comment one out while debugging.
+
+> [!plain] In plain English
+> `WHERE` is a test that runs once per row. Rows where the test is **true** stay; rows where it's false (or unknown, because of NULL) are dropped.
+
+## Common mistakes
+
+> [!mistake] Mixing AND and OR without parentheses
+> `WHERE category = 'Home' OR category = 'Furniture' AND price > 100` means `Home OR (Furniture AND price > 100)`, because `AND` binds tighter than `OR`. If you meant "(Home or Furniture) and expensive", write the parentheses, or use `IN`.
+
+> [!mistake] Comparing with NULL using `=`
+> `WHERE email = NULL` never matches anything. Use `IS NULL` / `IS NOT NULL`. The NULL lesson explains why.
+
+- `BETWEEN 10 AND 50` **includes** both ends.
+- `LIKE 'desk%'` in SQLite is case-insensitive for ASCII letters; `%` matches any run of characters, `_` exactly one.
+- Dates stored as `'YYYY-MM-DD'` text compare correctly as strings: `order_date >= '2025-06-01'`.
 
 :::quiz
 q: Which rows does `WHERE a = 1 OR b = 2 AND c = 3` keep?
@@ -333,4 +381,26 @@ SELECT first_name, last_name, year, major, gpa FROM students
 WHERE ((year = 4 AND gpa > 3.5)
     OR (year = 1 AND major IN ('Computer Science', 'Computer Engineering')))
   AND email IS NOT NULL;
+:::
+
+:::exercise
+id: proj-sql-02-restock
+level: 2
+title: "Project 2: the restock list"
+---
+List the `name`, `category` and `stock` of every product with **fewer than 20** units in stock, **excluding** the `Stationery` category (Maya restocks that locally).
+---hint
+Two conditions joined with `AND`; "excluding" is `<>` (or `!=`).
+---solution
+SELECT name, category, stock FROM products WHERE stock < 20 AND category <> 'Stationery';
+:::
+
+:::exercise
+id: proj-sql-02-open-orders
+level: 2
+title: "Project 2b: orders still in flight"
+---
+Maya wants to see every order that hasn't reached the customer yet: show `order_id`, `customer_id`, `order_date` and `status` for orders whose status is `pending` or `shipped` and that were placed **on or after** `2025-09-01`.
+---solution
+SELECT order_id, customer_id, order_date, status FROM orders WHERE status IN ('pending', 'shipped') AND order_date >= '2025-09-01';
 :::

@@ -4,6 +4,9 @@ title: Functions, CASE & types
 summary: String, number and date functions, CASE expressions for conditional logic, COALESCE/NULLIF, and type conversion with CAST.
 minutes: 30
 ---
+> [!project] Desk & Co, step 4: price bands and months
+> Maya thinks in **price bands** (budget, mid-range, premium) and **months**, not raw numbers and dates. `CASE` and the date functions turn raw columns into the labels she uses.
+
 ## Scalar functions
 
 A **scalar function** takes values from one row and returns one value. (Contrast with *aggregate* functions like `SUM`, which collapse many rows; that's the next-but-one module.) Function names differ between databases; this site uses SQLite, and the table notes common equivalents.
@@ -146,6 +149,58 @@ SQLite uses *dynamic typing*: a column has a type affinity, but each value carri
 ```sql run
 SELECT CAST('42' AS INTEGER) + 1, CAST(10 AS REAL) / 4, typeof('3'), typeof(3), typeof(3.0), typeof(NULL);
 ```
+
+## Worked example: from a requirement to a CASE expression
+
+Requirement: "label each product *budget* under $30, *mid-range* from $30 to under $100, *premium* from $100".
+
+First write the conditions as a table, checking the boundaries:
+
+| price | band |
+|---|---|
+| 29.99 | budget |
+| 30.00 | mid-range |
+| 99.99 | mid-range |
+| 100.00 | premium |
+
+Then translate top to bottom. `CASE` checks `WHEN` branches **in order** and stops at the first true one, so each branch only needs the upper bound:
+
+```sql run
+SELECT name, price,
+       CASE
+         WHEN price < 30  THEN 'budget'
+         WHEN price < 100 THEN 'mid-range'
+         ELSE 'premium'
+       END AS band
+FROM products
+ORDER BY price;
+```
+
+## Dates in SQLite
+
+SQLite stores dates as text (`'2025-07-14'`), and the `strftime` function pulls parts out:
+
+```sql run
+SELECT order_id, order_date,
+       strftime('%Y-%m', order_date) AS month,
+       strftime('%w', order_date)    AS weekday,      -- 0 = Sunday
+       julianday('2025-12-31') - julianday(order_date) AS days_before_year_end
+FROM orders
+LIMIT 5;
+```
+
+Other databases spell it differently (`EXTRACT(MONTH FROM d)` and `DATE_TRUNC('month', d)` in PostgreSQL, `DATE_FORMAT` in MySQL), but the idea is the same.
+
+## Common mistakes
+
+> [!mistake] Integer division
+> In SQLite, `7 / 2` is `3`: two integers give an integer. Write `7 / 2.0` or `CAST(x AS REAL) / y` when you want a fraction. This bites percentages constantly.
+
+> [!mistake] CASE without ELSE
+> A row that matches no `WHEN` gets `NULL`. Usually you want an explicit `ELSE`.
+
+- `ROUND(x, 2)` rounds for display; do the math first, round last.
+- `COALESCE(a, b)` returns the first non-NULL argument.
 
 :::quiz
 q: `SUBSTR('database', 1, 4)` returns…
@@ -357,4 +412,26 @@ SELECT order_id, order_date,
        CASE STRFTIME('%w', order_date) WHEN '0' THEN 'Sunday' ELSE 'Saturday' END AS day
 FROM orders
 WHERE STRFTIME('%w', order_date) IN ('0', '6');
+:::
+
+:::exercise
+id: proj-sql-04-bands
+level: 2
+title: "Project 4: price bands"
+---
+Show each product's `name`, `price`, and a column `band`: `budget` when the price is under 30, `mid-range` under 100, otherwise `premium`.
+---solution
+SELECT name, price, CASE WHEN price < 30 THEN 'budget' WHEN price < 100 THEN 'mid-range' ELSE 'premium' END AS band FROM products;
+:::
+
+:::exercise
+id: proj-sql-04-month
+level: 2
+title: "Project 4b: tag orders by month"
+---
+List every order's `order_id`, `status`, and its month as `month` in `YYYY-MM` form (for example `2025-03`).
+---hint
+`strftime('%Y-%m', order_date)`
+---solution
+SELECT order_id, status, strftime('%Y-%m', order_date) AS month FROM orders;
 :::

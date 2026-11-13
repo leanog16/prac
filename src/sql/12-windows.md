@@ -4,6 +4,9 @@ title: Window functions
 summary: Aggregates that don't collapse rows — OVER, PARTITION BY, ranking, running totals, LAG/LEAD, frames, and top-N per group.
 minutes: 40
 ---
+> [!project] Desk & Co, step 12: rankings and running totals
+> Maya wants each product's rank inside its category and a running revenue total across the year. Both need numbers computed **across** rows without collapsing them: window functions.
+
 ## GROUP BY collapses; windows don't
 
 `GROUP BY` turns many rows into one per group. A **window function** computes across a set of related rows (the *window*) but **keeps every row**, attaching the result as a new column.
@@ -138,6 +141,61 @@ FROM employees
 WINDOW w AS (ORDER BY salary)
 LIMIT 6;
 ```
+
+## Worked example: rank within a group
+
+Start from per-product revenue (a CTE), then rank inside each category:
+
+```sql run
+WITH rev AS (
+  SELECT p.product_id, p.name, p.category, SUM(oi.quantity * oi.unit_price) AS revenue
+  FROM products p JOIN order_items oi ON oi.product_id = p.product_id
+  GROUP BY p.product_id, p.name, p.category
+)
+SELECT category, name, ROUND(revenue, 2) AS revenue,
+       RANK() OVER (PARTITION BY category ORDER BY revenue DESC) AS rank_in_category
+FROM rev
+ORDER BY category, rank_in_category;
+```
+
+Read the `OVER` clause aloud: "**partition** the rows by category (each category is its own little table), **order** each partition by revenue descending, and give each row its position".
+
+## Worked example: a running total
+
+```sql run
+WITH monthly AS (
+  SELECT strftime('%Y-%m', o.order_date) AS month, SUM(oi.quantity * oi.unit_price) AS revenue
+  FROM orders o JOIN order_items oi ON oi.order_id = o.order_id
+  WHERE o.status <> 'cancelled'
+  GROUP BY month
+)
+SELECT month, ROUND(revenue, 2) AS revenue,
+       ROUND(SUM(revenue) OVER (ORDER BY month), 2) AS running_total,
+       ROUND(revenue - LAG(revenue) OVER (ORDER BY month), 2) AS change
+FROM monthly
+ORDER BY month;
+```
+
+`SUM(...) OVER (ORDER BY month)` adds up every month **up to and including** the current one. `LAG` reaches back one row, which gives month-over-month change. The first month's change is NULL because there's no earlier row.
+
+> [!plain] In plain English
+> `GROUP BY` squashes rows into one per group. A window function keeps every row and **adds a column** computed from that row's neighbours.
+
+## Which ranking function?
+
+| Values | ROW_NUMBER | RANK | DENSE_RANK |
+|---|---|---|---|
+| 90 | 1 | 1 | 1 |
+| 80 | 2 | 2 | 2 |
+| 80 | 3 | 2 | 2 |
+| 70 | 4 | **4** | **3** |
+
+Use `ROW_NUMBER` for "exactly one per group" (pick a tie-breaker!), `RANK` for competition-style ranking, `DENSE_RANK` when you want no gaps.
+
+## Common mistakes
+
+> [!mistake] Filtering on a window function in WHERE
+> `WHERE rank_in_category = 1` fails: windows are computed **after** WHERE. Wrap the query in a CTE and filter outside it.
 
 :::quiz
 q: How many rows does `SELECT dept_id, AVG(salary) OVER (PARTITION BY dept_id) FROM employees` return for 24 employees?
@@ -352,4 +410,26 @@ Classic trick: within a sorted list, `course_id - ROW_NUMBER()` is constant acro
 WITH c AS (SELECT DISTINCT course_id FROM enrollments WHERE student_id = 1004),
 g AS (SELECT course_id, course_id - ROW_NUMBER() OVER (ORDER BY course_id) AS grp FROM c)
 SELECT MIN(course_id) AS start_id, MAX(course_id) AS end_id FROM g GROUP BY grp ORDER BY start_id;
+:::
+
+:::exercise
+id: proj-sql-12-rank
+level: 3
+title: "Project 12: top product per category"
+ordered: true
+---
+For each category, return the product with the highest revenue (sum of quantity × unit price over all its order lines): columns `category`, `name`, `revenue` (rounded to 2 decimals), sorted by category. Use `ROW_NUMBER()` partitioned by category; break ties by product name.
+---solution
+WITH rev AS (SELECT p.name, p.category, SUM(oi.quantity * oi.unit_price) AS revenue FROM products p JOIN order_items oi ON oi.product_id = p.product_id GROUP BY p.product_id, p.name, p.category), ranked AS (SELECT category, name, revenue, ROW_NUMBER() OVER (PARTITION BY category ORDER BY revenue DESC, name) AS rn FROM rev) SELECT category, name, ROUND(revenue, 2) AS revenue FROM ranked WHERE rn = 1 ORDER BY category;
+:::
+
+:::exercise
+id: proj-sql-12-running
+level: 3
+title: "Project 12b: running revenue"
+ordered: true
+---
+Using monthly revenue from non-cancelled orders, return `month` (`YYYY-MM`), `revenue` and `running_total`, both rounded to 2 decimals, in month order.
+---solution
+WITH monthly AS (SELECT strftime('%Y-%m', o.order_date) AS month, SUM(oi.quantity * oi.unit_price) AS revenue FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status <> 'cancelled' GROUP BY month) SELECT month, ROUND(revenue, 2) AS revenue, ROUND(SUM(revenue) OVER (ORDER BY month), 2) AS running_total FROM monthly ORDER BY month;
 :::

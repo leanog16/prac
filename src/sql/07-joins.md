@@ -4,6 +4,9 @@ title: Inner joins
 summary: Combining tables through keys — join conditions, aliases, multi-table joins, join-then-aggregate, and the row-multiplication effect.
 minutes: 35
 ---
+> [!project] Desk & Co, step 7: revenue by category
+> Product IDs mean nothing to Maya; she thinks in categories. Revenue lives in `order_items`, categories live in `products`, and cancelled orders live in `orders`. Joins put them together.
+
 ## Why join?
 
 Normalized databases split facts across tables. An employee row stores `dept_id = 3`; the name "Sales" lives in `departments`. A **join** pairs rows from two tables according to a condition, producing wider rows that combine both.
@@ -106,6 +109,57 @@ WHERE e.dept_id = d.dept_id;
 ```
 
 It's equivalent to an inner join. Forget the `WHERE` and you get the full Cartesian product, which is why explicit `JOIN … ON` is preferred.
+
+## Worked example: a three-table join, built in stages
+
+Goal: revenue per category, **excluding cancelled orders**.
+
+**Stage 1.** Start from the fact table and attach product details. Run it and check the row count matches `order_items` (85): each line has exactly one product.
+
+```sql run
+SELECT oi.order_id, p.name, p.category, oi.quantity * oi.unit_price AS line_total
+FROM order_items AS oi
+JOIN products AS p ON p.product_id = oi.product_id
+LIMIT 8;
+```
+
+**Stage 2.** Attach the order so you can filter on its status:
+
+```sql run
+SELECT oi.order_id, o.status, p.category, oi.quantity * oi.unit_price AS line_total
+FROM order_items AS oi
+JOIN products AS p ON p.product_id = oi.product_id
+JOIN orders   AS o ON o.order_id   = oi.order_id
+WHERE o.status <> 'cancelled'
+LIMIT 8;
+```
+
+**Stage 3.** Now aggregate:
+
+```sql run
+SELECT p.category, ROUND(SUM(oi.quantity * oi.unit_price), 2) AS revenue
+FROM order_items AS oi
+JOIN products AS p ON p.product_id = oi.product_id
+JOIN orders   AS o ON o.order_id   = oi.order_id
+WHERE o.status <> 'cancelled'
+GROUP BY p.category
+ORDER BY revenue DESC;
+```
+
+Building in stages lets you **check the grain at each step**. If a join multiplies rows unexpectedly (a one-to-many relationship you didn't expect), you'll see it before the totals are wrong.
+
+> [!plain] In plain English
+> A join lines up rows from two tables wherever the `ON` condition matches, like matching invoice lines to a price list by product number. An inner `JOIN` drops rows that have no partner on the other side.
+
+## Common mistakes
+
+> [!mistake] Fan-out double counting
+> Joining `orders` to `order_items` gives one row **per line**. If you then `SUM` an order-level number (like a shipping fee on `orders`), it's added once per line. Aggregate at the right grain first, or sum the order-level value from `orders` alone.
+
+> [!mistake] Forgetting the ON condition
+> Without it (or with a wrong one) every row pairs with every row: 85 × 15 = 1,275 rows of nonsense. If a count looks huge, check your `ON`.
+
+- Give every table a short alias and prefix every column (`p.category`), even when it's unambiguous. Future you will thank you.
 
 :::quiz
 q: `employees` has 24 rows, 2 with NULL dept_id. Every non-NULL dept_id exists in departments. How many rows does `employees JOIN departments ON e.dept_id = d.dept_id` return?
@@ -329,4 +383,26 @@ The join condition doesn't have to be a key. `ON c.city = e.city` is fine.
 ---solution
 SELECT c.name, e.first_name, c.city
 FROM customers c JOIN employees e ON e.city = c.city;
+:::
+
+:::exercise
+id: proj-sql-07-category
+level: 3
+title: "Project 7: revenue by category"
+ordered: true
+---
+Show each product `category` with its `revenue` (sum of quantity × unit price, rounded to 2 decimals) from orders that are **not cancelled**, highest revenue first.
+---solution
+SELECT p.category, ROUND(SUM(oi.quantity * oi.unit_price), 2) AS revenue FROM order_items oi JOIN products p ON p.product_id = oi.product_id JOIN orders o ON o.order_id = oi.order_id WHERE o.status <> 'cancelled' GROUP BY p.category ORDER BY revenue DESC;
+:::
+
+:::exercise
+id: proj-sql-07-order-detail
+level: 2
+title: "Project 7b: an order's packing slip"
+ordered: true
+---
+For order **7**, list the customer's `name`, each product `name` as `product`, and the `quantity`, sorted by product name.
+---solution
+SELECT c.name, p.name AS product, oi.quantity FROM orders o JOIN customers c ON c.customer_id = o.customer_id JOIN order_items oi ON oi.order_id = o.order_id JOIN products p ON p.product_id = oi.product_id WHERE o.order_id = 7 ORDER BY p.name;
 :::
