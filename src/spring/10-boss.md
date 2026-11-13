@@ -230,7 +230,7 @@ Injected through the constructor
 rowImporter\.importOne\(\s*row\s*\)
 Calls `rowImporter.importOne(row)`
 ---rule
-!^\s+importOne\(\s*row\s*\)\s*;
+!^[ \t]+importOne\(\s*row\s*\)\s*;
 No more self-invocation
 ---solution
 package com.example.demo;
