@@ -1,0 +1,45 @@
+2026-10-20 08:00:00 WARN  [cache] retrying connection
+2026-10-20 08:11:17 INFO  [auth] user login ok user=alice
+2026-10-20 08:22:34 INFO  [api] cache refreshed
+2026-10-20 08:33:51 INFO  [scheduler] request completed
+2026-10-20 08:44:08 INFO  [scheduler] job finished
+2026-10-20 08:55:25 INFO  [scheduler] request completed
+2026-10-20 08:06:42 ERROR [api] connection refused
+2026-10-20 08:17:59 INFO  [scheduler] job finished
+2026-10-20 09:28:16 INFO  [api] user login ok user=erin
+2026-10-20 09:39:33 ERROR [scheduler] null pointer in handler
+2026-10-20 09:50:50 INFO  [scheduler] user login ok user=bob
+2026-10-20 09:01:07 WARN  [db] slow query took 2300ms
+2026-10-20 09:12:24 ERROR [cache] null pointer in handler
+2026-10-20 09:23:41 INFO  [auth] job finished
+2026-10-20 09:34:58 WARN  [api] slow query took 2300ms
+2026-10-20 09:45:15 DEBUG [api] cache miss key=user:42
+2026-10-20 10:56:32 INFO  [api] request completed
+2026-10-20 10:07:49 INFO  [auth] user login ok user=dan
+2026-10-20 10:18:06 INFO  [api] user login ok user=dan
+2026-10-20 10:29:23 DEBUG [scheduler] payload size=512
+2026-10-20 10:40:40 WARN  [api] disk usage at 85%
+2026-10-20 10:51:57 INFO  [auth] cache refreshed
+2026-10-20 10:02:14 INFO  [cache] user login ok user=dan
+2026-10-20 10:13:31 INFO  [auth] cache refreshed
+2026-10-20 11:24:48 WARN  [cache] disk usage at 85%
+2026-10-20 11:35:05 INFO  [db] user login ok user=bob
+2026-10-20 11:46:22 INFO  [db] connection opened
+2026-10-20 11:57:39 WARN  [db] disk usage at 85%
+2026-10-20 11:08:56 DEBUG [cache] cache miss key=user:42
+2026-10-20 11:19:13 INFO  [scheduler] connection opened
+2026-10-20 11:30:30 INFO  [auth] request completed
+2026-10-20 11:41:47 INFO  [scheduler] user login ok user=dan
+2026-10-20 12:52:04 INFO  [db] request completed
+2026-10-20 12:03:21 INFO  [db] job finished
+2026-10-20 12:14:38 ERROR [db] null pointer in handler
+2026-10-20 12:25:55 INFO  [scheduler] cache refreshed
+2026-10-20 12:36:12 INFO  [auth] job finished
+2026-10-20 12:47:29 WARN  [scheduler] disk usage at 85%
+2026-10-20 12:58:46 WARN  [scheduler] slow query took 2300ms
+2026-10-20 12:09:03 ERROR [db] connection refused
+2026-10-20 13:20:20 WARN  [db] disk usage at 85%
+2026-10-20 13:31:37 INFO  [db] user login ok user=bob
+2026-10-20 13:42:54 WARN  [scheduler] disk usage at 85%
+2026-10-20 13:53:11 INFO  [scheduler] request completed
+2026-10-20 13:04:28 INFO  [scheduler] connection opened

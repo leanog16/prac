@@ -1,0 +1,7 @@
+web-01 10.0.1.11 up
+web-02 10.0.1.12 up
+web-03 10.0.1.13 down
+db-01 10.0.2.21 up
+db-02 10.0.2.22 maintenance
+cache-01 10.0.3.31 up
+batch-01 10.0.4.41 down

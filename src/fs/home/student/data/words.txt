@@ -1,0 +1,16 @@
+apple
+banana
+cherry
+apple
+date
+banana
+apple
+elderberry
+fig
+grape
+cherry
+kiwi
+lemon
+apple
+mango
+fig

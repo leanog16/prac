@@ -1,0 +1,7 @@
+Alice Chen, alice.chen@example.com, (919) 555-0142
+Bob Diaz, bob@diaz.dev, 919-555-0199
+Carol Evans, carol_evans@example.org, 919.555.0175
+Dan Foster, no email, 704-555-0110
+Erin Gray, erin.gray@example.com, (984) 555-0123
+Frank Hill, frank@hill, 555-0188
+Grace Ito, GRACE.ITO@EXAMPLE.COM, 704 555 0167

@@ -1,0 +1,10 @@
+alice 92
+bob 78
+carol 85
+dan 64
+erin 99
+frank 71
+grace 88
+hank 55
+ivy 95
+jack 82

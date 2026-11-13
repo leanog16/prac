@@ -1,0 +1,5 @@
+Docker practice folder
+- hello/        a tiny Python program
+- site/         a static website for nginx
+- fastapi-app/  a FastAPI service
+- spring-app/   a Spring Boot service (Maven)

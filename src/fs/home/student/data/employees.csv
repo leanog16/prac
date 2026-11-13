@@ -1,0 +1,16 @@
+id,name,department,salary,hire_year,city
+101,Alice Chen,Engineering,98000,2019,Raleigh
+102,Bob Diaz,Marketing,62000,2021,Durham
+103,Carol Evans,Engineering,105000,2017,Raleigh
+104,Dan Foster,Sales,58000,2022,Charlotte
+105,Erin Gray,Engineering,87000,2020,Durham
+106,Frank Hill,Support,45000,2023,Raleigh
+107,Grace Ito,Sales,71000,2018,Charlotte
+108,Hank Jones,Marketing,66000,2020,Raleigh
+109,Ivy Kim,Engineering,120000,2015,Cary
+110,Jack Lee,Support,47000,2022,Durham
+111,Kara Moss,Sales,64000,2021,Raleigh
+112,Liam Nash,Engineering,91000,2019,Cary
+113,Mia Ortiz,Marketing,73000,2016,Durham
+114,Noah Park,Support,52000,2020,Charlotte
+115,Olga Quinn,Sales,80000,2017,Raleigh

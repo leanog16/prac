@@ -1,0 +1,10 @@
+Meeting notes - Monday
+The deploy is scheduled for Friday at 5pm.
+Remember to update the README before the deploy.
+Alice owns the database migration.
+Bob is reviewing the API changes.
+TODO: write tests for the login flow
+The staging server is slow again.
+TODO: ask about the budget for new servers
+Carol will present the Q3 numbers.
+Next meeting: Wednesday at 10am.
