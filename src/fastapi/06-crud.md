@@ -4,6 +4,9 @@ title: Building a CRUD API & routers
 summary: A complete create-read-update-delete resource with correct status codes, ID generation and 404 handling, then splitting an app into APIRouters with prefixes and tags.
 minutes: 35
 ---
+> [!project] Taskboard, step 6: complete CRUD, properly organized
+> Taskboard gets the rest of its task endpoints (update, partial update, delete) and moves them out of `main.py` into `routers/tasks.py`. This is the structure the app keeps for the rest of the track.
+
 ## A complete resource
 
 Here's the whole lifecycle of a `todos` resource, stored in memory to keep the focus on the API:
@@ -113,6 +116,60 @@ app.include_router(users.router)
 
 > [!tip] A typical layout
 > `main.py` (create app, include routers) · `routers/` (one file per resource) · `schemas.py` (Pydantic models) · `models.py` (database tables) · `crud.py` or `services/` (data access and business logic) · `dependencies.py` · `tests/`.
+
+## Worked example: PUT vs PATCH in code
+
+```python
+class TaskUpdate(BaseModel):              # PATCH body: everything optional
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = None
+    priority: int | None = Field(default=None, ge=1, le=5)
+    status: Status | None = None
+
+
+@router.patch("/{task_id}", response_model=TaskOut)
+def update_task(task_id: int, data: TaskUpdate):
+    task = find_task(task_id)
+    changes = data.model_dump(exclude_unset=True)    # only fields the client actually sent
+    task.update(changes)
+    return task
+```
+
+`exclude_unset=True` is the key. If the client sends `{"status": "done"}`, `changes` is `{"status": "done"}`, **not** `{"title": None, "description": None, …, "status": "done"}`, which would wipe the other fields. A `PUT`, by contrast, takes the full `TaskCreate` model and replaces everything.
+
+## Worked example: splitting into a router
+
+```python title=routers/tasks.py
+from fastapi import APIRouter
+
+router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+@router.get("")
+def list_tasks(): ...
+
+@router.get("/{task_id}")
+def get_task(task_id: int): ...
+```
+
+```python title=main.py
+from fastapi import FastAPI
+from routers import tasks
+
+app = FastAPI(title="Taskboard", version="0.2.0")
+app.include_router(tasks.router)
+```
+
+- `prefix="/tasks"` is prepended to every route in the router, so routes say `"/{task_id}"`, not `"/tasks/{task_id}"`.
+- `tags=["tasks"]` groups them in `/docs`.
+- Later routers (`users`, `comments`) plug in the same way, which keeps `main.py` tiny.
+
+> [!plain] In plain English
+> CRUD = **C**reate (POST), **R**ead (GET), **U**pdate (PUT/PATCH), **D**elete (DELETE). Almost every API is mostly CRUD on a handful of resources.
+
+## Common mistakes
+
+> [!mistake] Using a list and its length as the id generator
+> `id = len(TASKS) + 1` breaks as soon as you delete something: delete task 2 of 3 and the next task gets id 3, a duplicate. Keep a separate counter (or let the database assign ids, lesson 8).
 
 :::quiz
 q: Router created with `APIRouter(prefix="/orders")` has `@router.get("/{order_id}")`, included with `app.include_router(router, prefix="/api")`. What's the full path?
@@ -513,4 +570,127 @@ Using the `todos` app from the lesson (ids start at 1), a fresh server receives:
 [{"id": 2, "title": "b", "done": false}]
 ---solution
 [{"title": "b", "done": false, "id": 2}]
+:::
+
+:::exercise
+id: proj-fa-06-patch
+level: 3
+title: "Project 6: PATCH a task"
+mode: code
+lang: python
+file: routers/tasks.py
+---
+Write `@router.patch("/{task_id}", response_model=TaskOut)` `update_task(task_id: int, data: TaskUpdate)`: get the task with `find_task(task_id)` (it raises 404 itself), apply **only the fields the client sent** using `data.model_dump(exclude_unset=True)`, and return the task.
+---starter
+from fastapi import APIRouter
+
+from models import TaskOut, TaskUpdate
+from store import find_task
+
+router = APIRouter(prefix="/tasks", tags=["tasks"])
+---rule
+@router\.patch\(\s*["']/\{task_id\}["']\s*,\s*response_model\s*=\s*TaskOut\s*\)
+`@router.patch("/{task_id}", response_model=TaskOut)`
+---rule
+def\s+update_task\(\s*task_id\s*:\s*int\s*,\s*data\s*:\s*TaskUpdate\s*\)
+`update_task(task_id: int, data: TaskUpdate)`
+---rule
+task\s*=\s*find_task\(\s*task_id\s*\)
+Load the task
+---rule
+data\.model_dump\(\s*exclude_unset\s*=\s*True\s*\)
+`model_dump(exclude_unset=True)`
+---rule
+task\.update\(\s*\w+\s*\)|for\s+\w+\s*,\s*\w+\s+in\s+\w+\.items\(\s*\)\s*:
+Apply the changes
+---rule
+return\s+task
+Return it
+---solution
+from fastapi import APIRouter
+
+from models import TaskOut, TaskUpdate
+from store import find_task
+
+router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+@router.patch("/{task_id}", response_model=TaskOut)
+def update_task(task_id: int, data: TaskUpdate):
+    task = find_task(task_id)
+    changes = data.model_dump(exclude_unset=True)
+    task.update(changes)
+    return task
+:::
+
+:::exercise
+id: proj-fa-06-delete
+level: 2
+title: "Project 6b: DELETE with 204"
+mode: code
+lang: python
+file: routers/tasks.py
+---
+Add `@router.delete("/{task_id}", status_code=204)` `delete_task(task_id: int)` that calls `find_task(task_id)` (404 if missing) and then removes it from the `TASKS` dict with `del TASKS[task_id]`. Return nothing.
+---starter
+from fastapi import APIRouter
+
+from store import TASKS, find_task
+
+router = APIRouter(prefix="/tasks", tags=["tasks"])
+---rule
+@router\.delete\(\s*["']/\{task_id\}["']\s*,\s*status_code\s*=\s*(204|status\.HTTP_204_NO_CONTENT)\s*\)
+`@router.delete("/{task_id}", status_code=204)`
+---rule
+def\s+delete_task\(\s*task_id\s*:\s*int\s*\)
+`delete_task(task_id: int)`
+---rule
+find_task\(\s*task_id\s*\)
+404 if missing
+---rule
+del\s+TASKS\[\s*task_id\s*\]|TASKS\.pop\(\s*task_id
+Remove it
+---rule
+!return\s+\S
+No response body
+---solution
+from fastapi import APIRouter
+
+from store import TASKS, find_task
+
+router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+@router.delete("/{task_id}", status_code=204)
+def delete_task(task_id: int):
+    find_task(task_id)
+    del TASKS[task_id]
+:::
+
+:::exercise
+id: proj-fa-06-include
+level: 1
+title: "Project 6c: wire the router in"
+mode: code
+lang: python
+file: main.py
+---
+In `main.py`, import the `tasks` module from `routers` and include its `router` in the app.
+---starter
+from fastapi import FastAPI
+
+app = FastAPI(title="Taskboard", version="0.2.0")
+---rule
+from\s+routers\s+import\s+tasks|import\s+routers\.tasks
+Import the tasks router module
+---rule
+app\.include_router\(\s*(routers\.)?tasks\.router\s*\)
+`app.include_router(tasks.router)`
+---solution
+from fastapi import FastAPI
+
+from routers import tasks
+
+app = FastAPI(title="Taskboard", version="0.2.0")
+app.include_router(tasks.router)
 :::

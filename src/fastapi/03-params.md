@@ -4,6 +4,9 @@ title: Path & query parameters
 summary: Typed path parameters and automatic conversion, query parameters with defaults and optional values, validation with Path and Query, enums, list parameters, and route ordering.
 minutes: 35
 ---
+> [!project] Taskboard, step 3: finding tasks
+> A board with 500 tasks needs filtering. This step adds `GET /tasks/{task_id}` and query parameters to filter by status and limit the result, with validation so bad input gets a clear 422 instead of a crash.
+
 ## Path parameters
 
 Curly braces in the path declare a **path parameter**; a function argument with the same name receives it. The type hint drives conversion and validation:
@@ -119,6 +122,68 @@ def read_user(user_id: int): ...
 ```
 
 If `/users/{user_id}` were declared first, `GET /users/me` would match it and fail with 422 because `"me"` isn't an int.
+
+## Worked example: how FastAPI reads a request
+
+Given this function:
+
+```python
+@app.get("/tasks/{task_id}")
+def get_task(task_id: int, verbose: bool = False):
+    ...
+```
+
+and the request `GET /tasks/7?verbose=true`, FastAPI:
+
+1. matches the path template and pulls `"7"` out of the URL;
+2. sees `task_id: int`, converts `"7"` → `7` (or answers **422** if it can't, e.g. `/tasks/abc`);
+3. sees `verbose` isn't in the path, so it's a **query parameter**; `"true"` → `True`;
+4. calls your function with clean Python values.
+
+The **type hints are the specification**. Change `task_id: int` to `task_id: str` and the behaviour changes, with no other code.
+
+## Worked example: an Enum for allowed values
+
+Free text for `status` invites typos (`"Done"`, `"finished"`). An Enum makes the allowed values explicit, validates them, and shows a dropdown in `/docs`:
+
+```python
+from enum import Enum
+
+class Status(str, Enum):
+    todo = "todo"
+    doing = "doing"
+    done = "done"
+
+@app.get("/tasks")
+def list_tasks(status: Status | None = None, limit: int = 20):
+    result = [t for t in TASKS if status is None or t["status"] == status]
+    return result[:limit]
+```
+
+Inheriting from `str` means `Status.done == "done"` is `True`, so comparisons with plain strings and JSON output both just work.
+
+> [!plain] In plain English
+> Path parameters identify **which** thing (`/tasks/7`). Query parameters adjust **how** you get things (`?status=done&limit=5`). A parameter with a default is optional.
+
+## Validation with Query and Path
+
+```python
+from typing import Annotated
+from fastapi import Path, Query
+
+@app.get("/tasks/{task_id}")
+def get_task(task_id: Annotated[int, Path(ge=1)]): ...
+
+@app.get("/tasks")
+def list_tasks(limit: Annotated[int, Query(ge=1, le=100)] = 20, q: str | None = None): ...
+```
+
+`/tasks?limit=1000` now gets a 422 that explains the maximum. Cap page sizes **always**: an unbounded `limit` is an easy way to take down your own database.
+
+## Common mistakes
+
+> [!mistake] Route order: `/tasks/stats` vs `/tasks/{task_id}`
+> Routes are matched top to bottom. If `/tasks/{task_id}` is declared first, `GET /tasks/stats` tries to convert `"stats"` to an int and returns 422. Declare fixed paths before parameterized ones.
 
 :::quiz
 q: `def f(item_id: int)` on route `/items/{item_id}`. What does `GET /items/007` give `item_id`?
@@ -521,4 +586,130 @@ Which is the `loc` of the error for `GET /teams/x/players?limit=5`? Write it as 
 ["path", "team_id"]
 ---solution
 ["path", "team_id"]
+:::
+
+:::exercise
+id: proj-fa-03-filter
+level: 2
+title: "Project 3: filter the board"
+mode: code
+lang: python
+file: main.py
+---
+Define `class Status(str, Enum)` with members `todo`, `doing`, `done`. Change `GET /tasks` to accept an optional `status: Status | None = None` and `limit: Annotated[int, Query(ge=1, le=100)] = 20`, returning the matching tasks (all when `status` is None), at most `limit` of them.
+---starter
+from enum import Enum
+from typing import Annotated
+
+from fastapi import FastAPI, Query
+
+app = FastAPI(title="Taskboard", version="0.1.0")
+
+TASKS = [
+    {"id": 1, "title": "Set up repo", "status": "done"},
+    {"id": 2, "title": "Write API", "status": "doing"},
+    {"id": 3, "title": "Add tests", "status": "todo"},
+]
+
+
+@app.get("/tasks")
+def list_tasks():
+    return TASKS
+---rule
+class\s+Status\(\s*str\s*,\s*Enum\s*\)\s*:
+`class Status(str, Enum)`
+---rule
+todo\s*=\s*["']todo["'][\s\S]*doing\s*=\s*["']doing["'][\s\S]*done\s*=\s*["']done["']
+Members `todo`, `doing`, `done`
+---rule
+status\s*:\s*(Status\s*\|\s*None|Optional\[\s*Status\s*\])\s*=\s*None
+`status: Status | None = None`
+---rule
+limit\s*:\s*Annotated\[\s*int\s*,\s*Query\((?=[^)]*ge\s*=\s*1)(?=[^)]*le\s*=\s*100)[^)]*\)\s*\]\s*=\s*20
+`limit: Annotated[int, Query(ge=1, le=100)] = 20`
+---rule
+status\s+is\s+None\s+or\s+\w+\[\s*["']status["']\s*\]\s*==\s*status|\w+\[\s*["']status["']\s*\]\s*==\s*status\s+or\s+status\s+is\s+None|if\s+status(\s+is\s+not\s+None)?\s*:
+Filter by status only when given
+---rule
+\[\s*:\s*limit\s*\]
+Apply the limit
+---solution
+from enum import Enum
+from typing import Annotated
+
+from fastapi import FastAPI, Query
+
+app = FastAPI(title="Taskboard", version="0.1.0")
+
+
+class Status(str, Enum):
+    todo = "todo"
+    doing = "doing"
+    done = "done"
+
+
+TASKS = [
+    {"id": 1, "title": "Set up repo", "status": "done"},
+    {"id": 2, "title": "Write API", "status": "doing"},
+    {"id": 3, "title": "Add tests", "status": "todo"},
+]
+
+
+@app.get("/tasks")
+def list_tasks(status: Status | None = None, limit: Annotated[int, Query(ge=1, le=100)] = 20):
+    result = [t for t in TASKS if status is None or t["status"] == status]
+    return result[:limit]
+:::
+
+:::exercise
+id: proj-fa-03-one
+level: 2
+title: "Project 3b: one task by id"
+mode: code
+lang: python
+file: main.py
+---
+Add `GET /tasks/{task_id}` with `task_id: Annotated[int, Path(ge=1)]` that returns the matching task dict, or `{"detail": "not found"}` if none matches (proper 404s come in lesson 5).
+---starter
+from typing import Annotated
+
+from fastapi import FastAPI, Path
+
+app = FastAPI(title="Taskboard", version="0.1.0")
+
+TASKS = [
+    {"id": 1, "title": "Set up repo", "status": "done"},
+    {"id": 2, "title": "Write API", "status": "doing"},
+]
+---rule
+@app\.get\(\s*["']/tasks/\{task_id\}["']\s*\)
+`GET /tasks/{task_id}`
+---rule
+task_id\s*:\s*Annotated\[\s*int\s*,\s*Path\(\s*ge\s*=\s*1\s*\)\s*\]
+`task_id: Annotated[int, Path(ge=1)]`
+---rule
+for\s+(\w+)\s+in\s+TASKS\s*:\s*\n\s+if\s+\1\[\s*["']id["']\s*\]\s*==\s*task_id\s*:\s*\n\s+return\s+\1|next\(\s*\(?\s*(\w+)\s+for\s+\2\s+in\s+TASKS\s+if\s+\2\[\s*["']id["']\s*\]\s*==\s*task_id
+Find the task by id
+---rule
+return\s*\{\s*["']detail["']\s*:\s*["']not found["']\s*\}|None\s*\)?\s*or\s*\{\s*["']detail["']\s*:\s*["']not found["']\s*\}
+Fallback `{"detail": "not found"}`
+---solution
+from typing import Annotated
+
+from fastapi import FastAPI, Path
+
+app = FastAPI(title="Taskboard", version="0.1.0")
+
+TASKS = [
+    {"id": 1, "title": "Set up repo", "status": "done"},
+    {"id": 2, "title": "Write API", "status": "doing"},
+]
+
+
+@app.get("/tasks/{task_id}")
+def get_task(task_id: Annotated[int, Path(ge=1)]):
+    for task in TASKS:
+        if task["id"] == task_id:
+            return task
+    return {"detail": "not found"}
 :::

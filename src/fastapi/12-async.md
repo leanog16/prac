@@ -4,6 +4,9 @@ title: Async, WebSockets & async databases
 summary: How the event loop really works, the blocking-call trap and how to escape it (def routes, run_in_threadpool, asyncio.to_thread), concurrent I/O with asyncio.gather and httpx.AsyncClient, WebSockets and a broadcast manager, and SQLAlchemy's AsyncSession.
 minutes: 40
 ---
+> [!project] Taskboard, step 12: a live board
+> When a teammate moves a task, everyone else's board should update instantly. This step adds a WebSocket that broadcasts task events, and a webhook call to a chat tool that runs without blocking the API.
+
 ## One thread, many requests
 
 An `async def` route runs on the **event loop**: a single thread that juggles many requests by switching between them whenever one is **waiting** (`await`) for the network, the database or a timer. While request A awaits a database reply, the loop serves requests B, C and D. That's how one process handles thousands of concurrent connections.
@@ -192,6 +195,62 @@ Rules of thumb:
 - `expire_on_commit=False` keeps attributes readable after commit without another query.
 - **Lazy loading doesn't work** in async (touching an unloaded relationship raises `MissingGreenlet`). Load relationships up front: `select(Order).options(selectinload(Order.items))`.
 - Never share one `AsyncSession` between concurrent tasks; one session per request.
+
+## Worked example: deciding def vs async def in Taskboard
+
+Go through Taskboard's endpoints and ask: **does it call anything blocking?**
+
+| Endpoint | Calls | Choose |
+|---|---|---|
+| `GET /tasks` | sync SQLModel `Session` (blocking driver) | `def` |
+| `POST /tasks/{id}/attachments` | `await file.read()` | `async def` |
+| `notify_chat()` | `httpx.AsyncClient.post` | `async def` |
+| `/ws/board` | WebSocket send/receive | `async def` (required) |
+
+Mixing is completely fine: FastAPI runs `def` endpoints in a thread pool and `async def` ones on the event loop. The bug is putting a **blocking** call inside `async def`.
+
+## Worked example: broadcasting task events
+
+```python title=realtime.py
+class Board:
+    def __init__(self):
+        self.clients: set[WebSocket] = set()
+
+    async def join(self, ws: WebSocket):
+        await ws.accept()
+        self.clients.add(ws)
+
+    def leave(self, ws: WebSocket):
+        self.clients.discard(ws)
+
+    async def publish(self, event: dict):
+        for ws in list(self.clients):
+            try:
+                await ws.send_json(event)
+            except Exception:
+                self.leave(ws)                 # a dead connection shouldn't break the others
+
+board = Board()
+
+@router.websocket("/ws/board")
+async def board_socket(ws: WebSocket):
+    await board.join(ws)
+    try:
+        while True:
+            await ws.receive_text()            # keep the connection open; ignore client messages
+    except WebSocketDisconnect:
+        board.leave(ws)
+```
+
+Then, after a task changes, the endpoint publishes an event: `await board.publish({"type": "task.updated", "id": task.id, "status": task.status})`. Every connected browser gets it within milliseconds.
+
+> [!plain] In plain English
+> HTTP is "ask, then get one answer". A WebSocket is an open phone line: once connected, the server can push messages whenever something happens.
+
+## Common mistakes
+
+> [!mistake] Broadcasting from a sync endpoint
+> You can't `await` inside a `def` endpoint. Make the endpoint `async def` (and keep its DB work non-blocking), or hand the event to a background task.
 
 :::quiz
 q: An `async def` route calls `requests.get(url)` (a blocking library). What's the effect under load?
@@ -601,4 +660,97 @@ def
 def
 ---explain
 Plain `def` routes run in the thread pool, so their blocking calls don't stall the event loop.
+:::
+
+:::exercise
+id: proj-fa-12-board
+level: 3
+title: "Project 12: the board broadcaster"
+mode: code
+lang: python
+file: realtime.py
+---
+Implement `Board`: `join` accepts the socket and adds it to `self.clients` (a set); `leave` removes it with `discard`; `publish(event)` sends `event` with `send_json` to every client in `list(self.clients)`.
+---starter
+from fastapi import WebSocket
+
+
+class Board:
+    def __init__(self):
+        self.clients: set[WebSocket] = set()
+
+    async def join(self, ws: WebSocket):
+        ...
+
+    def leave(self, ws: WebSocket):
+        ...
+
+    async def publish(self, event: dict):
+        ...
+---rule
+async\s+def\s+join\(self,\s*ws[^)]*\):\s*\n\s+await\s+ws\.accept\(\s*\)
+`join` accepts first
+---rule
+self\.clients\.add\(\s*ws\s*\)
+Add to the set
+---rule
+self\.clients\.discard\(\s*ws\s*\)
+`leave` uses `discard`
+---rule
+for\s+(\w+)\s+in\s+list\(\s*self\.clients\s*\)\s*:[\s\S]*?await\s+\1\.send_json\(\s*event\s*\)
+`publish` sends JSON to each client
+---solution
+from fastapi import WebSocket
+
+
+class Board:
+    def __init__(self):
+        self.clients: set[WebSocket] = set()
+
+    async def join(self, ws: WebSocket):
+        await ws.accept()
+        self.clients.add(ws)
+
+    def leave(self, ws: WebSocket):
+        self.clients.discard(ws)
+
+    async def publish(self, event: dict):
+        for ws in list(self.clients):
+            await ws.send_json(event)
+:::
+
+:::exercise
+id: proj-fa-12-notify
+level: 3
+title: "Project 12b: notify the chat channel"
+mode: code
+lang: python
+file: notify.py
+---
+Write `async def notify_chat(client: httpx.AsyncClient, task_title: str)` that POSTs JSON `{"text": f"Task done: {task_title}"}` to `WEBHOOK_URL` with `await client.post(...)`, and calls `raise_for_status()` on the response.
+---starter
+import httpx
+
+WEBHOOK_URL = "https://chat.example.com/hooks/taskboard"
+---rule
+async\s+def\s+notify_chat\(\s*client\s*:\s*httpx\.AsyncClient\s*,\s*task_title\s*:\s*str\s*\)
+The async function signature
+---rule
+await\s+client\.post\(\s*WEBHOOK_URL\s*,\s*json\s*=\s*\{\s*["']text["']\s*:\s*f["']Task done: \{task_title\}["']\s*\}\s*\)
+`await client.post(WEBHOOK_URL, json={...})`
+---rule
+\.raise_for_status\(\s*\)
+`raise_for_status()`
+---rule
+!requests\.
+No blocking `requests`
+---solution
+import httpx
+
+WEBHOOK_URL = "https://chat.example.com/hooks/taskboard"
+
+
+async def notify_chat(client: httpx.AsyncClient, task_title: str):
+    response = await client.post(WEBHOOK_URL, json={"text": f"Task done: {task_title}"})
+    response.raise_for_status()
 :::

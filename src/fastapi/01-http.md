@@ -4,6 +4,9 @@ title: HTTP & REST essentials
 summary: The protocol under every web API — requests and responses, methods and their semantics, status codes, headers, JSON, and how to design RESTful resource URLs.
 minutes: 25
 ---
+> [!project] Track project: Taskboard, a task-tracking API
+> Across this track you'll build **Taskboard**: an API where a small team creates tasks, moves them from `todo` to `doing` to `done`, assigns them, attaches files and gets live updates. Every lesson adds a real feature, and the **Project** exercises at the end of each lesson are the next commit in that codebase. The Docker, CI/CD and AWS tracks later containerize, test and deploy this same API.
+
 ## A request, a response
 
 Every web API interaction is an **HTTP request** answered by an **HTTP response**.
@@ -92,6 +95,58 @@ curl -X DELETE http://localhost:8000/items/42
 ```
 
 FastAPI also gives you an interactive browser UI at `/docs` for free (next module).
+
+## Worked example: designing Taskboard's API on paper
+
+Good APIs are designed before they're coded. Start from what users do, then map each action to a **method + URL**:
+
+| User action | Method | URL | Success status |
+|---|---|---|---|
+| list tasks (optionally only `todo`) | GET | `/tasks?status=todo` | 200 |
+| see one task | GET | `/tasks/42` | 200 (404 if missing) |
+| create a task | POST | `/tasks` | 201 + `Location: /tasks/43` |
+| replace a task completely | PUT | `/tasks/42` | 200 |
+| change only its status | PATCH | `/tasks/42` | 200 |
+| delete a task | DELETE | `/tasks/42` | 204 (no body) |
+| list comments on a task | GET | `/tasks/42/comments` | 200 |
+
+Patterns to notice:
+
+- URLs name **things** (plural nouns: `/tasks`), and the method says what to do. Avoid verbs like `/getTask` or `/createTask`.
+- Filtering, sorting and paging go in the **query string** (`?status=todo&limit=20`), not the path.
+- Child resources nest under their parent: `/tasks/42/comments`.
+
+A full request and response look like this:
+
+```http
+POST /tasks HTTP/1.1
+Host: api.taskboard.dev
+Content-Type: application/json
+
+{"title": "Write onboarding docs", "priority": 2}
+```
+
+```http
+HTTP/1.1 201 Created
+Location: /tasks/43
+Content-Type: application/json
+
+{"id": 43, "title": "Write onboarding docs", "priority": 2, "status": "todo"}
+```
+
+> [!plain] In plain English
+> HTTP is a conversation: the client sends a **request** (method, URL, headers, maybe a body), the server sends back a **response** (status code, headers, maybe a body). JSON is just the text format for the bodies.
+
+## Safe and idempotent
+
+- **Safe** methods don't change anything (GET, HEAD). Browsers, caches and crawlers may call them freely.
+- **Idempotent** methods give the same result if repeated (GET, PUT, DELETE). If a network glitch makes a client retry `DELETE /tasks/42`, nothing bad happens.
+- **POST isn't idempotent**: retrying it can create a duplicate task. That's why payment APIs accept an `Idempotency-Key` header.
+
+## Common mistakes
+
+> [!mistake] 200 for everything
+> Returning `200 OK` with `{"error": "not found"}` in the body breaks every client, proxy and monitoring tool that relies on status codes. Use the right code; the error lesson covers which.
 
 :::quiz
 q: Which method is NOT idempotent?
@@ -255,4 +310,45 @@ A network glitch means a client doesn't know whether its request succeeded. Of `
 PUT
 ---solution
 PUT
+:::
+
+:::exercise
+id: proj-fa-01-move
+level: 2
+title: "Project 1: moving a task"
+mode: answer
+---
+A user drags task 42 from `todo` to `doing`. Only the `status` field changes. Which HTTP **method** should the client use?
+---answer
+PATCH
+---solution
+PATCH
+---explain
+PATCH applies a partial update. PUT would mean "replace the whole task with this body".
+:::
+
+:::exercise
+id: proj-fa-01-comments-url
+level: 2
+title: "Project 1b: comments URL"
+mode: answer
+---
+Write the method and path for **adding a comment** to task 42, e.g. `GET /something`.
+---answer
+POST /tasks/42/comments
+---solution
+POST /tasks/42/comments
+:::
+
+:::exercise
+id: proj-fa-01-delete-status
+level: 1
+title: "Project 1c: deleting succeeds"
+mode: answer
+---
+`DELETE /tasks/42` succeeded and returns no body. Which status code?
+---answer
+204
+---solution
+204
 :::

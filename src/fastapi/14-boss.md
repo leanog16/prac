@@ -4,6 +4,9 @@ title: Boss round: build & debug
 summary: Larger exercises that combine models, validation, errors, dependencies and status codes, plus predict-the-response puzzles that test how FastAPI really behaves.
 minutes: 50
 ---
+> [!project] Taskboard, final step: the assembled service
+> The boss round finishes Taskboard: the final `main.py` that wires every piece together, plus a status-transition rule that ties validation, errors and the database together.
+
 ## How to approach an API task
 
 1. **Design the contract first.** For each endpoint: method, path, path/query parameters, request model, response model, success status, error statuses.
@@ -20,6 +23,51 @@ A worked contract:
 | `GET /accounts/{id}` | — | 200 `AccountOut` | 404 |
 | `POST /accounts/{id}/deposit` | `Amount {value: float > 0}` | 200 `AccountOut` | 404, 422 |
 | `POST /accounts/{id}/withdraw` | `Amount` | 200 `AccountOut` | 404, 409 insufficient funds, 422 |
+
+## Worked example: Taskboard's final layout
+
+```
+taskboard/
+├── main.py              app, lifespan, middleware, routers
+├── config.py            Settings (env vars)
+├── db.py                engine, Task/User tables, SessionDep
+├── security.py          password hashing, JWT create/verify
+├── deps.py              CurrentUser, Paging
+├── models.py            TaskCreate, TaskUpdate, TaskOut
+├── realtime.py          Board (WebSocket broadcaster)
+├── routers/
+│   ├── auth.py          POST /token
+│   ├── tasks.py         CRUD + attachments
+│   └── export.py        GET /tasks.csv
+└── tests/
+    ├── conftest.py
+    └── test_tasks.py
+```
+
+Each file answers one question. "Where are passwords checked?" `security.py`. "What can a client send?" `models.py`. When a codebase is organized like this, new teammates find things without asking.
+
+## Worked example: a state machine for status
+
+Tasks shouldn't jump anywhere. Allowed moves:
+
+```
+todo ──► doing ──► done
+  ▲        │
+  └────────┘        (done is final)
+```
+
+Encode it as data, not a pile of `if`s:
+
+```python
+ALLOWED = {"todo": {"doing"}, "doing": {"todo", "done"}, "done": set()}
+
+def change_status(task: Task, new: str) -> None:
+    if new not in ALLOWED[task.status]:
+        raise InvalidTransition(task.status, new)        # handler → 409
+    task.status = new
+```
+
+Adding a `review` state later means editing one dictionary.
 
 :::exercise
 id: fb-bank
@@ -347,4 +395,110 @@ What status code does `GET /brew` return?
 418
 ---solution
 418
+:::
+
+:::exercise
+id: proj-fa-14-transition
+level: 4
+title: "Project 14: status transitions"
+mode: code
+lang: python
+file: rules.py
+---
+Write `ALLOWED = {"todo": {"doing"}, "doing": {"todo", "done"}, "done": set()}`, `class InvalidTransition(Exception)`, and `change_status(task, new: str)` that raises `InvalidTransition()` when `new not in ALLOWED[task.status]` and otherwise sets `task.status = new`.
+---starter
+---rule
+ALLOWED\s*=\s*\{\s*["']todo["']\s*:\s*\{\s*["']doing["']\s*\}\s*,\s*["']doing["']\s*:\s*\{\s*["'](todo|done)["']\s*,\s*["'](todo|done)["']\s*\}\s*,\s*["']done["']\s*:\s*set\(\s*\)\s*\}
+The `ALLOWED` table
+---rule
+class\s+InvalidTransition\(\s*Exception\s*\)
+`class InvalidTransition(Exception)`
+---rule
+def\s+change_status\(\s*task\s*,\s*new(\s*:\s*str)?\s*\)
+`change_status(task, new)`
+---rule
+if\s+new\s+not\s+in\s+ALLOWED\[\s*task\.status\s*\]\s*:\s*\n\s+raise\s+InvalidTransition\(
+Reject disallowed moves
+---rule
+task\.status\s*=\s*new
+Apply allowed moves
+---solution
+ALLOWED = {"todo": {"doing"}, "doing": {"todo", "done"}, "done": set()}
+
+
+class InvalidTransition(Exception):
+    pass
+
+
+def change_status(task, new: str) -> None:
+    if new not in ALLOWED[task.status]:
+        raise InvalidTransition()
+    task.status = new
+:::
+
+:::exercise
+id: proj-fa-14-main
+level: 4
+title: "Project 14b: the final main.py"
+mode: code
+lang: python
+file: main.py
+---
+Assemble Taskboard: create `app = FastAPI(title="Taskboard", version="1.0.0", lifespan=lifespan)`; add the `add_request_id` middleware with `app.middleware("http")(add_request_id)`; add CORS with `allow_origins=settings.cors_origins`; include the `auth`, `tasks` and `export` routers; and register an exception handler for `InvalidTransition` returning **409** `{"detail": "Invalid status change"}`.
+---starter
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from config import settings
+from lifecycle import lifespan
+from middleware import add_request_id
+from routers import auth, export, tasks
+from rules import InvalidTransition
+---rule
+app\s*=\s*FastAPI\((?=[^)]*title\s*=\s*["']Taskboard["'])(?=[^)]*version\s*=\s*["']1\.0\.0["'])(?=[^)]*lifespan\s*=\s*lifespan)
+The app with lifespan
+---rule
+app\.middleware\(\s*["']http["']\s*\)\(\s*add_request_id\s*\)
+Request-ID middleware
+---rule
+app\.add_middleware\(\s*CORSMiddleware\s*,[^)]*allow_origins\s*=\s*settings\.cors_origins
+CORS from settings
+---rule
+app\.include_router\(\s*auth\.router\s*\)
+Auth router
+---rule
+app\.include_router\(\s*tasks\.router\s*\)
+Tasks router
+---rule
+app\.include_router\(\s*export\.router\s*\)
+Export router
+---rule
+@app\.exception_handler\(\s*InvalidTransition\s*\)
+Handler for `InvalidTransition`
+---rule
+JSONResponse\((?=[^)]*status_code\s*=\s*409)(?=[^)]*Invalid status change)
+409 `"Invalid status change"`
+---solution
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from config import settings
+from lifecycle import lifespan
+from middleware import add_request_id
+from routers import auth, export, tasks
+from rules import InvalidTransition
+
+app = FastAPI(title="Taskboard", version="1.0.0", lifespan=lifespan)
+app.middleware("http")(add_request_id)
+app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["*"], allow_headers=["*"])
+app.include_router(auth.router)
+app.include_router(tasks.router)
+app.include_router(export.router)
+
+
+@app.exception_handler(InvalidTransition)
+async def invalid_transition_handler(request: Request, exc: InvalidTransition):
+    return JSONResponse(status_code=409, content={"detail": "Invalid status change"})
 :::

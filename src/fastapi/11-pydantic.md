@@ -4,6 +4,9 @@ title: Pydantic in depth
 summary: Field validators and model validators, before/after modes, computed fields, aliases and camelCase APIs, model_config (strict, extra='forbid', from_attributes, frozen), discriminated unions, and reusable Annotated types.
 minutes: 35
 ---
+> [!project] Taskboard, step 11: business rules in the models
+> Taskboard gains due dates and tags, and with them, rules: a due date can't be in the past, tags are normalized, and a task can't be `done` without a completion note. Validators enforce them before any endpoint code runs.
+
 ## When Field() isn't enough
 
 `Field(min_length=3, ge=0)` handles single-value constraints. Real rules are messier: "the slug must be lowercase", "end date must be after start date", "either email or phone is required". Pydantic v2 gives you **validators** for these, and FastAPI turns any validator error into the same 422 response as a built-in constraint.
@@ -185,6 +188,56 @@ class Post(BaseModel):
     slug: Slug
     author: Username
 ```
+
+## Worked example: where should a rule live?
+
+| Rule | Where | Why |
+|---|---|---|
+| title 1–120 characters | `Field(min_length=1, max_length=120)` | a single-field constraint |
+| tags are lowercase, trimmed, unique | `field_validator("tags")` | transforms one field |
+| `due_date` not in the past | `field_validator("due_date")` | needs custom logic, one field |
+| `done` requires a `completion_note` | `model_validator(mode="after")` | involves two fields |
+| title unique among open tasks | the endpoint / service (409) | needs the **database** |
+
+Validators should only use the data in front of them. Rules that need other records belong in the service layer.
+
+```python
+from datetime import date
+from typing import Self
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+class TaskCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    due_date: date | None = None
+    tags: list[str] = []
+
+    @field_validator("title")
+    @classmethod
+    def strip_title(cls, v: str) -> str:
+        return v.strip()
+
+    @field_validator("tags")
+    @classmethod
+    def normalize_tags(cls, v: list[str]) -> list[str]:
+        return sorted({t.strip().lower() for t in v if t.strip()})
+
+    @field_validator("due_date")
+    @classmethod
+    def not_in_past(cls, v: date | None) -> date | None:
+        if v is not None and v < date.today():
+            raise ValueError("due_date can't be in the past")
+        return v
+```
+
+A client sending `{"title": "  Fix login  ", "tags": ["Bug", "bug ", "UI"]}` gets a task titled `Fix login` with tags `["bug", "ui"]`. Clients can be sloppy, but your data stays clean.
+
+> [!plain] In plain English
+> Validators are methods Pydantic calls while building the model. They can reject the value (raise `ValueError`, which becomes a 422) or clean it up (return a new value).
+
+## Common mistakes
+
+> [!mistake] Validators with side effects
+> Don't query the database, call APIs or send emails from a validator. Validation can run many times (including in tests and serialization), and it should be fast and pure.
 
 :::quiz
 q: A `@field_validator` checks the value but forgets `return v`. What happens?
@@ -577,4 +630,96 @@ A FastAPI route takes `body: UserUpdate` where `UserUpdate` has `model_config = 
 422
 ---solution
 422
+:::
+
+:::exercise
+id: proj-fa-11-tags
+level: 2
+title: "Project 11: normalize tags"
+mode: code
+lang: python
+file: models.py
+---
+Add a field validator for `tags` that returns the tags **trimmed, lowercased, de-duplicated and sorted**, dropping empty strings: `sorted({t.strip().lower() for t in v if t.strip()})`.
+---starter
+from pydantic import BaseModel, Field, field_validator
+
+
+class TaskCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    tags: list[str] = []
+---rule
+@field_validator\(\s*["']tags["']\s*\)\s*\n\s*@classmethod
+`@field_validator("tags")` + `@classmethod`
+---rule
+def\s+\w+\(\s*cls\s*,\s*(v|value)\b
+Takes `cls, v`
+---rule
+sorted\(\s*\{\s*\w+\.strip\(\s*\)\.lower\(\s*\)\s+for\s+\w+\s+in\s+(v|value)\s+if\s+\w+\.strip\(\s*\)\s*\}\s*\)
+`sorted({t.strip().lower() for t in v if t.strip()})`
+---rule
+return\s+sorted\(
+Return the cleaned list
+---solution
+from pydantic import BaseModel, Field, field_validator
+
+
+class TaskCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    tags: list[str] = []
+
+    @field_validator("tags")
+    @classmethod
+    def normalize_tags(cls, v: list[str]) -> list[str]:
+        return sorted({t.strip().lower() for t in v if t.strip()})
+:::
+
+:::exercise
+id: proj-fa-11-done-note
+level: 3
+title: "Project 11b: done needs a note"
+mode: code
+lang: python
+file: models.py
+---
+Add an after-mode model validator to `TaskUpdate` that raises `ValueError("completion_note is required when status is done")` when `self.status == "done"` and `self.completion_note` is falsy. Return `self`.
+---starter
+from typing import Self
+
+from pydantic import BaseModel, model_validator
+
+
+class TaskUpdate(BaseModel):
+    status: str | None = None
+    completion_note: str | None = None
+---rule
+@model_validator\(\s*mode\s*=\s*["']after["']\s*\)
+`@model_validator(mode="after")`
+---rule
+def\s+\w+\(\s*self\s*\)
+Takes `self`
+---rule
+self\.status\s*==\s*["']done["']\s+and\s+not\s+self\.completion_note
+`status == "done" and not completion_note`
+---rule
+raise\s+ValueError\(\s*["']completion_note is required when status is done["']\s*\)
+Raise the message
+---rule
+return\s+self
+Return `self`
+---solution
+from typing import Self
+
+from pydantic import BaseModel, model_validator
+
+
+class TaskUpdate(BaseModel):
+    status: str | None = None
+    completion_note: str | None = None
+
+    @model_validator(mode="after")
+    def note_when_done(self) -> Self:
+        if self.status == "done" and not self.completion_note:
+            raise ValueError("completion_note is required when status is done")
+        return self
 :::

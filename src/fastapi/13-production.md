@@ -4,6 +4,9 @@ title: Security & production
 summary: Issuing and verifying JWTs with expiry, password hashing, OAuth2 scopes with Security, rate limiting, caching with ETag and Cache-Control, request IDs and structured logging, health and readiness checks, workers and proxy headers, and API versioning.
 minutes: 45
 ---
+> [!project] Taskboard, step 13: production-ready
+> Taskboard replaces its demo API keys with a real login that issues JWTs, adds request IDs to every log line, and splits health into liveness and readiness. After this step it's ready for the Docker track to containerize.
+
 ## JWT access tokens, end to end
 
 The dependency lesson sketched `create_jwt` and `decode_jwt`. Here is a complete, correct version with **PyJWT** and **pwdlib** (argon2):
@@ -231,6 +234,52 @@ app.include_router(v2_router, prefix="/v2")
 ```
 
 Additive changes (new optional fields, new endpoints) don't need a new version. Removing or renaming a field, changing a type, or tightening validation does. Announce deprecations (`@app.get(..., deprecated=True)` marks a route in /docs) and keep the old version running for an agreed period.
+
+## Worked example: the login flow, end to end
+
+```
+client                                   Taskboard
+  │ POST /token  (form: username, password)  │
+  │ ───────────────────────────────────────► │  look up user, verify password hash
+  │ ◄─────────────────────────────────────── │  200 {"access_token": "eyJ…", "token_type": "bearer"}
+  │                                          │
+  │ GET /tasks   Authorization: Bearer eyJ…  │
+  │ ───────────────────────────────────────► │  verify signature + expiry → user "ada"
+  │ ◄─────────────────────────────────────── │  200 [...]
+```
+
+```python title=routers/auth.py
+@router.post("/token")
+def login(form: Annotated[OAuth2PasswordRequestForm, Depends()], session: SessionDep):
+    user = session.exec(select(User).where(User.username == form.username)).first()
+    if user is None or not verify_password(form.password, user.password_hash):
+        raise HTTPException(401, "Incorrect username or password",
+                            headers={"WWW-Authenticate": "Bearer"})
+    return {"access_token": create_access_token(user.username), "token_type": "bearer"}
+```
+
+And the `get_current_user` dependency from step 7 changes from "look up an API key" to "decode a JWT". **No endpoint changes**, because they all depend on `CurrentUser`. That's the dependency system paying off.
+
+> [!plain] In plain English
+> At login, the server checks the password once and hands back a signed **token**. The client sends the token with every request; the server only has to check the signature, without looking up a session.
+
+## A production checklist for Taskboard
+
+| Concern | Taskboard's answer |
+|---|---|
+| secrets | `SECRET_KEY` and `DATABASE_URL` from environment via `pydantic-settings` |
+| passwords | argon2 hashes via `pwdlib` |
+| tokens | 15-minute JWTs, `algorithms=["HS256"]` pinned |
+| brute force | `5/minute` rate limit on `/token` |
+| traceability | `X-Request-ID` middleware + JSON logs |
+| health | `/health` (no deps), `/ready` (DB ping) |
+| serving | `uvicorn --workers N --proxy-headers`, no `--reload` |
+| docs | `/docs` disabled or protected in production |
+
+## Common mistakes
+
+> [!mistake] Long-lived tokens with no way to revoke
+> A JWT valid for 30 days that leaks is valid for 30 days. Keep access tokens short and use refresh tokens.
 
 :::quiz
 q: Why must `jwt.decode` be given `algorithms=["HS256"]` explicitly?
@@ -636,4 +685,109 @@ A client exceeds the rate limit. What HTTP status code should it get?
 429
 ---solution
 429
+:::
+
+:::exercise
+id: proj-fa-13-login
+level: 4
+title: "Project 13: the /token endpoint"
+mode: code
+lang: python
+file: routers/auth.py
+---
+Write `POST /token`: take `form: Annotated[OAuth2PasswordRequestForm, Depends()]` and `session: SessionDep`; load the user with `session.exec(select(User).where(User.username == form.username)).first()`; if it's `None` or `verify_password(form.password, user.password_hash)` is false, raise **401** `"Incorrect username or password"` with header `WWW-Authenticate: Bearer`; otherwise return `{"access_token": create_access_token(user.username), "token_type": "bearer"}`.
+---starter
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlmodel import select
+
+from db import SessionDep, User
+from security import create_access_token, verify_password
+
+router = APIRouter()
+---rule
+@router\.post\(\s*["']/token["']\s*\)
+`POST /token`
+---rule
+form\s*:\s*Annotated\[\s*OAuth2PasswordRequestForm\s*,\s*Depends\(\s*\)\s*\]
+The OAuth2 form dependency
+---rule
+session\.exec\(\s*select\(\s*User\s*\)\.where\(\s*User\.username\s*==\s*form\.username\s*\)\s*\)\.first\(\s*\)
+Look up the user
+---rule
+if\s+\w+\s+is\s+None\s+or\s+not\s+verify_password\(\s*form\.password\s*,\s*\w+\.password_hash\s*\)
+Check user and password together
+---rule
+raise\s+HTTPException\((?=[^)]*401)(?=[^)]*Incorrect username or password)(?=[^)]*WWW-Authenticate)
+401 with the header
+---rule
+["']access_token["']\s*:\s*create_access_token\(\s*\w+\.username\s*\)
+Issue the token
+---rule
+["']token_type["']\s*:\s*["']bearer["']
+`token_type: bearer`
+---solution
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlmodel import select
+
+from db import SessionDep, User
+from security import create_access_token, verify_password
+
+router = APIRouter()
+
+
+@router.post("/token")
+def login(form: Annotated[OAuth2PasswordRequestForm, Depends()], session: SessionDep):
+    user = session.exec(select(User).where(User.username == form.username)).first()
+    if user is None or not verify_password(form.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Incorrect username or password", headers={"WWW-Authenticate": "Bearer"})
+    return {"access_token": create_access_token(user.username), "token_type": "bearer"}
+:::
+
+:::exercise
+id: proj-fa-13-settings
+level: 2
+title: "Project 13b: settings from the environment"
+mode: code
+lang: python
+file: config.py
+---
+Write `class Settings(BaseSettings)` with `database_url: str = "sqlite:///taskboard.db"`, a required `secret_key: str`, `access_token_minutes: int = 15`, and `model_config = SettingsConfigDict(env_file=".env")`. Create `settings = Settings()`.
+---starter
+from pydantic_settings import BaseSettings, SettingsConfigDict
+---rule
+class\s+Settings\(\s*BaseSettings\s*\)\s*:
+`class Settings(BaseSettings)`
+---rule
+database_url\s*:\s*str\s*=\s*["']sqlite:///taskboard\.db["']
+`database_url` with a default
+---rule
+secret_key\s*:\s*str\s*$
+Required `secret_key`
+---rule
+access_token_minutes\s*:\s*int\s*=\s*15
+`access_token_minutes: int = 15`
+---rule
+model_config\s*=\s*SettingsConfigDict\(\s*env_file\s*=\s*["']\.env["']\s*\)
+Read `.env`
+---rule
+settings\s*=\s*Settings\(\s*\)
+`settings = Settings()`
+---solution
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    database_url: str = "sqlite:///taskboard.db"
+    secret_key: str
+    access_token_minutes: int = 15
+    model_config = SettingsConfigDict(env_file=".env")
+
+
+settings = Settings()
 :::

@@ -4,6 +4,9 @@ title: Dependency injection & auth
 summary: Depends for shared parameters, classes as dependencies, yield dependencies for setup/teardown, sub-dependencies, router-wide dependencies, API-key and bearer-token auth, and password hashing basics.
 minutes: 35
 ---
+> [!project] Taskboard, step 7: who is asking?
+> Taskboard is about to have real users. This step adds a reusable **pagination** dependency and a **current user** dependency, so every task records its owner and only the owner can delete it.
+
 ## What a dependency is
 
 A **dependency** is a function (or class) that FastAPI calls **before** your handler, passing its return value in. Declare it with `Depends`:
@@ -129,6 +132,61 @@ def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
 ## Classes as dependencies
 
 Any callable works, including a class: `Depends(Paginator)` constructs an instance from the query parameters its `__init__` declares.
+
+## Worked example: following a request through dependencies
+
+```python
+def get_current_user(x_api_key: Annotated[str, Header()]) -> User:
+    user = USERS_BY_KEY.get(x_api_key)
+    if user is None:
+        raise HTTPException(401, "Invalid API key")
+    return user
+
+CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+@router.delete("/{task_id}", status_code=204)
+def delete_task(task_id: int, user: CurrentUser):
+    task = find_task(task_id)
+    if task["owner"] != user.name:
+        raise HTTPException(403, "Only the owner can delete this task")
+    del TASKS[task_id]
+```
+
+For `DELETE /tasks/5` with header `X-API-Key: k-ada`:
+
+1. FastAPI sees `user: CurrentUser` and calls `get_current_user` **first**.
+2. That dependency needs the `X-API-Key` header: present, so it's passed in. (Missing → automatic 422; unknown key → our 401.)
+3. The returned `User` becomes the `user` argument.
+4. Only now does `delete_task` run, already knowing who's asking, and it checks **authorization** (is this user allowed?) itself.
+
+Note the two different questions: **authentication** ("who are you?", answered by the dependency, failure = 401) and **authorization** ("may you do this?", answered by the endpoint, failure = 403).
+
+> [!plain] In plain English
+> A dependency is a function FastAPI runs before your endpoint to prepare something it needs: the current user, a database session, pagination settings. You declare it once and reuse it everywhere.
+
+## Reusing dependencies for consistency
+
+Every list endpoint should page the same way. Write it once:
+
+```python
+class Page(BaseModel):
+    offset: int
+    limit: int
+
+def pagination(offset: Annotated[int, Query(ge=0)] = 0,
+               limit: Annotated[int, Query(ge=1, le=100)] = 20) -> Page:
+    return Page(offset=offset, limit=limit)
+
+Paging = Annotated[Page, Depends(pagination)]
+```
+
+Now `/tasks`, `/users` and `/tasks/5/comments` all accept `?offset=&limit=` with identical rules, and you can't forget the cap.
+
+## Common mistakes
+
+> [!mistake] Trusting a user id from the client
+> `DELETE /tasks/5?user_id=1` lets anyone pretend to be user 1. Identity must come from a **credential** (a key, token or session) checked server-side.
 
 :::quiz
 q: A dependency declares `skip: int = 0`. Where does `skip` come from for routes that use it?
@@ -437,4 +495,99 @@ A dependency parameter is declared as `user_agent: Annotated[str, Header()]`. Wh
 User-Agent
 ---solution
 User-Agent
+:::
+
+:::exercise
+id: proj-fa-07-paging
+level: 2
+title: "Project 7: a pagination dependency"
+mode: code
+lang: python
+file: deps.py
+---
+Write `pagination(offset: Annotated[int, Query(ge=0)] = 0, limit: Annotated[int, Query(ge=1, le=100)] = 20)` returning `{"offset": offset, "limit": limit}`, and define `Paging = Annotated[dict, Depends(pagination)]`.
+---starter
+from typing import Annotated
+
+from fastapi import Depends, Query
+---rule
+def\s+pagination\(
+`def pagination(...)`
+---rule
+offset\s*:\s*Annotated\[\s*int\s*,\s*Query\(\s*ge\s*=\s*0\s*\)\s*\]\s*=\s*0
+`offset` ≥ 0, default 0
+---rule
+limit\s*:\s*Annotated\[\s*int\s*,\s*Query\((?=[^)]*ge\s*=\s*1)(?=[^)]*le\s*=\s*100)[^)]*\)\s*\]\s*=\s*20
+`limit` 1–100, default 20
+---rule
+return\s*\{\s*["']offset["']\s*:\s*offset\s*,\s*["']limit["']\s*:\s*limit\s*\}
+Return both
+---rule
+Paging\s*=\s*Annotated\[\s*dict\s*,\s*Depends\(\s*pagination\s*\)\s*\]
+`Paging = Annotated[dict, Depends(pagination)]`
+---solution
+from typing import Annotated
+
+from fastapi import Depends, Query
+
+
+def pagination(offset: Annotated[int, Query(ge=0)] = 0, limit: Annotated[int, Query(ge=1, le=100)] = 20):
+    return {"offset": offset, "limit": limit}
+
+
+Paging = Annotated[dict, Depends(pagination)]
+:::
+
+:::exercise
+id: proj-fa-07-owner
+level: 3
+title: "Project 7b: only owners delete"
+mode: code
+lang: python
+file: routers/tasks.py
+---
+Change `delete_task` to take `user: CurrentUser`. After finding the task, raise **403** `"Only the owner can delete this task"` when `task["owner"] != user["name"]`; otherwise delete it.
+---starter
+from fastapi import APIRouter, HTTPException
+
+from deps import CurrentUser
+from store import TASKS, find_task
+
+router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+@router.delete("/{task_id}", status_code=204)
+def delete_task(task_id: int):
+    find_task(task_id)
+    del TASKS[task_id]
+---rule
+def\s+delete_task\(\s*task_id\s*:\s*int\s*,\s*user\s*:\s*CurrentUser\s*\)
+Takes `user: CurrentUser`
+---rule
+task\s*=\s*find_task\(\s*task_id\s*\)
+Keep the task
+---rule
+if\s+task\[\s*["']owner["']\s*\]\s*!=\s*user\[\s*["']name["']\s*\]\s*:
+Compare the owner
+---rule
+raise\s+HTTPException\((?=[^)]*(403|HTTP_403_FORBIDDEN))(?=[^)]*Only the owner can delete this task)
+403 with the message
+---rule
+del\s+TASKS\[\s*task_id\s*\]
+Still deletes
+---solution
+from fastapi import APIRouter, HTTPException
+
+from deps import CurrentUser
+from store import TASKS, find_task
+
+router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+@router.delete("/{task_id}", status_code=204)
+def delete_task(task_id: int, user: CurrentUser):
+    task = find_task(task_id)
+    if task["owner"] != user["name"]:
+        raise HTTPException(status_code=403, detail="Only the owner can delete this task")
+    del TASKS[task_id]
 :::

@@ -4,6 +4,9 @@ title: Request bodies & Pydantic models
 summary: Declaring JSON bodies with Pydantic models, Field constraints, optional and default fields, nested models, response_model to shape and filter output, and separate input/output schemas.
 minutes: 35
 ---
+> [!project] Taskboard, step 4: creating tasks
+> Until now tasks were hard-coded dicts. This step introduces Pydantic **models**: one describing what clients send (`TaskCreate`), one describing what the API returns (`TaskOut`), and `POST /tasks` to create tasks.
+
 ## A model is a schema
 
 Subclass `BaseModel` and annotate fields. A parameter typed as a model is read from the **JSON body**:
@@ -111,6 +114,64 @@ def update_item(item_id: int, item: ItemCreate, notify: bool = False):
 - `item_id` appears in the path → **path**
 - `item` is a Pydantic model → **body**
 - `notify` is a simple type not in the path → **query**
+
+## Worked example: why two models?
+
+What a client **sends** and what the server **returns** are different:
+
+| Field | Client sends? | Server returns? | Why |
+|---|---|---|---|
+| `title`, `description`, `priority` | yes | yes | user-provided |
+| `id` | **no** | yes | the server assigns it |
+| `status` | no (always starts `todo`) | yes | business rule |
+| `created_at` | no | yes | server clock |
+| `owner_password_hash` (later) | no | **never** | secret |
+
+So you write separate models, often sharing a base:
+
+```python
+from datetime import datetime
+from pydantic import BaseModel, Field
+
+
+class TaskBase(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    description: str = ""
+    priority: int = Field(default=3, ge=1, le=5)
+
+
+class TaskCreate(TaskBase):
+    pass                                  # exactly what a client may send
+
+
+class TaskOut(TaskBase):
+    id: int
+    status: Status
+    created_at: datetime
+```
+
+```python
+@app.post("/tasks", response_model=TaskOut, status_code=201)
+def create_task(data: TaskCreate):
+    task = {"id": next_id(), "status": "todo", "created_at": datetime.now(timezone.utc), **data.model_dump()}
+    TASKS[task["id"]] = task
+    return task
+```
+
+- A parameter typed as a Pydantic model is read from the **JSON body** and validated: a missing `title` or `priority: 9` gets a detailed 422.
+- `response_model=TaskOut` **filters** the output: even if the dict had extra internal fields, only `TaskOut`'s fields are sent.
+- `**data.model_dump()` unpacks the validated fields into the new dict.
+
+> [!plain] In plain English
+> A Pydantic model is a class that says "valid data looks like this". FastAPI uses it to check incoming JSON, to shape outgoing JSON, and to document both in `/docs`.
+
+## Common mistakes
+
+> [!mistake] One model for everything
+> Reusing the response model as input lets clients set `id` or `status` themselves (a "mass assignment" bug). Keep create, update and output models separate.
+
+> [!mistake] Mutable defaults
+> `tags: list[str] = []` is safe in Pydantic (it copies defaults), but the same line in a plain Python function signature isn't. Don't carry the habit over to ordinary functions.
 
 :::quiz
 q: A route parameter typed with a Pydantic model is read from…
@@ -497,4 +558,118 @@ The client sends `{"name": "Bolt"}`. Write the `loc` of the validation error as 
 ["body", "price"]
 ---solution
 ["body", "price"]
+:::
+
+:::exercise
+id: proj-fa-04-models
+level: 2
+title: "Project 4: TaskCreate and TaskOut"
+mode: code
+lang: python
+file: models.py
+---
+Write `TaskBase` with `title: str = Field(min_length=1, max_length=120)`, `description: str = ""` and `priority: int = Field(default=3, ge=1, le=5)`. Then `TaskCreate(TaskBase)` with no extra fields (`pass`), and `TaskOut(TaskBase)` adding `id: int` and `status: str`.
+---starter
+from pydantic import BaseModel, Field
+---rule
+class\s+TaskBase\(\s*BaseModel\s*\)\s*:
+`class TaskBase(BaseModel)`
+---rule
+title\s*:\s*str\s*=\s*Field\((?=[^)]*min_length\s*=\s*1)(?=[^)]*max_length\s*=\s*120)
+`title` with length limits
+---rule
+description\s*:\s*str\s*=\s*["']["']
+`description: str = ""`
+---rule
+priority\s*:\s*int\s*=\s*Field\((?=[^)]*default\s*=\s*3)(?=[^)]*ge\s*=\s*1)(?=[^)]*le\s*=\s*5)
+`priority` 1–5, default 3
+---rule
+class\s+TaskCreate\(\s*TaskBase\s*\)\s*:\s*\n\s+pass
+`class TaskCreate(TaskBase): pass`
+---rule
+class\s+TaskOut\(\s*TaskBase\s*\)\s*:[\s\S]*id\s*:\s*int[\s\S]*status\s*:\s*str|class\s+TaskOut\(\s*TaskBase\s*\)\s*:[\s\S]*status\s*:\s*str[\s\S]*id\s*:\s*int
+`TaskOut` adds `id` and `status`
+---solution
+from pydantic import BaseModel, Field
+
+
+class TaskBase(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    description: str = ""
+    priority: int = Field(default=3, ge=1, le=5)
+
+
+class TaskCreate(TaskBase):
+    pass
+
+
+class TaskOut(TaskBase):
+    id: int
+    status: str
+:::
+
+:::exercise
+id: proj-fa-04-create
+level: 3
+title: "Project 4b: POST /tasks"
+mode: code
+lang: python
+file: main.py
+---
+Write `POST /tasks` with `response_model=TaskOut` and `status_code=201`. It takes `data: TaskCreate`, builds `task = {"id": len(TASKS) + 1, "status": "todo", **data.model_dump()}`, appends it to `TASKS`, and returns it.
+---starter
+from fastapi import FastAPI
+
+from models import TaskCreate, TaskOut
+
+app = FastAPI(title="Taskboard", version="0.1.0")
+TASKS: list[dict] = []
+---rule
+@app\.post\(\s*["']/tasks["'](?=[^)]*response_model\s*=\s*TaskOut)(?=[^)]*status_code\s*=\s*(201|status\.HTTP_201_CREATED))
+`@app.post("/tasks", response_model=TaskOut, status_code=201)`
+---rule
+def\s+\w+\(\s*data\s*:\s*TaskCreate\s*\)
+Takes `data: TaskCreate`
+---rule
+["']id["']\s*:\s*len\(\s*TASKS\s*\)\s*\+\s*1
+`"id": len(TASKS) + 1`
+---rule
+["']status["']\s*:\s*["']todo["']
+New tasks start as `todo`
+---rule
+\*\*\s*data\.model_dump\(\s*\)
+`**data.model_dump()`
+---rule
+TASKS\.append\(\s*task\s*\)
+Store it
+---rule
+return\s+task
+Return it
+---solution
+from fastapi import FastAPI
+
+from models import TaskCreate, TaskOut
+
+app = FastAPI(title="Taskboard", version="0.1.0")
+TASKS: list[dict] = []
+
+
+@app.post("/tasks", response_model=TaskOut, status_code=201)
+def create_task(data: TaskCreate):
+    task = {"id": len(TASKS) + 1, "status": "todo", **data.model_dump()}
+    TASKS.append(task)
+    return task
+:::
+
+:::exercise
+id: proj-fa-04-predict
+level: 2
+title: "Project 4c: predict the validation"
+mode: answer
+---
+With the models above, a client sends `POST /tasks` with `{"title": "Ship it", "priority": 9}`. What status code comes back?
+---answer
+422
+---solution
+422
 :::

@@ -4,6 +4,9 @@ title: Your first FastAPI app
 summary: What FastAPI is built on, creating the app object, path operations with decorators, returning JSON, running with uvicorn, the automatic /docs, and def vs async def.
 minutes: 25
 ---
+> [!project] Taskboard, step 2: the first commit
+> Time to write code. Taskboard starts as a single `main.py` with two endpoints every service needs: a **root** that says what it is, and a **health check** that deployments and load balancers will call.
+
 ## What FastAPI is
 
 **FastAPI** is a Python web framework for building APIs. It stands on two libraries:
@@ -79,6 +82,68 @@ Use `async def` when you `await` async libraries (httpx, async DB drivers). Use 
 
 > [!note] How these exercises are graded
 > There's no Python runtime in your browser, so FastAPI code exercises are checked against a **requirement checklist** (the right decorator, path, parameter types, return value…). Click "Show requirements" to see the list before you start. Predict-the-response exercises ask what a real FastAPI app would return.
+
+## Worked example: from empty folder to running API
+
+```bash
+mkdir taskboard && cd taskboard
+python -m venv .venv && source .venv/bin/activate     # an isolated Python for this project
+pip install "fastapi[standard]"
+```
+
+```python title=main.py
+from fastapi import FastAPI
+
+app = FastAPI(title="Taskboard", version="0.1.0")
+
+
+@app.get("/")
+def root():
+    return {"name": "Taskboard", "version": "0.1.0"}
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+```
+
+```bash
+fastapi dev main.py            # or: uvicorn main:app --reload
+curl -s localhost:8000/health
+```
+
+What happens when a request arrives:
+
+1. Uvicorn (the server) receives the HTTP request and hands it to `app`.
+2. FastAPI finds the function registered for that method and path (`@app.get("/health")`).
+3. It calls the function and converts the returned dict to JSON, with status 200.
+
+Open `http://localhost:8000/docs`: FastAPI generated interactive documentation from your code. You'll use it constantly to try endpoints.
+
+> [!plain] In plain English
+> A **decorator** like `@app.get("/health")` means "when someone sends GET to /health, run the function below". The function's return value becomes the response body.
+
+## Project layout as it grows
+
+You'll start with one file and split it as Taskboard grows:
+
+```
+taskboard/
+├── main.py            app creation, router includes
+├── routers/tasks.py   task endpoints (lesson 6)
+├── models.py          Pydantic/SQLModel models (lessons 4 and 8)
+├── db.py              database setup (lesson 8)
+├── tests/             pytest tests (lesson 9)
+└── requirements.txt
+```
+
+## Common mistakes
+
+> [!mistake] Two functions with the same name
+> Python silently keeps the last definition. FastAPI registers both routes, but tracebacks and `/docs` operation IDs get confusing. Give every path operation a unique, descriptive function name.
+
+> [!mistake] Forgetting the virtual environment
+> Installing packages globally mixes projects' dependency versions. Activate `.venv` first, and freeze what you use into `requirements.txt` (`pip freeze > requirements.txt`).
 
 :::quiz
 q: In `uvicorn main:app`, what is `app`?
@@ -413,4 +478,97 @@ def list_todos():
 @app.delete("/todos", status_code=204)
 def clear_todos():
     return None
+:::
+
+:::exercise
+id: proj-fa-02-main
+level: 1
+title: "Project 2: Taskboard's main.py"
+mode: code
+lang: python
+file: main.py
+---
+Create the Taskboard app: `app = FastAPI(title="Taskboard", version="0.1.0")`, a `GET /` that returns `{"name": "Taskboard", "version": "0.1.0"}`, and a `GET /health` that returns `{"status": "ok"}`.
+---starter
+from fastapi import FastAPI
+---rule
+app\s*=\s*FastAPI\((?=[^)]*title\s*=\s*["']Taskboard["'])(?=[^)]*version\s*=\s*["']0\.1\.0["'])
+`FastAPI(title="Taskboard", version="0.1.0")`
+---rule
+@app\.get\(\s*["']/["']\s*\)
+`GET /`
+---rule
+return\s*\{\s*["']name["']\s*:\s*["']Taskboard["']\s*,\s*["']version["']\s*:\s*["']0\.1\.0["']\s*\}
+Root returns name and version
+---rule
+@app\.get\(\s*["']/health["']\s*\)
+`GET /health`
+---rule
+return\s*\{\s*["']status["']\s*:\s*["']ok["']\s*\}
+Health returns `{"status": "ok"}`
+---solution
+from fastapi import FastAPI
+
+app = FastAPI(title="Taskboard", version="0.1.0")
+
+
+@app.get("/")
+def root():
+    return {"name": "Taskboard", "version": "0.1.0"}
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+:::
+
+:::exercise
+id: proj-fa-02-tasks-stub
+level: 2
+title: "Project 2b: a first list of tasks"
+mode: code
+lang: python
+file: main.py
+---
+Add a module-level list `TASKS` with two dicts, `{"id": 1, "title": "Set up repo", "status": "done"}` and `{"id": 2, "title": "Write API", "status": "doing"}`, and a `GET /tasks` endpoint that returns it.
+---starter
+from fastapi import FastAPI
+
+app = FastAPI(title="Taskboard", version="0.1.0")
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+---rule
+TASKS\s*=\s*\[
+A module-level `TASKS` list
+---rule
+\{\s*["']id["']\s*:\s*1\s*,\s*["']title["']\s*:\s*["']Set up repo["']\s*,\s*["']status["']\s*:\s*["']done["']\s*\}
+Task 1
+---rule
+\{\s*["']id["']\s*:\s*2\s*,\s*["']title["']\s*:\s*["']Write API["']\s*,\s*["']status["']\s*:\s*["']doing["']\s*\}
+Task 2
+---rule
+@app\.get\(\s*["']/tasks["']\s*\)\s*\ndef\s+\w+\(\s*\)\s*:\s*\n\s+return\s+TASKS
+`GET /tasks` returns `TASKS`
+---solution
+from fastapi import FastAPI
+
+app = FastAPI(title="Taskboard", version="0.1.0")
+
+TASKS = [
+    {"id": 1, "title": "Set up repo", "status": "done"},
+    {"id": 2, "title": "Write API", "status": "doing"},
+]
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.get("/tasks")
+def list_tasks():
+    return TASKS
 :::

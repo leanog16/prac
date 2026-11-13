@@ -4,6 +4,9 @@ title: Testing, middleware & settings
 summary: Testing endpoints with TestClient and pytest, overriding dependencies in tests, middleware and CORS, background tasks, and typed configuration from environment variables.
 minutes: 35
 ---
+> [!project] Taskboard, step 9: a test suite
+> Taskboard now has enough behaviour to break. This step adds `tests/test_tasks.py`: tests that run against a throwaway in-memory database, with the current user overridden, so they're fast and repeatable. The CI/CD track runs exactly these tests on every push.
+
 ## TestClient
 
 `TestClient` calls your app in-process (no server needed) with a `requests`-style API. Tests are plain `pytest` functions:
@@ -137,6 +140,71 @@ settings = Settings()      # reads DATABASE_URL, SECRET_KEY, DEBUG
 ```
 
 Missing required settings fail fast at startup with a clear validation error, which beats a crash on the first request.
+
+## Worked example: a test fixture that swaps the database
+
+```python title=tests/conftest.py
+import pytest
+from fastapi.testclient import TestClient
+from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel.pool import StaticPool
+
+from main import app
+from db import get_session
+from deps import get_current_user
+
+
+@pytest.fixture
+def client():
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    SQLModel.metadata.create_all(engine)
+
+    def session_override():
+        with Session(engine) as session:
+            yield session
+
+    app.dependency_overrides[get_session] = session_override
+    app.dependency_overrides[get_current_user] = lambda: {"name": "ada"}
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
+```
+
+- `sqlite://` (no file name) is an **in-memory** database: created for each test, gone afterwards. `StaticPool` keeps the same connection so every session sees the same in-memory data.
+- `dependency_overrides` replaces the real dependencies **only in tests**: no real database, no real auth.
+- The `yield` makes it a fixture with teardown: the overrides are cleared after each test.
+
+```python title=tests/test_tasks.py
+def test_create_then_get(client):
+    created = client.post("/tasks", json={"title": "Write docs", "priority": 2})
+    assert created.status_code == 201
+    task_id = created.json()["id"]
+
+    got = client.get(f"/tasks/{task_id}")
+    assert got.status_code == 200
+    assert got.json()["title"] == "Write docs"
+    assert got.json()["owner"] == "ada"
+
+
+def test_missing_task_is_404(client):
+    assert client.get("/tasks/999").status_code == 404
+
+
+def test_priority_out_of_range_is_422(client):
+    assert client.post("/tasks", json={"title": "x", "priority": 9}).status_code == 422
+```
+
+> [!plain] In plain English
+> A test calls your code with known input and **asserts** the output is what you expect. pytest finds every function named `test_*` in files named `test_*.py` and runs it; a fixture is setup code that tests ask for by naming it as a parameter.
+
+## What to test
+
+For each endpoint, test the **happy path** and each **failure you designed**: 404, 409, 422, 401, 403. Those error paths are exactly the ones that break silently during refactors. Arrange-act-assert keeps each test readable: set up data, make one request, check the result.
+
+## Common mistakes
+
+> [!mistake] Tests that depend on each other
+> If `test_get` only passes because `test_create` ran first, the suite breaks when run in another order or in parallel. Each test creates its own data (the per-test in-memory DB makes this automatic).
 
 :::quiz
 q: What does `TestClient(app)` need running?
@@ -516,4 +584,124 @@ fails
 fail
 ---explain
 The route returns 201, so `assert r.status_code == 200` fails.
+:::
+
+:::exercise
+id: proj-fa-09-test-create
+level: 2
+title: "Project 9: test task creation"
+mode: code
+lang: python
+file: tests/test_tasks.py
+---
+Write `test_create_task(client)`: POST `/tasks` with JSON `{"title": "Write docs", "priority": 2}`, assert the status code is **201**, and assert the response JSON's `status` is `"todo"` and its `owner` is `"ada"`.
+---starter
+def test_health(client):
+    assert client.get("/health").status_code == 200
+---rule
+def\s+test_create_task\(\s*client\s*\)\s*:
+`def test_create_task(client):`
+---rule
+client\.post\(\s*["']/tasks["']\s*,\s*json\s*=\s*\{\s*["']title["']\s*:\s*["']Write docs["']\s*,\s*["']priority["']\s*:\s*2\s*\}\s*\)
+POST the task
+---rule
+assert\s+\w+\.status_code\s*==\s*201
+Assert 201
+---rule
+assert\s+\w+\.json\(\s*\)\[\s*["']status["']\s*\]\s*==\s*["']todo["']|assert\s+\w+\[\s*["']status["']\s*\]\s*==\s*["']todo["']
+Assert status `todo`
+---rule
+assert\s+\w+\.json\(\s*\)\[\s*["']owner["']\s*\]\s*==\s*["']ada["']|assert\s+\w+\[\s*["']owner["']\s*\]\s*==\s*["']ada["']
+Assert owner `ada`
+---solution
+def test_health(client):
+    assert client.get("/health").status_code == 200
+
+
+def test_create_task(client):
+    response = client.post("/tasks", json={"title": "Write docs", "priority": 2})
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == "todo"
+    assert body["owner"] == "ada"
+:::
+
+:::exercise
+id: proj-fa-09-test-errors
+level: 2
+title: "Project 9b: test the failures"
+mode: code
+lang: python
+file: tests/test_tasks.py
+---
+Write two tests: `test_missing_task_is_404(client)` asserting that `GET /tasks/999` returns **404**, and `test_bad_priority_is_422(client)` asserting that POSTing `{"title": "x", "priority": 9}` to `/tasks` returns **422**.
+---starter
+---rule
+def\s+test_missing_task_is_404\(\s*client\s*\)\s*:
+`test_missing_task_is_404`
+---rule
+client\.get\(\s*["']/tasks/999["']\s*\)\.status_code\s*==\s*404|client\.get\(\s*["']/tasks/999["']\s*\)[\s\S]*?status_code\s*==\s*404
+`GET /tasks/999` → 404
+---rule
+def\s+test_bad_priority_is_422\(\s*client\s*\)\s*:
+`test_bad_priority_is_422`
+---rule
+client\.post\(\s*["']/tasks["']\s*,\s*json\s*=\s*\{\s*["']title["']\s*:\s*["']x["']\s*,\s*["']priority["']\s*:\s*9\s*\}\s*\)[\s\S]*?status_code\s*==\s*422
+Priority 9 → 422
+---solution
+def test_missing_task_is_404(client):
+    assert client.get("/tasks/999").status_code == 404
+
+
+def test_bad_priority_is_422(client):
+    response = client.post("/tasks", json={"title": "x", "priority": 9})
+    assert response.status_code == 422
+:::
+
+:::exercise
+id: proj-fa-09-override
+level: 3
+title: "Project 9c: fake the current user"
+mode: code
+lang: python
+file: tests/conftest.py
+---
+In the `client` fixture, override `get_current_user` so it returns `{"name": "ada"}`, create the `TestClient` with a `with` block and `yield` it, and clear the overrides afterwards.
+---starter
+import pytest
+from fastapi.testclient import TestClient
+
+from deps import get_current_user
+from main import app
+
+
+@pytest.fixture
+def client():
+    ...
+---rule
+app\.dependency_overrides\[\s*get_current_user\s*\]\s*=\s*lambda\s*:\s*\{\s*["']name["']\s*:\s*["']ada["']\s*\}
+Override `get_current_user`
+---rule
+with\s+TestClient\(\s*app\s*\)\s+as\s+(\w+)\s*:\s*\n\s+yield\s+\1
+`with TestClient(app) as c: yield c`
+---rule
+app\.dependency_overrides\.clear\(\s*\)
+Clear the overrides
+---rule
+yield[\s\S]*dependency_overrides\.clear
+Clear after the test
+---solution
+import pytest
+from fastapi.testclient import TestClient
+
+from deps import get_current_user
+from main import app
+
+
+@pytest.fixture
+def client():
+    app.dependency_overrides[get_current_user] = lambda: {"name": "ada"}
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
 :::

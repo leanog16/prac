@@ -4,6 +4,9 @@ title: Errors & status codes
 summary: Raising HTTPException, choosing the right status code, the status module, custom exceptions with handlers, headers on errors, and what validation errors look like.
 minutes: 25
 ---
+> [!project] Taskboard, step 5: honest errors
+> Taskboard currently answers `{"detail": "not found"}` with a **200**. This step fixes that with proper 404s, a 409 for duplicate titles, and a custom domain exception so the business logic doesn't need to know about HTTP.
+
 ## HTTPException
 
 Return an error by **raising** `HTTPException`. FastAPI stops the handler and sends a JSON body `{"detail": ...}` with the status code you chose:
@@ -99,6 +102,61 @@ def delete_item(item_id: int):
     items.pop(item_id, None)
     return Response(status_code=204)     # or simply return None
 ```
+
+## Worked example: choosing the status code
+
+Walk through each failure and ask "whose fault is it, and what should the client do?":
+
+| Situation in Taskboard | Code | Client should… |
+|---|---|---|
+| `/tasks/abc` (not an int), title too long | 422 | fix the request |
+| task 999 doesn't exist | 404 | stop asking, or refresh its list |
+| another open task already has that title | 409 | rename and retry |
+| moving a `done` task back to `todo` isn't allowed | 409 (or 422) | show the rule to the user |
+| not logged in | 401 | log in |
+| logged in, but not the task's owner | 403 | give up |
+| database down | 503 | retry later |
+| a bug in our code | 500 | report it |
+
+## Worked example: domain exceptions
+
+Raising `HTTPException` deep inside business logic couples it to the web layer. A cleaner pattern: raise a **domain** exception, and translate it to HTTP in one place:
+
+```python
+class TaskNotFound(Exception):
+    def __init__(self, task_id: int):
+        self.task_id = task_id
+
+
+def find_task(task_id: int) -> dict:          # pure logic: no HTTP here
+    for t in TASKS:
+        if t["id"] == task_id:
+            return t
+    raise TaskNotFound(task_id)
+
+
+@app.exception_handler(TaskNotFound)
+async def task_not_found_handler(request: Request, exc: TaskNotFound):
+    return JSONResponse(status_code=404, content={"detail": f"Task {exc.task_id} not found"})
+
+
+@app.get("/tasks/{task_id}")
+def get_task(task_id: int):
+    return find_task(task_id)
+```
+
+`find_task` can now be reused by a CLI, a background job or a test, without any FastAPI imports, and every endpoint that calls it gets consistent 404s for free.
+
+> [!plain] In plain English
+> Raising an exception stops the function immediately. FastAPI catches `HTTPException` (and any exception you registered a handler for) and turns it into an error response.
+
+## Common mistakes
+
+> [!mistake] Returning instead of raising
+> `return HTTPException(404)` sends the exception object as a 200 JSON body. You must `raise` it.
+
+> [!mistake] Leaking internals in 500s
+> Never put stack traces or SQL in error responses. Log them server-side with the request ID; send the client a generic message.
 
 :::quiz
 q: What does `return HTTPException(status_code=404)` (instead of raise) do?
@@ -425,4 +483,120 @@ What status code does `GET /orders/abc` return?
 422
 ---explain
 Validation happens before your function runs, so the `int` conversion fails first.
+:::
+
+:::exercise
+id: proj-fa-05-404
+level: 2
+title: "Project 5: a real 404"
+mode: code
+lang: python
+file: main.py
+---
+Fix `get_task`: if no task matches, **raise** `HTTPException` with status **404** and detail `"Task not found"` (use `status.HTTP_404_NOT_FOUND` or `404`).
+---starter
+from fastapi import FastAPI, HTTPException, status
+
+app = FastAPI(title="Taskboard", version="0.1.0")
+TASKS = [{"id": 1, "title": "Set up repo", "status": "done"}]
+
+
+@app.get("/tasks/{task_id}")
+def get_task(task_id: int):
+    for task in TASKS:
+        if task["id"] == task_id:
+            return task
+    return {"detail": "not found"}
+---rule
+raise\s+HTTPException\((?=[^)]*(404|HTTP_404_NOT_FOUND))(?=[^)]*["']Task not found["'])
+`raise HTTPException(404, "Task not found")`
+---rule
+!return\s*\{\s*["']detail["']
+No more 200 with an error body
+---solution
+from fastapi import FastAPI, HTTPException, status
+
+app = FastAPI(title="Taskboard", version="0.1.0")
+TASKS = [{"id": 1, "title": "Set up repo", "status": "done"}]
+
+
+@app.get("/tasks/{task_id}")
+def get_task(task_id: int):
+    for task in TASKS:
+        if task["id"] == task_id:
+            return task
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+:::
+
+:::exercise
+id: proj-fa-05-domain
+level: 3
+title: "Project 5b: a domain exception"
+mode: code
+lang: python
+file: main.py
+---
+Define `class DuplicateTitle(Exception)` and register an exception handler for it that returns a `JSONResponse` with status **409** and content `{"detail": "A task with this title already exists"}`. In `create_task`, raise `DuplicateTitle()` when any existing task has the same `title` as `data.title`.
+---starter
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+
+app = FastAPI(title="Taskboard", version="0.1.0")
+TASKS: list[dict] = []
+
+
+class TaskCreate(BaseModel):
+    title: str
+
+
+@app.post("/tasks", status_code=201)
+def create_task(data: TaskCreate):
+    task = {"id": len(TASKS) + 1, "status": "todo", **data.model_dump()}
+    TASKS.append(task)
+    return task
+---rule
+class\s+DuplicateTitle\(\s*Exception\s*\)
+`class DuplicateTitle(Exception)`
+---rule
+@app\.exception_handler\(\s*DuplicateTitle\s*\)
+Register a handler
+---rule
+JSONResponse\((?=[^)]*status_code\s*=\s*(409|status\.HTTP_409_CONFLICT))(?=[^)]*A task with this title already exists)
+409 with the message
+---rule
+any\(\s*\w+\[\s*["']title["']\s*\]\s*==\s*data\.title\s+for\s+\w+\s+in\s+TASKS\s*\)|for\s+(\w+)\s+in\s+TASKS\s*:\s*\n\s+if\s+\1\[\s*["']title["']\s*\]\s*==\s*data\.title
+Check for an existing title
+---rule
+raise\s+DuplicateTitle\(\s*\)
+`raise DuplicateTitle()`
+---solution
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+
+app = FastAPI(title="Taskboard", version="0.1.0")
+TASKS: list[dict] = []
+
+
+class DuplicateTitle(Exception):
+    pass
+
+
+@app.exception_handler(DuplicateTitle)
+async def duplicate_title_handler(request: Request, exc: DuplicateTitle):
+    return JSONResponse(status_code=409, content={"detail": "A task with this title already exists"})
+
+
+class TaskCreate(BaseModel):
+    title: str
+
+
+@app.post("/tasks", status_code=201)
+def create_task(data: TaskCreate):
+    if any(t["title"] == data.title for t in TASKS):
+        raise DuplicateTitle()
+    task = {"id": len(TASKS) + 1, "status": "todo", **data.model_dump()}
+    TASKS.append(task)
+    return task
 :::

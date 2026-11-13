@@ -4,6 +4,9 @@ title: Lifespan, files & streaming
 summary: Startup and shutdown with the lifespan context manager and app.state, form data, file uploads with UploadFile, size and type checks, FileResponse, StreamingResponse, server-sent events and serving static files.
 minutes: 35
 ---
+> [!project] Taskboard, step 10: attachments and exports
+> Teams attach screenshots and specs to tasks, and managers want a CSV of the board. This step adds a lifespan that prepares the database and upload folder at startup, file attachments, and a streaming CSV export.
+
 ## Startup and shutdown: lifespan
 
 Some things should happen **once per process**, not once per request: opening a database connection pool, creating an HTTP client, loading a machine-learning model, warming a cache. FastAPI's answer is a **lifespan** function: an async context manager where code before `yield` runs at startup and code after it runs at shutdown.
@@ -177,6 +180,49 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 ```
 
 `mount` attaches a whole sub-application at a path prefix; routes under `/static` never reach your path operations. In production, a CDN or nginx in front of the app usually serves static files more efficiently.
+
+## Worked example: where Taskboard does its startup work
+
+```python title=main.py
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+UPLOAD_DIR = Path("uploads")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    UPLOAD_DIR.mkdir(exist_ok=True)                 # once, at startup
+    SQLModel.metadata.create_all(engine)            # demo-friendly; Alembic in production
+    yield
+    engine.dispose()                                # close pooled DB connections on shutdown
+
+app = FastAPI(title="Taskboard", version="0.4.0", lifespan=lifespan)
+```
+
+Before lifespan existed, people did this at **import time** (top-level code in `main.py`), which runs even when a test merely imports the module, and has no shutdown hook.
+
+## Worked example: a safe attachment endpoint
+
+```python
+@router.post("/{task_id}/attachments", status_code=201)
+async def add_attachment(task_id: int, file: UploadFile, session: SessionDep):
+    task = session.get(Task, task_id) or raise_404()
+    if file.content_type not in {"image/png", "image/jpeg", "application/pdf"}:
+        raise HTTPException(415, "PNG, JPEG or PDF only")
+    stored_name = f"{uuid4().hex}{Path(file.filename or '').suffix.lower()}"
+    size = await save_upload(file, UPLOAD_DIR / stored_name)       # chunked, enforces a size cap
+    return {"task_id": task.id, "file": stored_name, "size": size}
+```
+
+Every choice there defends against something: an allow-list of types, a **server-generated** name (no `../../` tricks, no collisions), and a chunked save with a size cap so one huge upload can't fill the disk or memory.
+
+> [!plain] In plain English
+> Uploads arrive as `multipart/form-data`, not JSON. `UploadFile` gives you the file's name, type and a way to read it in pieces. Never trust what the client says about its file.
+
+## Common mistakes
+
+> [!mistake] Storing uploads inside the container
+> In Docker, files written to the container's filesystem disappear when it's replaced. Use a volume locally and object storage (S3) in production. The AWS track moves Taskboard's attachments to S3 with presigned URLs.
 
 :::quiz
 q: In a lifespan function, when does the code **after** `yield` run?
@@ -611,4 +657,122 @@ What does it print? (The test does **not** use `with TestClient(app) as client`.
 {"ready": false}
 ---explain
 Without the `with` block, TestClient doesn't run the lifespan, so `app.state.ready` was never set.
+:::
+
+:::exercise
+id: proj-fa-10-lifespan
+level: 3
+title: "Project 10: Taskboard's lifespan"
+mode: code
+lang: python
+file: main.py
+---
+Write an `@asynccontextmanager` `lifespan(app: FastAPI)` that creates the upload folder with `UPLOAD_DIR.mkdir(exist_ok=True)` and the tables with `SQLModel.metadata.create_all(engine)` before `yield`, and calls `engine.dispose()` after it. Pass it to the app.
+---starter
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI
+from sqlmodel import SQLModel
+
+from db import engine
+
+UPLOAD_DIR = Path("uploads")
+app = FastAPI(title="Taskboard", version="0.4.0")
+---rule
+@asynccontextmanager\s*\nasync\s+def\s+lifespan\(\s*app(\s*:\s*FastAPI)?\s*\)
+The lifespan function
+---rule
+UPLOAD_DIR\.mkdir\(\s*exist_ok\s*=\s*True\s*\)
+Create the upload folder
+---rule
+SQLModel\.metadata\.create_all\(\s*engine\s*\)
+Create the tables
+---rule
+yield\s*\n\s+engine\.dispose\(\s*\)
+Dispose the engine after `yield`
+---rule
+mkdir[\s\S]*yield|create_all[\s\S]*yield
+Startup work before `yield`
+---rule
+app\s*=\s*FastAPI\([^)]*lifespan\s*=\s*lifespan
+`FastAPI(..., lifespan=lifespan)`
+---solution
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI
+from sqlmodel import SQLModel
+
+from db import engine
+
+UPLOAD_DIR = Path("uploads")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    UPLOAD_DIR.mkdir(exist_ok=True)
+    SQLModel.metadata.create_all(engine)
+    yield
+    engine.dispose()
+
+
+app = FastAPI(title="Taskboard", version="0.4.0", lifespan=lifespan)
+:::
+
+:::exercise
+id: proj-fa-10-export
+level: 3
+title: "Project 10b: CSV export"
+mode: code
+lang: python
+file: routers/export.py
+---
+Write a generator `task_rows(tasks)` that yields `"id,title,status\n"` and then `f"{t.id},{t.title},{t.status}\n"` for each task. Add `GET /tasks.csv` that loads `session.exec(select(Task).order_by(Task.id)).all()` and returns `StreamingResponse(task_rows(tasks), media_type="text/csv")`.
+---starter
+from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
+from sqlmodel import select
+
+from db import SessionDep, Task
+
+router = APIRouter()
+---rule
+def\s+task_rows\(\s*tasks\s*\)\s*:
+`def task_rows(tasks):`
+---rule
+yield\s+["']id,title,status\\n["']
+Header row first
+---rule
+for\s+(\w+)\s+in\s+tasks\s*:\s*\n\s+yield\s+f["']\{\1\.id\},\{\1\.title\},\{\1\.status\}\\n["']
+One row per task
+---rule
+@router\.get\(\s*["']/tasks\.csv["']\s*\)
+`GET /tasks.csv`
+---rule
+session\.exec\(\s*select\(\s*Task\s*\)\.order_by\(\s*Task\.id\s*\)\s*\)\.all\(\s*\)
+Load the tasks in id order
+---rule
+StreamingResponse\(\s*task_rows\(\s*\w+\s*\)\s*,\s*media_type\s*=\s*["']text/csv["']\s*\)
+Stream it as CSV
+---solution
+from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
+from sqlmodel import select
+
+from db import SessionDep, Task
+
+router = APIRouter()
+
+
+def task_rows(tasks):
+    yield "id,title,status\n"
+    for t in tasks:
+        yield f"{t.id},{t.title},{t.status}\n"
+
+
+@router.get("/tasks.csv")
+def export_tasks(session: SessionDep):
+    tasks = session.exec(select(Task).order_by(Task.id)).all()
+    return StreamingResponse(task_rows(tasks), media_type="text/csv")
 :::
