@@ -4,6 +4,9 @@ title: Boss round: architecture & incidents
 summary: Design and debug like a cloud engineer: least-privilege policies for a real service, a secure network path, a serverless pipeline with failure handling, cross-account access, cost and security incidents, and architecture choices with trade-offs.
 minutes: 60
 ---
+> [!project] Taskboard, final step: production incidents
+> Taskboard is live on AWS. The boss round's project exercises are incidents from its first month in production. Each has a root cause in a lesson you've done.
+
 ## A reference architecture
 
 Most web applications on AWS converge on a shape like this:
@@ -35,6 +38,22 @@ Secrets Manager · CloudWatch logs/metrics/alarms · CloudTrail · IaC (CDK/Terr
 | Lambda timeouts | downstream latency, VPC egress (NAT/endpoints), cold starts, timeout vs SQS visibility |
 | Messages stuck or duplicated | visibility timeout, DLQ, idempotency, batch failure reporting |
 | Bill spiked | Cost Explorer by service and tag: NAT data, data transfer, logs, forgotten resources |
+
+## Worked example: an incident write-up
+
+Good teams write a short, blameless **post-incident review** after every outage. Taskboard's first one:
+
+> **Summary.** For 23 minutes, 40% of `PATCH /tasks` requests returned 502.
+>
+> **Timeline.** 10:02 deploy of `sha-9c1e2f0` starts · 10:05 5xx alarm fires · 10:09 on-call sees new tasks flapping between healthy and unhealthy · 10:21 identified · 10:25 rolled back to `sha-3f2c1ab` · 10:25 errors stop.
+>
+> **Root cause.** The new image added a database migration at startup that took ~70 s. The target group health check (5 s interval, 2 failures) marked tasks unhealthy and ECS killed them before startup finished, so they never became stable. The circuit breaker was disabled on this service.
+>
+> **What went well.** The alarm fired within 3 minutes. Rollback was a single command.
+>
+> **Action items.** Run migrations as a separate one-off task before deploying (owner: Ana). Set `healthCheckGracePeriodSeconds` to 120. Enable the deployment circuit breaker on every service. Add "startup time" to the load test.
+
+Notice the review blames a **process and a configuration**, not a person, and every action item makes this class of failure impossible or detectable. That's how systems get more reliable over time.
 
 :::exercise
 id: ab-policy
@@ -337,4 +356,73 @@ AWS Lambda
 Lambda
 ---explain
 Event-driven, bursty, short tasks, and no server management: S3 event → (optionally SQS for buffering and retries) → Lambda, with a DLQ and an alarm.
+:::
+
+:::exercise
+id: proj-aws-10-grace
+level: 3
+title: "Project 10: give startup some room"
+mode: code
+lang: bash
+file: fix-service.sh
+---
+Apply two action items from the review to service `taskboard-api` in cluster `taskboard`: set the health check grace period to **120** seconds, and enable the deployment circuit breaker **with rollback**.
+---starter
+#!/bin/sh
+---rule
+aws\s+ecs\s+update-service
+`aws ecs update-service`
+---rule
+--cluster[ =]taskboard\b
+Cluster
+---rule
+--service[ =]taskboard-api
+Service
+---rule
+--health-check-grace-period-seconds[ =]120
+Grace period 120 s
+---rule
+deploymentCircuitBreaker=\{enable=true,rollback=true\}
+Circuit breaker with rollback
+---solution
+#!/bin/sh
+aws ecs update-service --cluster taskboard --service taskboard-api \
+  --health-check-grace-period-seconds 120 \
+  --deployment-configuration "deploymentCircuitBreaker={enable=true,rollback=true}"
+:::
+
+:::exercise
+id: proj-aws-10-presign-denied
+level: 3
+title: "Project 10b: uploads fail with AccessDenied"
+mode: answer
+---
+Browsers get `403 AccessDenied` when PUTting to presigned URLs that the Taskboard API generates. The task role allows only `s3:GetObject` and `s3:DeleteObject` on `taskboard-attachments-prod/tasks/*`. Which action is missing from the task role?
+---answer
+s3:PutObject
+---solution
+s3:PutObject
+---explain
+A presigned URL carries the permissions of the identity that signed it. The API's role must itself be allowed to `PutObject` on that key.
+:::
+
+:::exercise
+id: proj-aws-10-nat-bill
+level: 3
+title: "Project 10c: the NAT bill"
+mode: answer
+---
+Taskboard's monthly bill shows a large "NAT Gateway data processing" charge. Most of the traffic is ECS tasks pulling images from ECR and the API reading and writing attachments in S3. What should you add so S3 traffic stops going through the NAT gateway? (Three words: the type of endpoint.)
+---answer
+S3 gateway endpoint
+---answer
+gateway VPC endpoint
+---answer
+gateway endpoint
+---answer
+VPC gateway endpoint
+---solution
+S3 gateway endpoint
+---explain
+A gateway endpoint for S3 is free and routes S3 traffic privately. ECR also needs interface endpoints (ecr.api, ecr.dkr), whose layers are served from S3 too.
 :::

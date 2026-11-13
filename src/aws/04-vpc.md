@@ -4,6 +4,9 @@ title: VPC networking
 summary: VPCs and CIDR blocks, public, private and isolated subnets across AZs, route tables, internet and NAT gateways, security groups vs network ACLs, VPC endpoints for S3 and other services, peering and Transit Gateway, Route 53 DNS, and the standard three-tier layout.
 minutes: 40
 ---
+> [!project] Taskboard, step 4: Taskboard's network
+> Production Taskboard gets a proper VPC: public subnets for the load balancer, private subnets for the API tasks, isolated subnets for the database, in two Availability Zones, with security groups that only allow the traffic the architecture needs.
+
 ## A VPC is your private network
 
 A **Virtual Private Cloud (VPC)** is an isolated network in one region, with an IP range you choose as a **CIDR block**:
@@ -107,6 +110,35 @@ When "it can't connect", walk the path:
 5. Is the target **listening** on that port and interface (not just 127.0.0.1)?
 
 **VPC Reachability Analyzer** checks this path for you, and **VPC Flow Logs** record accepted and rejected traffic.
+
+## Worked example: planning the address space
+
+Pick a VPC range that won't collide with the office network or other VPCs you may peer with later, then carve it up. Leave room to grow:
+
+| Subnet | AZ a | AZ b | Route `0.0.0.0/0` → | Holds |
+|---|---|---|---|---|
+| public | `10.20.0.0/24` | `10.20.1.0/24` | internet gateway | ALB, NAT gateways |
+| private | `10.20.10.0/24` | `10.20.11.0/24` | NAT gateway (same AZ) | ECS tasks |
+| isolated | `10.20.20.0/24` | `10.20.21.0/24` | none | RDS |
+
+VPC: `10.20.0.0/16` (65,536 addresses; we use 6 × 256 and keep the rest for later).
+
+## Worked example: security groups as a chain
+
+```
+internet ──443──► sg-alb ──8000──► sg-api ──5432──► sg-db
+```
+
+| Group | Inbound rule | Source |
+|---|---|---|
+| `sg-alb` | TCP 443 | `0.0.0.0/0` |
+| `sg-api` | TCP 8000 | **`sg-alb`** (the group, not an IP range) |
+| `sg-db` | TCP 5432 | **`sg-api`** |
+
+Each tier accepts traffic only from the tier in front of it. Even if someone launched something else in the private subnet, it couldn't reach the database, because it isn't in `sg-api`. Referencing groups instead of CIDRs also keeps working as tasks come and go with new IPs.
+
+> [!plain] In plain English
+> Subnets decide **where** things live and how traffic is routed; security groups decide **who may talk to whom**. Good designs use both.
 
 :::quiz
 q: What makes a subnet "public"?
@@ -274,4 +306,64 @@ rds security group
 security group
 ---explain
 The database's security group probably doesn't allow 5432 from the app's security group.
+:::
+
+:::exercise
+id: proj-aws-04-chain
+level: 3
+title: "Project 4: the security group chain"
+mode: code
+lang: bash
+file: security-groups.sh
+---
+Write three ingress rules: `sg-0alb` allows TCP **443** from `0.0.0.0/0`; `sg-0api` allows TCP **8000** from source group `sg-0alb`; `sg-0db` allows TCP **5432** from source group `sg-0api`.
+---starter
+#!/bin/sh
+set -e
+---rule
+authorize-security-group-ingress\s+(?=[^\n]*--group-id[ =]sg-0alb)(?=[^\n]*--port[ =]443\b)(?=[^\n]*--cidr[ =]0\.0\.0\.0/0)
+ALB: 443 from the internet
+---rule
+authorize-security-group-ingress\s+(?=[^\n]*--group-id[ =]sg-0api)(?=[^\n]*--port[ =]8000\b)(?=[^\n]*--source-group[ =]sg-0alb)
+API: 8000 from the ALB group
+---rule
+authorize-security-group-ingress\s+(?=[^\n]*--group-id[ =]sg-0db)(?=[^\n]*--port[ =]5432\b)(?=[^\n]*--source-group[ =]sg-0api)
+DB: 5432 from the API group
+---rule
+(--protocol[ =]tcp[\s\S]*){3}
+TCP on all three
+---solution
+#!/bin/sh
+set -e
+aws ec2 authorize-security-group-ingress --group-id sg-0alb --protocol tcp --port 443 --cidr 0.0.0.0/0
+aws ec2 authorize-security-group-ingress --group-id sg-0api --protocol tcp --port 8000 --source-group sg-0alb
+aws ec2 authorize-security-group-ingress --group-id sg-0db --protocol tcp --port 5432 --source-group sg-0api
+:::
+
+:::exercise
+id: proj-aws-04-tier
+level: 2
+title: "Project 4b: where do the tasks go?"
+mode: answer
+---
+In Taskboard's layout, which subnet tier (`public`, `private` or `isolated`) should the ECS API tasks run in, given they must call an external email API on the internet but must not be reachable from it?
+---answer
+private
+---solution
+private
+:::
+
+:::exercise
+id: proj-aws-04-count
+level: 2
+title: "Project 4c: how much room is left?"
+mode: answer
+---
+The VPC is `10.20.0.0/16` and Taskboard uses six `/24` subnets. How many **more** `/24` subnets could still be created in it?
+---answer
+250
+---solution
+250
+---explain
+A /16 holds 2⁸ = 256 subnets of size /24; 256 − 6 = 250.
 :::

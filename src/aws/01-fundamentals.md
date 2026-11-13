@@ -4,6 +4,9 @@ title: AWS fundamentals
 summary: Regions, Availability Zones and edge locations, the shared responsibility model, accounts and AWS Organizations, the root user, the CLI with profiles and SSO, credential resolution order, ARNs, tags, and the Well-Architected pillars.
 minutes: 30
 ---
+> [!project] Track project: Taskboard on AWS
+> Taskboard has code (FastAPI track), an image (Docker track) and a pipeline (CI/CD track). In this track it moves into AWS: an IAM role per component, a VPC with private subnets, attachments in S3, PostgreSQL on RDS, the API on ECS Fargate behind a load balancer, notifications through SQS and Lambda, alarms and infrastructure as code. Each lesson's **Project** exercises build one piece.
+
 ## Global infrastructure
 
 | Concept | Is | Why it matters |
@@ -104,6 +107,45 @@ Tags are key/value labels on resources: `Environment=prod`, `Team=payments`, `Co
 ## The Well-Architected Framework
 
 AWS's checklist for good designs has six pillars: **operational excellence**, **security**, **reliability**, **performance efficiency**, **cost optimization** and **sustainability**. Each lesson in this track maps to them: IAM to security, multi-AZ to reliability, right-sizing to cost.
+
+## Worked example: Taskboard's target architecture
+
+```
+                 Route 53: api.taskboard.dev
+                          │
+                     ALB (public subnets, HTTPS via ACM)
+                          │
+            ECS Fargate service "taskboard-api" (private subnets, 2 AZs)
+             │                 │                         │
+     RDS PostgreSQL     S3 bucket                SQS "task-events"
+     (isolated,          taskboard-attachments    │
+      Multi-AZ)          (presigned URLs)         ▼
+                                               Lambda "notify" ──► email / chat
+  Secrets Manager (DB password, SECRET_KEY) · CloudWatch logs + alarms · ECR for images
+```
+
+You'll also use **two AWS accounts**: `taskboard-staging` and `taskboard-prod`. Separate accounts are the strongest isolation AWS offers: a mistake (or an attacker) in staging can't touch production data, and each account's bill shows exactly what that environment costs.
+
+## Worked example: the first five minutes in a new account
+
+1. Enable **MFA** on the root user, then stop using it.
+2. Set up **IAM Identity Center** and sign in as a normal user.
+3. Create a **budget** with email alerts (lesson 9 explains why this is first).
+4. Pick a **region** close to Taskboard's users (say `eu-west-1`) and use it consistently.
+5. Configure the CLI profile and check it works:
+
+```bash
+aws configure sso --profile taskboard-staging
+aws sts get-caller-identity --profile taskboard-staging
+```
+
+> [!plain] In plain English
+> AWS is a catalog of rentable building blocks (servers, databases, storage, networks). An **account** is your private space where those blocks live and get billed; a **region** is where in the world they physically run.
+
+## Common mistakes
+
+> [!mistake] Resources in the wrong region
+> The console defaults to whatever region you last used. Half of "my bucket/instance disappeared" questions are a different region selected in the top-right corner.
 
 :::quiz
 q: What is an Availability Zone?
@@ -291,4 +333,66 @@ availability zone
 zonal
 ---explain
 An EBS volume lives in one AZ and can only attach to instances in that AZ. Snapshots (stored in S3) are regional and can be copied across regions.
+:::
+
+:::exercise
+id: proj-aws-01-profile
+level: 2
+title: "Project 1: profiles for both accounts"
+mode: code
+lang: properties
+file: ~/.aws/config
+---
+Add two SSO profiles using the session `acme`: `taskboard-staging` (account `111111111111`, role `Developer`) and `taskboard-prod` (account `222222222222`, role `ReadOnly`), both in region `eu-west-1`.
+---starter
+[sso-session acme]
+sso_start_url = https://acme.awsapps.com/start
+sso_region = eu-west-1
+---rule
+\[profile taskboard-staging\]\s*\n(.*\n)*?sso_account_id\s*=\s*111111111111
+Staging profile with its account
+---rule
+\[profile taskboard-staging\]\s*\n(.*\n)*?sso_role_name\s*=\s*Developer
+Staging role `Developer`
+---rule
+\[profile taskboard-prod\]\s*\n(.*\n)*?sso_account_id\s*=\s*222222222222
+Prod profile with its account
+---rule
+\[profile taskboard-prod\]\s*\n(.*\n)*?sso_role_name\s*=\s*ReadOnly
+Prod role `ReadOnly`
+---rule
+(sso_session\s*=\s*acme[\s\S]*){2}
+Both use `sso_session = acme`
+---rule
+(region\s*=\s*eu-west-1[\s\S]*){2}
+Both in `eu-west-1`
+---solution
+[sso-session acme]
+sso_start_url = https://acme.awsapps.com/start
+sso_region = eu-west-1
+
+[profile taskboard-staging]
+sso_session = acme
+sso_account_id = 111111111111
+sso_role_name = Developer
+region = eu-west-1
+
+[profile taskboard-prod]
+sso_session = acme
+sso_account_id = 222222222222
+sso_role_name = ReadOnly
+region = eu-west-1
+:::
+
+:::exercise
+id: proj-aws-01-arn
+level: 2
+title: "Project 1b: name Taskboard's bucket"
+mode: answer
+---
+Taskboard stores attachments in the bucket `taskboard-attachments-prod`, under the prefix `tasks/`. Write the ARN that matches every attachment object.
+---answer
+arn:aws:s3:::taskboard-attachments-prod/tasks/*
+---solution
+arn:aws:s3:::taskboard-attachments-prod/tasks/*
 :::

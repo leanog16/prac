@@ -4,6 +4,9 @@ title: Observability, IaC & cost
 summary: CloudWatch metrics, logs, Logs Insights queries and alarms, X-Ray tracing, CloudTrail for auditing, AWS Config and GuardDuty; infrastructure as code with CloudFormation, CDK and Terraform (state, plan, drift); and cost control with budgets, tagging, right-sizing and the usual surprise charges.
 minutes: 45
 ---
+> [!project] Taskboard, step 9: alarms, IaC and the bill
+> Taskboard runs; now it needs to be **operated**. This step adds alarms on the symptoms users feel, defines the infrastructure as code so it can be recreated, and puts a budget on it.
+
 ## CloudWatch: metrics, logs, alarms
 
 **Metrics** are time series. AWS services publish them automatically (EC2 `CPUUtilization`, ALB `HTTPCode_Target_5XX_Count` and `TargetResponseTime`, Lambda `Errors`/`Duration`/`Throttles`, SQS `ApproximateAgeOfOldestMessage`, RDS `FreeStorageSpace`). Publish your own business metrics too (orders placed, payment failures), via the SDK, the CloudWatch agent, or the Embedded Metric Format in log lines.
@@ -159,6 +162,50 @@ The usual surprise charges:
 | **CloudWatch Logs** ingestion and forever retention | retention policies; log less at INFO; sample debug logs |
 | idle **load balancers, Elastic IPs, unattached EBS volumes, old snapshots** | tag, review monthly, automate cleanup |
 | forgotten **dev resources** (a big RDS instance, a GPU box) | IaC + budgets + scheduled shutdown |
+
+## Worked example: Taskboard's alarm list
+
+Start from what users experience, then add the early warnings:
+
+| Alarm | Metric | Threshold | Why |
+|---|---|---|---|
+| API errors | ALB `HTTPCode_Target_5XX_Count` | > 10/min for 3 of 5 min | users are seeing failures |
+| API slow | ALB `TargetResponseTime` p99 | > 1.5 s for 5 min | users are waiting |
+| no healthy tasks | target group `HealthyHostCount` | < 1 for 1 min | Taskboard is down |
+| notifications stuck | SQS `ApproximateAgeOfOldestMessage` | > 600 s | the notifier is broken or overwhelmed |
+| poison messages | DLQ `ApproximateNumberOfMessagesVisible` | > 0 | some events will never be processed |
+| database filling up | RDS `FreeStorageSpace` | < 10 GB | before it becomes an outage |
+
+Every alarm notifies the `taskboard-oncall` SNS topic, and each one has a short **runbook** entry: what it means, the first three commands to run, and how to mitigate.
+
+## Worked example: Taskboard as infrastructure code
+
+Everything from lessons 2–8 (roles, VPC, bucket, database, ECS, queue, Lambda, alarms) is defined in code, reviewed in pull requests and applied by the pipeline. A Terraform fragment:
+
+```hcl
+resource "aws_s3_bucket" "attachments" {
+  bucket = "taskboard-attachments-${var.env}"
+  tags   = local.tags
+}
+
+resource "aws_sqs_queue" "task_events_dlq" {
+  name = "task-events-dlq-${var.env}"
+}
+
+resource "aws_sqs_queue" "task_events" {
+  name                       = "task-events-${var.env}"
+  visibility_timeout_seconds = 180
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.task_events_dlq.arn
+    maxReceiveCount     = 5
+  })
+}
+```
+
+With `var.env` set to `staging` or `prod`, the **same code** builds both environments, so staging really is a copy of production.
+
+> [!plain] In plain English
+> Infrastructure as code means your servers, networks and databases are described in files like application code. You can review changes, see history, and rebuild everything from scratch.
 
 :::quiz
 q: What's the default retention of a new CloudWatch log group?
@@ -390,4 +437,118 @@ AWS Budgets
 budgets
 ---solution
 AWS Budgets
+:::
+
+:::exercise
+id: proj-aws-09-alarm
+level: 3
+title: "Project 9: the 5xx alarm"
+mode: code
+lang: bash
+file: alarms.sh
+---
+Create `taskboard-api-5xx`: namespace `AWS/ApplicationELB`, metric `HTTPCode_Target_5XX_Count`, dimension `LoadBalancer=app/taskboard-alb/abc123`, statistic `Sum`, period `60`, **5** evaluation periods with **3** datapoints to alarm, threshold `10`, `GreaterThanThreshold`, missing data `notBreaching`, notifying `arn:aws:sns:eu-west-1:222222222222:taskboard-oncall`.
+---starter
+#!/bin/sh
+---rule
+aws\s+cloudwatch\s+put-metric-alarm
+`put-metric-alarm`
+---rule
+--alarm-name[ =]taskboard-api-5xx
+Name
+---rule
+--namespace[ =]AWS/ApplicationELB
+Namespace
+---rule
+--metric-name[ =]HTTPCode_Target_5XX_Count
+Metric
+---rule
+--dimensions[ =]Name=LoadBalancer,Value=app/taskboard-alb/abc123
+Dimension
+---rule
+--statistic[ =]Sum
+`Sum`
+---rule
+--period[ =]60\b
+Period 60
+---rule
+--evaluation-periods[ =]5\b
+5 evaluation periods
+---rule
+--datapoints-to-alarm[ =]3\b
+3 datapoints to alarm
+---rule
+--threshold[ =]10\b
+Threshold 10
+---rule
+--comparison-operator[ =]GreaterThanThreshold
+`GreaterThanThreshold`
+---rule
+--treat-missing-data[ =]notBreaching
+Missing data not breaching
+---rule
+--alarm-actions[ =]arn:aws:sns:eu-west-1:222222222222:taskboard-oncall
+Notify on-call
+---solution
+#!/bin/sh
+aws cloudwatch put-metric-alarm --alarm-name taskboard-api-5xx \
+  --namespace AWS/ApplicationELB --metric-name HTTPCode_Target_5XX_Count \
+  --dimensions Name=LoadBalancer,Value=app/taskboard-alb/abc123 \
+  --statistic Sum --period 60 --evaluation-periods 5 --datapoints-to-alarm 3 \
+  --threshold 10 --comparison-operator GreaterThanThreshold \
+  --treat-missing-data notBreaching \
+  --alarm-actions arn:aws:sns:eu-west-1:222222222222:taskboard-oncall
+:::
+
+:::exercise
+id: proj-aws-09-cfn-queue
+level: 3
+title: "Project 9b: queues as code"
+mode: code
+lang: yaml
+file: queues.yaml
+---
+Write a CloudFormation template with two resources: `TaskEventsDLQ` (`AWS::SQS::Queue`) and `TaskEvents` (`AWS::SQS::Queue`) with `VisibilityTimeout: 180` and a `RedrivePolicy` whose `deadLetterTargetArn` is `!GetAtt TaskEventsDLQ.Arn` and `maxReceiveCount` is `5`.
+---starter
+AWSTemplateFormatVersion: "2010-09-09"
+---rule
+TaskEventsDLQ:\s*\n\s+Type:\s*["']?AWS::SQS::Queue["']?
+The DLQ
+---rule
+TaskEvents:\s*\n\s+Type:\s*["']?AWS::SQS::Queue["']?
+The main queue
+---rule
+VisibilityTimeout:\s*180
+Visibility timeout 180
+---rule
+RedrivePolicy:\s*\n\s+deadLetterTargetArn:\s*!GetAtt\s+TaskEventsDLQ\.Arn
+Redrive to the DLQ
+---rule
+maxReceiveCount:\s*5
+`maxReceiveCount: 5`
+---solution
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  TaskEventsDLQ:
+    Type: AWS::SQS::Queue
+  TaskEvents:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 180
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt TaskEventsDLQ.Arn
+        maxReceiveCount: 5
+:::
+
+:::exercise
+id: proj-aws-09-budget
+level: 2
+title: "Project 9c: the visibility timeout"
+mode: answer
+---
+The notify Lambda has a timeout of **30** seconds. Using the 6× guideline, what `visibility_timeout_seconds` should the `task-events` queue have? (This is why the Terraform above says 180.)
+---answer
+180
+---solution
+180
 :::

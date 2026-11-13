@@ -4,6 +4,9 @@ title: Containers on AWS: ECR & ECS
 summary: Pushing images to ECR with lifecycle policies and scanning, ECS concepts (clusters, task definitions, services), Fargate vs EC2 capacity, writing a task definition with secrets and logs, services behind an ALB with health checks, rolling deployments and the circuit breaker, autoscaling, ECS Exec, and when to choose App Runner or EKS.
 minutes: 45
 ---
+> [!project] Taskboard, step 7: the API on Fargate
+> This is the step that replaces the single EC2 box: Taskboard's image in ECR, a task definition with its secrets and logs, and an ECS service across two AZs behind the ALB, deployed by the pipeline from the CI/CD track.
+
 ## Choosing where containers run
 
 | Service | You manage | Good for |
@@ -148,6 +151,36 @@ Track CPU, memory, or **ALB requests per target**. Keep at least 2 tasks across 
 - **Stopped tasks** show a reason: `CannotPullContainerError` (ECR permissions, no route to ECR), `ResourceInitializationError` (secrets the execution role can't read), `Essential container exited` (your app crashed: read the logs), health check failures.
 - **Logs**: `aws logs tail /ecs/shop-api --follow`.
 - **ECS Exec** opens a shell in a running container (via SSM, no SSH): `aws ecs execute-command --cluster shop --task <id> --container api --interactive --command "/bin/sh"` (enable it on the service and give the task role SSM permissions).
+
+## Worked example: mapping Compose to ECS
+
+You've already described Taskboard in `compose.yaml`. ECS asks for the same information in different places:
+
+| compose.yaml | ECS |
+|---|---|
+| `image:` | `containerDefinitions[].image` (from ECR) |
+| `ports: ["8000:8000"]` | `portMappings` + target group on the ALB |
+| `environment:` | `environment` (non-secret) |
+| secrets / `.env` | `secrets` with `valueFrom` Secrets Manager ARNs |
+| `deploy.resources.limits` | task `cpu` / `memory` |
+| `healthcheck:` | container `healthCheck` + target group health check |
+| `restart: unless-stopped` | the **service** keeps `desiredCount` tasks running |
+| `db` service | RDS (not a container in production) |
+| `docker compose up` | `aws ecs update-service` from the pipeline |
+
+The concepts transfer directly; production adds what Compose can't do on one host: spreading across AZs, load balancing, rolling deployments with automatic rollback, and autoscaling.
+
+## The deploy path, end to end
+
+1. CI builds `taskboard:sha-3f2c1ab` and pushes it to ECR.
+2. The pipeline renders the task definition with that image and registers revision 42.
+3. `update-service --task-definition taskboard-api:42` starts a rolling deployment.
+4. New tasks start in the private subnets, pull the image (via VPC endpoints or NAT), read secrets, pass the container and ALB health checks.
+5. The ALB shifts traffic to them; old tasks drain and stop.
+6. If new tasks keep failing, the **circuit breaker** rolls back to revision 41.
+
+> [!plain] In plain English
+> A task definition describes **one copy** of Taskboard; a service keeps **N copies** running, replaces broken ones, and swaps in new versions safely.
 
 :::quiz
 q: Which network mode does Fargate require?
@@ -419,4 +452,144 @@ App Runner
 AWS App Runner
 ---solution
 App Runner
+:::
+
+:::exercise
+id: proj-aws-07-taskdef
+level: 4
+title: "Project 7: Taskboard's task definition"
+mode: code
+lang: json
+file: taskboard-task.json
+---
+Complete the task definition: Fargate (`requiresCompatibilities` `["FARGATE"]`, `networkMode` `awsvpc`), task `cpu` `"512"` and `memory` `"1024"`, `runtimePlatform` with `cpuArchitecture` `ARM64`; container `api` with port **8000**, environment `LOG_LEVEL=info`, secrets `DATABASE_PASSWORD` from `arn:aws:secretsmanager:eu-west-1:222222222222:secret:taskboard/prod/db` and `SECRET_KEY` from `arn:aws:secretsmanager:eu-west-1:222222222222:secret:taskboard/prod/app`, and `awslogs` logging to `/ecs/taskboard-api`.
+---starter
+{
+  "family": "taskboard-api",
+  "executionRoleArn": "arn:aws:iam::222222222222:role/taskboard-api-execution",
+  "taskRoleArn": "arn:aws:iam::222222222222:role/taskboard-api-task",
+  "containerDefinitions": [
+    {
+      "name": "api",
+      "image": "222222222222.dkr.ecr.eu-west-1.amazonaws.com/taskboard:sha-3f2c1ab",
+      "essential": true
+    }
+  ]
+}
+---rule
+"requiresCompatibilities"\s*:\s*\[\s*"FARGATE"\s*\]
+Fargate
+---rule
+"networkMode"\s*:\s*"awsvpc"
+`awsvpc`
+---rule
+"cpu"\s*:\s*"512"
+CPU 512
+---rule
+"memory"\s*:\s*"1024"
+Memory 1024
+---rule
+"cpuArchitecture"\s*:\s*"ARM64"
+Graviton
+---rule
+"containerPort"\s*:\s*8000
+Port 8000
+---rule
+\{\s*"name"\s*:\s*"LOG_LEVEL"\s*,\s*"value"\s*:\s*"info"\s*\}
+`LOG_LEVEL=info`
+---rule
+\{\s*"name"\s*:\s*"DATABASE_PASSWORD"\s*,\s*"valueFrom"\s*:\s*"arn:aws:secretsmanager:eu-west-1:222222222222:secret:taskboard/prod/db"\s*\}
+`DATABASE_PASSWORD` secret
+---rule
+\{\s*"name"\s*:\s*"SECRET_KEY"\s*,\s*"valueFrom"\s*:\s*"arn:aws:secretsmanager:eu-west-1:222222222222:secret:taskboard/prod/app"\s*\}
+`SECRET_KEY` secret
+---rule
+"logDriver"\s*:\s*"awslogs"[\s\S]*"awslogs-group"\s*:\s*"/ecs/taskboard-api"
+CloudWatch logs
+---solution
+{
+  "family": "taskboard-api",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "512",
+  "memory": "1024",
+  "runtimePlatform": { "cpuArchitecture": "ARM64", "operatingSystemFamily": "LINUX" },
+  "executionRoleArn": "arn:aws:iam::222222222222:role/taskboard-api-execution",
+  "taskRoleArn": "arn:aws:iam::222222222222:role/taskboard-api-task",
+  "containerDefinitions": [
+    {
+      "name": "api",
+      "image": "222222222222.dkr.ecr.eu-west-1.amazonaws.com/taskboard:sha-3f2c1ab",
+      "essential": true,
+      "portMappings": [{ "containerPort": 8000, "protocol": "tcp" }],
+      "environment": [{ "name": "LOG_LEVEL", "value": "info" }],
+      "secrets": [
+        { "name": "DATABASE_PASSWORD", "valueFrom": "arn:aws:secretsmanager:eu-west-1:222222222222:secret:taskboard/prod/db" },
+        { "name": "SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-1:222222222222:secret:taskboard/prod/app" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/taskboard-api",
+          "awslogs-region": "eu-west-1",
+          "awslogs-stream-prefix": "api"
+        }
+      }
+    }
+  ]
+}
+:::
+
+:::exercise
+id: proj-aws-07-service
+level: 4
+title: "Project 7b: the service"
+mode: code
+lang: bash
+file: create-service.sh
+---
+Create the service `taskboard-api` in cluster `taskboard` from `taskboard-api:1` with **2** tasks on `FARGATE`, in subnets `subnet-0priv-a` and `subnet-0priv-b` with security group `sg-0api` and **no public IP**, attached to target group `arn:aws:elasticloadbalancing:eu-west-1:222222222222:targetgroup/taskboard/abc123` (container `api`, port 8000), with the deployment circuit breaker **enabled with rollback**.
+---starter
+#!/bin/sh
+---rule
+aws\s+ecs\s+create-service
+`aws ecs create-service`
+---rule
+--cluster[ =]taskboard\b
+Cluster
+---rule
+--service-name[ =]taskboard-api
+Service name
+---rule
+--task-definition[ =]taskboard-api:1
+Task definition
+---rule
+--desired-count[ =]2
+Two tasks
+---rule
+capacityProvider=FARGATE|--launch-type[ =]FARGATE
+Fargate
+---rule
+subnets=\[subnet-0priv-a,subnet-0priv-b\]
+Private subnets
+---rule
+securityGroups=\[sg-0api\]
+Security group
+---rule
+assignPublicIp=DISABLED
+No public IP
+---rule
+targetGroupArn=arn:aws:elasticloadbalancing:eu-west-1:222222222222:targetgroup/taskboard/abc123,containerName=api,containerPort=8000
+Load balancer attachment
+---rule
+deploymentCircuitBreaker=\{enable=true,rollback=true\}
+Circuit breaker with rollback
+---solution
+#!/bin/sh
+aws ecs create-service --cluster taskboard --service-name taskboard-api \
+  --task-definition taskboard-api:1 --desired-count 2 \
+  --capacity-provider-strategy capacityProvider=FARGATE,weight=1 \
+  --network-configuration "awsvpcConfiguration={subnets=[subnet-0priv-a,subnet-0priv-b],securityGroups=[sg-0api],assignPublicIp=DISABLED}" \
+  --load-balancers "targetGroupArn=arn:aws:elasticloadbalancing:eu-west-1:222222222222:targetgroup/taskboard/abc123,containerName=api,containerPort=8000" \
+  --deployment-configuration "deploymentCircuitBreaker={enable=true,rollback=true}"
 :::

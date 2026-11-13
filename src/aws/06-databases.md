@@ -4,6 +4,9 @@ title: RDS, Aurora & DynamoDB
 summary: Managed relational databases with RDS and Aurora, Multi-AZ vs read replicas, backups and point-in-time restore, credentials in Secrets Manager, connection pooling with RDS Proxy; DynamoDB tables, partition and sort keys, access-pattern-first design, queries vs scans, GSIs, capacity modes, conditional writes and TTL; and ElastiCache.
 minutes: 45
 ---
+> [!project] Taskboard, step 6: a managed PostgreSQL
+> Taskboard's data moves to Amazon RDS for PostgreSQL: Multi-AZ, encrypted, in the isolated subnets, with its password in Secrets Manager. You'll also see when DynamoDB would be the better fit, using Taskboard's activity feed.
+
 ## RDS: managed relational databases
 
 **Amazon RDS** runs PostgreSQL, MySQL, MariaDB, Oracle or SQL Server for you: provisioning, patching, backups, failover and monitoring. You still own the schema, queries, indexes and sizing.
@@ -137,6 +140,45 @@ table.update_item(
 | known access patterns, huge scale, simple key lookups, serverless | DynamoDB |
 | sub-millisecond cache, sessions, rate-limit counters, leaderboards | **ElastiCache** (Redis/Valkey) |
 | full-text search | OpenSearch |
+
+## Worked example: Taskboard's RDS settings, justified
+
+| Setting | Taskboard prod | Why |
+|---|---|---|
+| engine | PostgreSQL 16 | same as local Docker and CI, no surprises |
+| instance | `db.t4g.medium` | Graviton, burstable; resize later from metrics |
+| Multi-AZ | yes | survives an AZ outage with automatic failover |
+| storage | gp3, 50 GB, autoscaling to 200 GB | grows without an outage |
+| encryption | on (KMS) | can't be enabled later |
+| subnets | the two **isolated** subnets | no route to the internet at all |
+| security group | `sg-db`, 5432 from `sg-api` only | from lesson 4 |
+| credentials | `--manage-master-user-password` | RDS stores and rotates the password in Secrets Manager |
+| backups | 14 days, point-in-time restore | recover from bad deploys and mistakes |
+| deletion protection | on | `delete-db-instance` refuses until disabled |
+
+```bash
+aws rds create-db-instance --db-instance-identifier taskboard-prod \
+  --engine postgres --engine-version 16.4 --db-instance-class db.t4g.medium \
+  --allocated-storage 50 --max-allocated-storage 200 --storage-type gp3 \
+  --multi-az --storage-encrypted \
+  --db-subnet-group-name taskboard-isolated --vpc-security-group-ids sg-0db \
+  --master-username taskboard --manage-master-user-password \
+  --backup-retention-period 14 --deletion-protection --no-publicly-accessible
+```
+
+## Worked example: when DynamoDB fits better
+
+Taskboard's **activity feed** ("Ada moved *Write docs* to done, 2 minutes ago") is append-only, read newest-first per board, high-volume, and never joined with anything. That's DynamoDB's sweet spot:
+
+| Access pattern | Key design |
+|---|---|
+| a board's latest events | partition key `board_id`, sort key `ts` (ISO timestamp), `Query` with `ScanIndexForward=False` |
+| expire events after 90 days | TTL attribute `expires_at` |
+
+Tasks themselves stay in PostgreSQL: they're relational (users, comments, attachments) and queried in flexible ways. Using two databases for two different shapes of data is normal; using a database because it's fashionable isn't.
+
+> [!plain] In plain English
+> RDS is PostgreSQL that AWS operates for you: backups, patches, failover. DynamoDB is a different kind of database: blazing fast for questions you planned for, awkward for ones you didn't.
 
 :::quiz
 q: What does RDS Multi-AZ primarily give you?
@@ -426,4 +468,125 @@ a GSI
 GSI
 ---explain
 A global secondary index with partition key `status` and sort key `order_date`. (A sparse index, holding only disputed orders, avoids a hot `status` partition.)
+:::
+
+:::exercise
+id: proj-aws-06-rds
+level: 4
+title: "Project 6: create Taskboard's database"
+mode: code
+lang: bash
+file: create-db.sh
+---
+Write the `aws rds create-db-instance` command for `taskboard-prod`: engine `postgres`, class `db.t4g.medium`, 50 GB gp3 storage, **Multi-AZ**, **encrypted**, subnet group `taskboard-isolated`, security group `sg-0db`, master user `taskboard` with the password **managed by RDS**, 14 days of backups, deletion protection, and **not** publicly accessible.
+---starter
+#!/bin/sh
+---rule
+aws\s+rds\s+create-db-instance
+`aws rds create-db-instance`
+---rule
+--db-instance-identifier[ =]taskboard-prod
+Identifier
+---rule
+--engine[ =]postgres\b
+PostgreSQL
+---rule
+--db-instance-class[ =]db\.t4g\.medium
+Instance class
+---rule
+--allocated-storage[ =]50\b
+50 GB
+---rule
+--storage-type[ =]gp3
+gp3
+---rule
+--multi-az\b
+Multi-AZ
+---rule
+--storage-encrypted
+Encrypted
+---rule
+--db-subnet-group-name[ =]taskboard-isolated
+Isolated subnets
+---rule
+--vpc-security-group-ids[ =]sg-0db
+Security group
+---rule
+--master-username[ =]taskboard
+Master user
+---rule
+--manage-master-user-password
+RDS-managed password
+---rule
+--backup-retention-period[ =]14
+14 days of backups
+---rule
+--deletion-protection
+Deletion protection
+---rule
+--no-publicly-accessible
+Not public
+---rule
+!--master-user-password
+No password on the command line
+---solution
+#!/bin/sh
+aws rds create-db-instance --db-instance-identifier taskboard-prod \
+  --engine postgres --db-instance-class db.t4g.medium \
+  --allocated-storage 50 --storage-type gp3 \
+  --multi-az --storage-encrypted \
+  --db-subnet-group-name taskboard-isolated --vpc-security-group-ids sg-0db \
+  --master-username taskboard --manage-master-user-password \
+  --backup-retention-period 14 --deletion-protection --no-publicly-accessible
+:::
+
+:::exercise
+id: proj-aws-06-feed
+level: 3
+title: "Project 6b: the activity feed query"
+mode: code
+lang: python
+file: feed.py
+---
+Write `latest_events(board_id: str, limit: int = 20)` that queries the DynamoDB table `TaskEvents` for `board_id` (partition key), **newest first**, at most `limit` items, returning `resp["Items"]`.
+---starter
+import boto3
+from boto3.dynamodb.conditions import Key
+
+table = boto3.resource("dynamodb").Table("TaskEvents")
+---rule
+def\s+latest_events\(\s*board_id\s*:\s*str\s*,\s*limit\s*:\s*int\s*=\s*20\s*\)
+The signature
+---rule
+table\.query\(
+A query, not a scan
+---rule
+KeyConditionExpression\s*=\s*Key\(\s*["']board_id["']\s*\)\.eq\(\s*board_id\s*\)
+Key condition on `board_id`
+---rule
+ScanIndexForward\s*=\s*False
+Newest first
+---rule
+Limit\s*=\s*limit
+Limit
+---rule
+return\s+\w+\[\s*["']Items["']\s*\]
+Return the items
+---rule
+!\.scan\(
+No scan
+---solution
+import boto3
+from boto3.dynamodb.conditions import Key
+
+table = boto3.resource("dynamodb").Table("TaskEvents")
+
+
+def latest_events(board_id: str, limit: int = 20):
+    resp = table.query(
+        KeyConditionExpression=Key("board_id").eq(board_id),
+        ScanIndexForward=False,
+        Limit=limit,
+    )
+    return resp["Items"]
 :::

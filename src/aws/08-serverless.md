@@ -4,6 +4,9 @@ title: Lambda & event-driven services
 summary: Lambda handlers, events and context, configuration (memory, timeout, environment), cold starts and concurrency, API Gateway HTTP APIs, SQS queues with visibility timeouts, dead-letter queues, batch failures and idempotency, SNS fan-out, EventBridge rules and schedules, and Step Functions.
 minutes: 45
 ---
+> [!project] Taskboard, step 8: notifications without slowing the API
+> When a task is assigned or completed, Taskboard should notify people by email and chat. Doing that inside the HTTP request would make the API slow and fragile, so the API drops an event on an **SQS queue**, and a **Lambda** function sends the notifications.
+
 ## Lambda in one minute
 
 **AWS Lambda** runs your function in response to events, with no servers to manage. You pay per request and per millisecond of execution × memory, and nothing when idle.
@@ -119,6 +122,43 @@ It also receives events from AWS services (an EC2 instance stopped, an ECS task 
 ## Step Functions: workflows
 
 When a process has several steps, retries, branches, waits or human approvals (place order → charge card → reserve stock → ship, with compensation if a step fails), **Step Functions** orchestrates it as a state machine, with built-in retries, error handling and a visual execution history. It beats chaining Lambdas through queues by hand.
+
+## Worked example: why a queue between the API and the notifier?
+
+Without a queue, `PATCH /tasks/42` calls the email provider directly:
+
+- If the email API takes 2 seconds, every task update takes 2 seconds.
+- If the email API is down, task updates **fail**, even though the task change itself was fine.
+- A burst of 1,000 updates means 1,000 simultaneous calls to the email API, which rate-limits you.
+
+With a queue:
+
+```
+PATCH /tasks/42 ──► save to RDS ──► SendMessage(task-events) ──► 200 OK   (fast, always)
+                                           │
+                                  SQS buffers the events
+                                           │
+                              Lambda "notify" (batches of 10)
+                                  │                 │
+                               email API         chat webhook
+                                  └─ failures retry; poison messages → DLQ + alarm
+```
+
+The API's job ends when the event is safely queued. The notifier can be slow, retry, or be down for an hour, and nothing is lost: messages wait in the queue.
+
+## The event format
+
+Agree on a small, versioned message, not a dump of the database row:
+
+```json
+{"type": "task.completed", "version": 1, "task_id": 42, "board_id": "b-7",
+ "actor": "ada", "occurred_at": "2026-11-13T10:42:00Z", "event_id": "e-9f3c…"}
+```
+
+`event_id` lets the consumer be **idempotent**: if SQS delivers the message twice, the second delivery sees the id was already processed and skips sending a duplicate email.
+
+> [!plain] In plain English
+> A queue is a to-do list between two programs. The first adds items quickly and moves on; the second works through them at its own pace, and nothing is lost if it falls behind.
 
 :::quiz
 q: Where should you create a boto3 client in a Lambda function?
@@ -416,4 +456,126 @@ asynchronous
 asynchronously
 ---explain
 S3 invokes Lambda asynchronously, so Lambda handles retries (twice) and on-failure destinations.
+:::
+
+:::exercise
+id: proj-aws-08-publish
+level: 3
+title: "Project 8: publish a task event"
+mode: code
+lang: python
+file: events.py
+---
+Write `publish_completed(task_id: int, board_id: str, actor: str)`: build the event dict with `"type": "task.completed"`, `"version": 1`, `task_id`, `board_id`, `actor`, `"event_id": uuid4().hex` and `"occurred_at": datetime.now(timezone.utc).isoformat()`, and send it to `QUEUE_URL` with `sqs.send_message(QueueUrl=QUEUE_URL, MessageBody=json.dumps(event))`.
+---starter
+import json
+from datetime import datetime, timezone
+from uuid import uuid4
+
+import boto3
+
+sqs = boto3.client("sqs")
+QUEUE_URL = "https://sqs.eu-west-1.amazonaws.com/222222222222/task-events"
+---rule
+def\s+publish_completed\(\s*task_id\s*:\s*int\s*,\s*board_id\s*:\s*str\s*,\s*actor\s*:\s*str\s*\)
+The signature
+---rule
+["']type["']\s*:\s*["']task\.completed["']
+Event type
+---rule
+["']version["']\s*:\s*1
+Version 1
+---rule
+["']event_id["']\s*:\s*uuid4\(\s*\)\.hex
+A unique event id
+---rule
+["']occurred_at["']\s*:\s*datetime\.now\(\s*timezone\.utc\s*\)\.isoformat\(\s*\)
+A UTC timestamp
+---rule
+["']task_id["']\s*:\s*task_id[\s\S]*["']board_id["']\s*:\s*board_id|["']board_id["']\s*:\s*board_id[\s\S]*["']task_id["']\s*:\s*task_id
+Task and board ids
+---rule
+sqs\.send_message\(\s*QueueUrl\s*=\s*QUEUE_URL\s*,\s*MessageBody\s*=\s*json\.dumps\(\s*\w+\s*\)\s*\)
+Send it as JSON
+---solution
+import json
+from datetime import datetime, timezone
+from uuid import uuid4
+
+import boto3
+
+sqs = boto3.client("sqs")
+QUEUE_URL = "https://sqs.eu-west-1.amazonaws.com/222222222222/task-events"
+
+
+def publish_completed(task_id: int, board_id: str, actor: str):
+    event = {
+        "type": "task.completed",
+        "version": 1,
+        "task_id": task_id,
+        "board_id": board_id,
+        "actor": actor,
+        "event_id": uuid4().hex,
+        "occurred_at": datetime.now(timezone.utc).isoformat(),
+    }
+    sqs.send_message(QueueUrl=QUEUE_URL, MessageBody=json.dumps(event))
+:::
+
+:::exercise
+id: proj-aws-08-notify
+level: 4
+title: "Project 8b: the notify Lambda"
+mode: code
+lang: python
+file: notify.py
+---
+Write the Lambda `handler(event, context)`: for each record, parse the body; skip it if `already_sent(msg["event_id"])` is true; otherwise call `send_notification(msg)` and then `mark_sent(msg["event_id"])`. Wrap each record in `try`/`except Exception` and return `{"batchItemFailures": failures}` with the failed `messageId`s.
+---starter
+import json
+
+from store import already_sent, mark_sent
+from sender import send_notification
+---rule
+def\s+handler\(\s*event\s*,\s*context\s*\)
+`def handler(event, context)`
+---rule
+for\s+(\w+)\s+in\s+event\[\s*["']Records["']\s*\]
+Loop over records
+---rule
+json\.loads\(\s*\w+\[\s*["']body["']\s*\]\s*\)
+Parse the body
+---rule
+if\s+already_sent\(\s*\w+\[\s*["']event_id["']\s*\]\s*\)\s*:\s*\n\s+continue
+Skip duplicates
+---rule
+send_notification\(\s*\w+\s*\)\s*\n\s+mark_sent\(\s*\w+\[\s*["']event_id["']\s*\]\s*\)
+Send, then mark as sent
+---rule
+except\s+Exception
+Catch failures per record
+---rule
+failures\.append\(\s*\{\s*["']itemIdentifier["']\s*:\s*\w+\[\s*["']messageId["']\s*\]\s*\}\s*\)
+Report failed messages
+---rule
+return\s*\{\s*["']batchItemFailures["']\s*:\s*failures\s*\}
+Return `batchItemFailures`
+---solution
+import json
+
+from store import already_sent, mark_sent
+from sender import send_notification
+
+
+def handler(event, context):
+    failures = []
+    for record in event["Records"]:
+        try:
+            msg = json.loads(record["body"])
+            if already_sent(msg["event_id"]):
+                continue
+            send_notification(msg)
+            mark_sent(msg["event_id"])
+        except Exception:
+            failures.append({"itemIdentifier": record["messageId"]})
+    return {"batchItemFailures": failures}
 :::

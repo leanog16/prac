@@ -4,6 +4,9 @@ title: IAM & policies
 summary: Users, groups, roles and IAM Identity Center; identity-based and resource-based policies; the JSON policy grammar (Effect, Action, Resource, Condition); evaluation logic with explicit deny; least privilege; trust policies and AssumeRole; instance profiles; permission boundaries; and debugging AccessDenied.
 minutes: 45
 ---
+> [!project] Taskboard, step 2: one role per component
+> Every piece of Taskboard gets its own identity with exactly the permissions it needs: the API's task role, ECS's execution role, the notify Lambda's role, and the CI deploy role.
+
 ## Identities
 
 | Identity | Is | Credentials | Use for |
@@ -128,6 +131,30 @@ The CLI does this automatically for profiles with `role_arn` and `source_profile
 3. Check both sides: identity policy **and** resource policy (bucket policy, KMS key policy). For KMS-encrypted data you need `kms:Decrypt` on the key too.
 4. Use the **IAM Policy Simulator** or `aws iam simulate-principal-policy`.
 5. Look up the request in **CloudTrail** for the exact action, resource and error code.
+
+## Worked example: deriving the API's policy from its code
+
+Read through Taskboard's code and list every AWS call it makes:
+
+| Code path | AWS call | Action | Resource |
+|---|---|---|---|
+| upload attachment | `put_object` / presigned PUT | `s3:PutObject` | `taskboard-attachments-prod/tasks/*` |
+| download attachment | presigned GET | `s3:GetObject` | same |
+| delete task → delete files | `delete_object` | `s3:DeleteObject` | same |
+| task moved → event | `send_message` | `sqs:SendMessage` | `task-events` queue |
+| startup → secrets | `get_secret_value` | `secretsmanager:GetSecretValue` | `taskboard/prod/*` |
+
+That table **is** the policy. Anything not in it (listing all buckets, reading other queues, deleting the bucket) isn't granted. If someone finds a remote-code-execution bug in Taskboard, the damage is limited to these five actions.
+
+Keep the table in the repository next to the IaC. When a code change adds an AWS call, the review shows both the code and the permission change.
+
+> [!plain] In plain English
+> Least privilege means writing down what a component actually does, and granting exactly that. When in doubt, deny; a missing permission shows up as a clear `AccessDenied` you can fix in minutes.
+
+## Common mistakes
+
+> [!mistake] Sharing one role across components
+> If the Lambda and the API share a role, the Lambda can read attachments and the API can do whatever the Lambda can. Separate roles keep each blast radius small, and CloudTrail shows exactly who did what.
 
 :::quiz
 q: A user has a policy allowing `s3:*` on a bucket and another policy denying `s3:DeleteObject` on it. Can they delete objects?
@@ -465,4 +492,101 @@ task execution role
 execution role
 ---solution
 task execution role
+:::
+
+:::exercise
+id: proj-aws-02-api-policy
+level: 4
+title: "Project 2: the API task role policy"
+mode: code
+lang: json
+file: taskboard-api-policy.json
+---
+Write the API task role's policy from the table: `s3:PutObject`, `s3:GetObject` and `s3:DeleteObject` on `arn:aws:s3:::taskboard-attachments-prod/tasks/*`; `sqs:SendMessage` on `arn:aws:sqs:eu-west-1:222222222222:task-events`; `secretsmanager:GetSecretValue` on `arn:aws:secretsmanager:eu-west-1:222222222222:secret:taskboard/prod/*`. No wildcard actions.
+---starter
+{
+  "Version": "2012-10-17",
+  "Statement": []
+}
+---rule
+"s3:PutObject"
+`s3:PutObject`
+---rule
+"s3:GetObject"
+`s3:GetObject`
+---rule
+"s3:DeleteObject"
+`s3:DeleteObject`
+---rule
+"arn:aws:s3:::taskboard-attachments-prod/tasks/\*"
+Only the `tasks/` prefix
+---rule
+"sqs:SendMessage"[\s\S]*?"arn:aws:sqs:eu-west-1:222222222222:task-events"|"arn:aws:sqs:eu-west-1:222222222222:task-events"[\s\S]*?"sqs:SendMessage"
+Send to `task-events`
+---rule
+"secretsmanager:GetSecretValue"[\s\S]*?"arn:aws:secretsmanager:eu-west-1:222222222222:secret:taskboard/prod/\*"|"arn:aws:secretsmanager:eu-west-1:222222222222:secret:taskboard/prod/\*"[\s\S]*?"secretsmanager:GetSecretValue"
+Read Taskboard's secrets
+---rule
+!"[a-z0-9]+:\*"|"Action"\s*:\s*"\*"|"Resource"\s*:\s*"\*"
+No wildcard actions or resources
+---solution
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Attachments",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::taskboard-attachments-prod/tasks/*"
+    },
+    {
+      "Sid": "TaskEvents",
+      "Effect": "Allow",
+      "Action": "sqs:SendMessage",
+      "Resource": "arn:aws:sqs:eu-west-1:222222222222:task-events"
+    },
+    {
+      "Sid": "Secrets",
+      "Effect": "Allow",
+      "Action": "secretsmanager:GetSecretValue",
+      "Resource": "arn:aws:secretsmanager:eu-west-1:222222222222:secret:taskboard/prod/*"
+    }
+  ]
+}
+:::
+
+:::exercise
+id: proj-aws-02-trust
+level: 3
+title: "Project 2b: trust ECS tasks"
+mode: code
+lang: json
+file: taskboard-api-trust.json
+---
+Write the trust policy for the API task role so that **ECS tasks** (`ecs-tasks.amazonaws.com`) can assume it.
+---starter
+{
+  "Version": "2012-10-17",
+  "Statement": []
+}
+---rule
+"Effect"\s*:\s*"Allow"
+`Allow`
+---rule
+"Principal"\s*:\s*\{\s*"Service"\s*:\s*"ecs-tasks\.amazonaws\.com"\s*\}
+ECS tasks principal
+---rule
+"Action"\s*:\s*"sts:AssumeRole"
+`sts:AssumeRole`
+---solution
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "Service": "ecs-tasks.amazonaws.com" },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
 :::
