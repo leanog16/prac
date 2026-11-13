@@ -4,6 +4,9 @@ title: Deployment strategies
 summary: Recreate, rolling, blue/green and canary deployments; feature flags; zero-downtime database migrations with expand and contract; a staging-then-production pipeline with approvals; deploying to a VM over SSH, to Amazon ECS and to Kubernetes; smoke tests, automatic rollback and GitOps.
 minutes: 40
 ---
+> [!project] Taskboard, step 6: staging, then production
+> The image exists; now ship it. Taskboard deploys automatically to staging, runs a smoke test, waits for an approval, then deploys the **same** image to production on Amazon ECS with automatic rollback.
+
 ## How the new version replaces the old
 
 | Strategy | How | Downtime | Rollback | Cost |
@@ -145,6 +148,39 @@ Most teams template manifests with **Helm** or **Kustomize**. With **GitOps** (A
 - Watch error rates and latency for the first minutes; canary tools (Argo Rollouts, Flagger, AWS CodeDeploy) automate the decision.
 - **Rollback** should be one action: redeploy the previous immutable tag, `kubectl rollout undo`, switch blue/green back, or turn off the flag. Practice it before you need it.
 - Prefer rolling **forward** with a fix only when the fix is quick and certain; otherwise roll back first and debug calmly.
+
+## Worked example: Taskboard's release with a schema change
+
+The next Taskboard release renames `tasks.assignee` to `tasks.assignee_id`. During the rolling deployment, old and new tasks of the service run side by side for a few minutes. Plan it as expand/contract across **three** releases:
+
+| Release | Migration | Code |
+|---|---|---|
+| 1.3 | add nullable `assignee_id`, backfill it | writes **both** columns, reads `assignee_id` falling back to `assignee` |
+| 1.4 | none | reads and writes only `assignee_id` |
+| 1.5 | drop `assignee` | unchanged |
+
+Every release is safe to roll back to the previous one, because the previous code still finds the columns it expects. This is slower than one big change, and it's the price of zero downtime.
+
+## Worked example: what "deploy" actually runs
+
+```yaml
+- id: task
+  uses: aws-actions/amazon-ecs-render-task-definition@v1
+  with:
+    task-definition: deploy/taskboard-task.json
+    container-name: api
+    image: ${{ needs.image.outputs.ref }}           # the exact image CI built
+- uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+  with:
+    task-definition: ${{ steps.task.outputs.task-definition }}
+    service: taskboard-api
+    cluster: taskboard-staging
+    wait-for-service-stability: true                 # fail the job if new tasks don't become healthy
+- run: ./scripts/smoke-test.sh https://staging.taskboard.dev
+```
+
+> [!plain] In plain English
+> Deploying means telling the platform "run this new image instead of the old one", then checking the new version actually works before calling it done.
 
 :::quiz
 q: Which strategy gives the fastest, cleanest rollback?
@@ -469,4 +505,127 @@ canary deployment
 canary release
 ---solution
 canary
+:::
+
+:::exercise
+id: proj-cd-06-promote
+level: 4
+title: "Project 6: staging → production"
+mode: code
+lang: yaml
+file: .github/workflows/deploy.yml
+---
+Write two jobs. `staging` (needs `image`, environment `staging`) runs `./scripts/deploy.sh staging ghcr.io/acme/taskboard:${{ github.sha }}` then `./scripts/smoke-test.sh https://staging.taskboard.dev`. `production` (needs `staging`, environment `production` with url `https://taskboard.dev`) runs the same deploy script with `production` and smoke-tests `https://taskboard.dev`. Add a top-level concurrency group `deploy` that **doesn't** cancel in-progress runs.
+---starter
+name: Deploy
+on:
+  push:
+    branches: [main]
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "build and push ghcr.io/acme/taskboard:${{ github.sha }}"
+---rule
+^concurrency:\s*\n\s+group:\s*deploy\s*\n\s+cancel-in-progress:\s*false
+Deployment concurrency without cancelling
+---rule
+staging:\s*\n(\s{4}.*\n)*?\s{4}needs:\s*\[?\s*image\s*\]?
+`staging` needs `image`
+---rule
+staging:\s*\n(\s{4}.*\n)*?\s{4}environment:\s*staging
+`staging` environment
+---rule
+run:\s*\./scripts/deploy\.sh staging ghcr\.io/acme/taskboard:\$\{\{\s*github\.sha\s*\}\}
+Deploy the SHA image to staging
+---rule
+run:\s*\./scripts/smoke-test\.sh https://staging\.taskboard\.dev
+Smoke-test staging
+---rule
+production:\s*\n(\s{4}.*\n)*?\s{4}needs:\s*\[?\s*staging\s*\]?
+`production` needs `staging`
+---rule
+environment:\s*\n\s+name:\s*production\s*\n\s+url:\s*https://taskboard\.dev
+Production environment with URL
+---rule
+run:\s*\./scripts/deploy\.sh production ghcr\.io/acme/taskboard:\$\{\{\s*github\.sha\s*\}\}
+Deploy the same image to production
+---rule
+run:\s*\./scripts/smoke-test\.sh https://taskboard\.dev
+Smoke-test production
+---solution
+name: Deploy
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "build and push ghcr.io/acme/taskboard:${{ github.sha }}"
+  staging:
+    needs: image
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/deploy.sh staging ghcr.io/acme/taskboard:${{ github.sha }}
+      - run: ./scripts/smoke-test.sh https://staging.taskboard.dev
+  production:
+    needs: staging
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://taskboard.dev
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/deploy.sh production ghcr.io/acme/taskboard:${{ github.sha }}
+      - run: ./scripts/smoke-test.sh https://taskboard.dev
+:::
+
+:::exercise
+id: proj-cd-06-smoke
+level: 3
+title: "Project 6b: Taskboard's smoke test"
+mode: code
+lang: bash
+file: scripts/smoke-test.sh
+---
+Write `scripts/smoke-test.sh`: `set -euo pipefail`; take the base URL as `$1` into a variable `BASE`; request `$BASE/health` with `curl --fail --silent --show-error --retry 5 --retry-connrefused`; then check `$BASE/tasks` returns HTTP **401** without credentials, by comparing `curl -s -o /dev/null -w '%{http_code}' "$BASE/tasks"` to `401` and exiting 1 if it differs.
+---starter
+#!/bin/bash
+---rule
+set\s+-euo\s+pipefail
+Strict mode
+---rule
+BASE="?\$\{?1\}?"?
+`BASE=$1`
+---rule
+curl\s+(?=[^\n]*--fail)(?=[^\n]*--retry[ =]5)(?=[^\n]*--retry-connrefused)[^\n]*"?\$\{?BASE\}?/health"?
+Health check with retries
+---rule
+curl\s+-s\s+-o\s+/dev/null\s+-w\s+['"]%\{http_code\}['"]\s+"?\$\{?BASE\}?/tasks"?
+Capture the status of `/tasks`
+---rule
+401
+Compare with 401
+---rule
+exit\s+1
+Fail when it differs
+---solution
+#!/bin/bash
+set -euo pipefail
+BASE="$1"
+curl --fail --silent --show-error --retry 5 --retry-connrefused "$BASE/health"
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/tasks")
+if [ "$code" != "401" ]; then
+  echo "expected 401 from /tasks without credentials, got $code" >&2
+  exit 1
+fi
 :::

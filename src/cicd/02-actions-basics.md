@@ -4,6 +4,9 @@ title: GitHub Actions basics
 summary: Workflows, events, jobs, steps and runners; push, pull_request, schedule and workflow_dispatch triggers with branch and path filters; run steps vs uses steps; checkout; job dependencies with needs; expressions, contexts, if conditions and default shells.
 minutes: 35
 ---
+> [!project] Taskboard, step 2: the first workflow
+> Taskboard's first `.github/workflows/ci.yml`: on every push and pull request, check out the code, install Python and the dependencies, lint with ruff and run pytest.
+
 ## The pieces
 
 **GitHub Actions** runs automation defined in YAML files under `.github/workflows/` in your repository.
@@ -160,6 +163,48 @@ jobs:
 ```
 
 GitHub sets many default variables: `GITHUB_SHA`, `GITHUB_REF_NAME`, `GITHUB_REPOSITORY`, `GITHUB_RUN_NUMBER`, `RUNNER_OS`, `CI=true`. To set a variable for **later steps**, append to the `$GITHUB_ENV` file: `echo "VERSION=1.4.2" >> "$GITHUB_ENV"`.
+
+## Worked example: reading a run, step by step
+
+When you push, GitHub:
+
+1. Reads every file in `.github/workflows/` and checks whether its `on:` matches the event (a push to `feature/login`? a PR to `main`?).
+2. For each matching workflow, creates a **run**, and for each job, requests a fresh runner VM (`ubuntu-latest`).
+3. On the runner, executes each step in order, streaming the logs to the **Actions** tab.
+4. Marks the job green when all steps exit 0, red at the first failure, and reports the result as a **check** on the commit and the pull request.
+
+```yaml title=.github/workflows/ci.yml
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4            # 1. get the code
+      - uses: actions/setup-python@v5        # 2. install Python 3.12
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt ruff     # 3. dependencies + linter
+      - run: ruff check .                    # 4. lint
+      - run: pytest -q                       # 5. tests
+```
+
+When a step fails, click it in the Actions tab: the log shows the exact command output. Reproduce locally with the **same commands** before guessing.
+
+> [!plain] In plain English
+> A workflow file says: "when THIS happens, on a fresh machine, run THESE commands". Nothing more magical than that.
+
+## Common mistakes
+
+> [!mistake] Workflows in the wrong folder
+> Only `.github/workflows/*.yml` at the **repository root** run. `taskboard/.github/workflows/` inside a subfolder is ignored.
+
+> [!mistake] Unquoted Python versions
+> `python-version: 3.10` is the YAML number `3.1`. Always quote versions.
 
 :::quiz
 q: Two jobs in a workflow have no `needs`. How do they run?
@@ -548,4 +593,117 @@ refs/heads/main
 refs/heads/main
 ---explain
 `github.ref` is the full ref; `github.ref_name` is just `main`. Tags look like `refs/tags/v1.2.0`.
+:::
+
+:::exercise
+id: proj-cd-02-ci
+level: 2
+title: "Project 2: Taskboard's ci.yml"
+mode: code
+lang: yaml
+file: .github/workflows/ci.yml
+---
+Write Taskboard's workflow `CI`, triggered on pushes to `main` and on all pull requests, with one job `test` (ubuntu-latest) that checks out, sets up Python `"3.12"`, runs `pip install -r requirements.txt ruff`, then `ruff check .`, then `pytest -q`.
+---starter
+name: CI
+---rule
+push:\s*\n\s+branches:\s*\[\s*["']?main["']?\s*\]
+Push to `main`
+---rule
+^\s+pull_request:
+Pull requests
+---rule
+test:\s*\n\s+runs-on:\s*ubuntu-latest
+Job `test`
+---rule
+actions/checkout@v4[\s\S]*actions/setup-python@v5[\s\S]*python-version:\s*["']3\.12["']
+Checkout, then Python 3.12
+---rule
+run:\s*pip install -r requirements\.txt ruff
+Install dependencies and ruff
+---rule
+run:\s*ruff check \.[\s\S]*run:\s*pytest -q
+Lint, then test
+---solution
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt ruff
+      - run: ruff check .
+      - run: pytest -q
+:::
+
+:::exercise
+id: proj-cd-02-split
+level: 3
+title: "Project 2b: lint and test in parallel"
+mode: code
+lang: yaml
+file: .github/workflows/ci.yml
+---
+Split the job in two so they run **in parallel**: `lint` (checkout, setup-python 3.12, `pip install ruff`, `ruff check .`) and `test` (checkout, setup-python 3.12, `pip install -r requirements.txt`, `pytest -q`). Neither needs the other.
+---starter
+name: CI
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt ruff
+      - run: ruff check .
+      - run: pytest -q
+---rule
+^\s{2}lint:\s*\n\s+runs-on:\s*ubuntu-latest
+A `lint` job
+---rule
+lint:[\s\S]*?run:\s*pip install ruff\s*\n\s+-\s*run:\s*ruff check \.
+`lint` installs ruff and lints
+---rule
+^\s{2}test:\s*\n\s+runs-on:\s*ubuntu-latest
+A `test` job
+---rule
+test:[\s\S]*?run:\s*pip install -r requirements\.txt\s*\n\s+-\s*run:\s*pytest -q
+`test` installs and runs pytest
+---rule
+!needs:
+No dependency between them
+---solution
+name: CI
+on: [push, pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      - run: ruff check .
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: pytest -q
 :::

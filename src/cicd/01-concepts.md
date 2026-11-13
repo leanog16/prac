@@ -4,6 +4,9 @@ title: CI/CD fundamentals
 summary: Continuous integration, continuous delivery and continuous deployment, what a pipeline is made of, build-once-promote artifacts, trunk-based development and branch protection, fast feedback and the test pyramid, versioning, and the DORA metrics.
 minutes: 25
 ---
+> [!project] Track project: Taskboard's delivery pipeline
+> You built Taskboard in the FastAPI track and containerized it in the Docker track. In this track you'll give it a real **pipeline** in `.github/workflows/`: lint and test on every pull request, build and publish the image, deploy to staging automatically and to production with an approval. Each lesson's **Project** exercises add the next part.
+
 ## The problem CI/CD solves
 
 Without automation, releasing software looks like this: developers work on long-lived branches for weeks, someone merges everything at the end ("merge hell"), a person builds the release on their laptop, follows a wiki page to deploy it, and everyone hopes. Bugs are found late, releases are rare and scary, and nobody can say exactly what's running in production.
@@ -77,6 +80,41 @@ Research by the DORA team identified four metrics that distinguish high-performi
 | **Time to restore service** | how fast you recover from a failure | under an hour |
 
 The first two measure speed, the last two stability. The key finding: they **improve together**. Small, frequent, automated changes are both faster and safer than big, rare, manual ones.
+
+## Worked example: Taskboard's pipeline on one page
+
+Before writing YAML, sketch the stages and what each one guards against:
+
+```
+pull request ─► lint (ruff) ─► unit tests (pytest) ─► build image (no push)
+                  2 min          3 min                     2 min
+                         └── fast feedback before review ──┘
+
+merge to main ─► same checks ─► build + push ghcr.io/acme/taskboard:<sha>
+              ─► deploy to staging ─► smoke test ─► (approval) ─► deploy to production ─► smoke test
+```
+
+| Stage | Catches |
+|---|---|
+| lint | style problems, unused imports, obvious bugs |
+| unit tests | broken business rules (status transitions, validation) |
+| image build | missing dependencies, Dockerfile mistakes |
+| staging deploy + smoke test | configuration, migrations, networking problems |
+| approval | a human sanity check before customers see it |
+
+The image built from `main` is tagged with the **commit SHA**, and **that exact image** goes to staging and then production. Nothing is rebuilt between environments.
+
+> [!plain] In plain English
+> A pipeline is an assembly line for code changes. Every change goes through the same checks in the same order, automatically, and stops at the first one that fails.
+
+## How long should it take?
+
+Aim for **under 10 minutes** from push to a green or red pull request. Past that, developers start batching changes and stop waiting for results, which defeats the purpose. Lessons 3 and 7 are about keeping it fast.
+
+## Common mistakes
+
+> [!mistake] Pipelines that only run on main
+> If checks run only after merging, broken code is already on `main`. Run them on pull requests and make them **required** before merging.
 
 :::quiz
 q: What is the difference between continuous delivery and continuous deployment?
@@ -202,4 +240,32 @@ lead time
 change lead time
 ---solution
 lead time for changes
+:::
+
+:::exercise
+id: proj-cd-01-order
+level: 2
+title: "Project 1: order the stages"
+mode: answer
+---
+Put Taskboard's main-branch stages in order (answer with the letters, e.g. `ABCDE`): **A** deploy to production, **B** run unit tests, **C** build and push the image, **D** deploy to staging, **E** smoke-test staging.
+---answer
+BCDEA
+---solution
+BCDEA
+:::
+
+:::exercise
+id: proj-cd-01-tag
+level: 2
+title: "Project 1b: which tag ships?"
+mode: answer
+---
+Commit `3f2c1ab` on `main` passes CI and its image is tested in staging. Which tag of `ghcr.io/acme/taskboard` should production run: `latest`, `main`, or `sha-3f2c1ab`?
+---answer
+sha-3f2c1ab
+---solution
+sha-3f2c1ab
+---explain
+Only the SHA tag is immutable and identical to what staging tested; `latest` and `main` move with every merge.
 :::

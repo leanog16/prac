@@ -4,6 +4,9 @@ title: Reusable workflows & pipeline hygiene
 summary: Reusable workflows with workflow_call inputs, secrets and outputs; composite actions; concurrency to cancel stale runs; path-based jobs in monorepos; required status checks and merge queues; Dependabot for dependencies and actions; release automation from tags; and speeding up slow pipelines.
 minutes: 35
 ---
+> [!project] Taskboard, step 7: shared pipelines
+> The company now has Taskboard plus two more Python services, each with its own copy of the CI file. This step extracts a reusable workflow and a composite action, and makes Taskboard call them.
+
 ## Don't copy-paste pipelines
 
 Ten services with ten nearly identical `ci.yml` files means ten places to fix every change. GitHub Actions has two reuse mechanisms:
@@ -214,6 +217,38 @@ A 40-minute pipeline means developers context-switch, batch changes and skip run
 4. **Fail fast**: cheap checks first, `--maxfail`.
 5. **Bigger runners** for CPU-bound builds; they often cost less overall because they finish sooner.
 6. Move slow end-to-end suites to a merge queue or nightly run, keeping PR feedback quick.
+
+## Worked example: deciding what to extract
+
+Compare the three services' `ci.yml` files. The **identical** parts (checkout, setup-python with cache, install, lint, test) belong in a shared template. The **varying** parts (Python version, working directory, whether there's a database) become **inputs**. Things only one service needs stay in that service's own workflow.
+
+```yaml title=acme/ci-templates/.github/workflows/python-service.yml
+on:
+  workflow_call:
+    inputs:
+      python-version: { type: string, default: "3.12" }
+      needs-postgres: { type: boolean, default: false }
+```
+
+Then Taskboard's whole CI shrinks to:
+
+```yaml title=.github/workflows/ci.yml
+name: CI
+on: [push, pull_request]
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ci:
+    uses: acme/ci-templates/.github/workflows/python-service.yml@v2
+    with:
+      needs-postgres: true
+```
+
+When the platform team adds a security scan to the template and releases `v2.1`, every service gets it by bumping one version. No copy-paste, no drift.
+
+> [!plain] In plain English
+> A reusable workflow is a pipeline other pipelines can call, like a function: it takes inputs, does its jobs, and can return outputs.
 
 :::quiz
 q: What's the key difference between a reusable workflow and a composite action?
@@ -536,4 +571,102 @@ Your repository enables a merge queue, but queued PRs hang waiting for the CI ch
 merge_group
 ---solution
 merge_group
+:::
+
+:::exercise
+id: proj-cd-07-template
+level: 3
+title: "Project 7: the shared template"
+mode: code
+lang: yaml
+file: .github/workflows/python-service.yml
+---
+Write the reusable workflow: triggered by `workflow_call` with a `string` input `python-version` (default `"3.12"`); one job `test` (ubuntu-latest) that checks out, sets up Python with `${{ inputs.python-version }}` and pip cache, installs `requirements.txt`, and runs `pytest -q`.
+---starter
+name: Python service CI
+---rule
+on:\s*\n\s+workflow_call:\s*\n\s+inputs:\s*\n\s+python-version:
+`workflow_call` with `python-version`
+---rule
+type:\s*string
+`type: string`
+---rule
+default:\s*["']3\.12["']
+Default `"3.12"`
+---rule
+python-version:\s*\$\{\{\s*inputs\.python-version\s*\}\}
+Use the input
+---rule
+cache:\s*["']?pip["']?
+pip cache
+---rule
+run:\s*pip install -r requirements\.txt[\s\S]*run:\s*pytest -q
+Install, then test
+---solution
+name: Python service CI
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        type: string
+        default: "3.12"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: pytest -q
+:::
+
+:::exercise
+id: proj-cd-07-caller
+level: 2
+title: "Project 7b: Taskboard calls the template"
+mode: code
+lang: yaml
+file: .github/workflows/ci.yml
+---
+Replace Taskboard's CI with a call to `acme/ci-templates/.github/workflows/python-service.yml@v2` (job `ci`, input `python-version: "3.13"`), plus a top-level concurrency group `ci-${{ github.ref }}` that cancels superseded runs.
+---starter
+name: CI
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pytest -q
+---rule
+^concurrency:\s*\n\s+group:\s*ci-\$\{\{\s*github\.ref\s*\}\}\s*\n\s+cancel-in-progress:\s*true
+Cancel superseded runs
+---rule
+ci:\s*\n\s+uses:\s*acme/ci-templates/\.github/workflows/python-service\.yml@v2
+Call the template
+---rule
+with:\s*\n\s+python-version:\s*["']3\.13["']
+Pass `python-version: "3.13"`
+---rule
+!runs-on:
+No local job steps left
+---solution
+name: CI
+on: [push, pull_request]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: acme/ci-templates/.github/workflows/python-service.yml@v2
+    with:
+      python-version: "3.13"
 :::

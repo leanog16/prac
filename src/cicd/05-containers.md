@@ -4,6 +4,9 @@ title: Building & publishing images
 summary: Building Docker images in CI with Buildx, logging in to GitHub Container Registry, Docker Hub and Amazon ECR, tagging strategies with docker/metadata-action, registry and GitHub Actions layer caches, multi-platform builds, scanning with Trivy before pushing, and SBOM/provenance attestations.
 minutes: 35
 ---
+> [!project] Taskboard, step 5: publishing the image
+> Every merge to `main` now produces `ghcr.io/acme/taskboard:sha-<commit>`, built with a layer cache, scanned for vulnerabilities, and pushed only if the scan is clean.
+
 ## The standard image pipeline
 
 ```yaml title=.github/workflows/image.yml
@@ -149,6 +152,31 @@ The second build is almost instant thanks to the cache. Also scan the source and
 ```
 
 The **SBOM** lists every package in the image. **Provenance** records how, where and from which commit the image was built (SLSA). Together they let consumers verify an image came from your pipeline, and let you answer "which images contain the vulnerable library?" in minutes.
+
+## Worked example: what metadata-action produces for Taskboard
+
+With `tags: type=sha` and `type=semver,pattern={{version}}`, the same workflow tags differently depending on the event:
+
+| Event | Tags produced |
+|---|---|
+| push to `main`, commit `3f2c1ab` | `ghcr.io/acme/taskboard:sha-3f2c1ab` |
+| push of git tag `v1.2.0` at that commit | `…:sha-3f2c1ab`, `…:1.2.0` |
+| pull request #42 | (built, not pushed) |
+
+Every image is traceable to a commit; releases additionally get a human-friendly version. And since tags are computed rather than typed, nobody can fat-finger `1.2.0` onto the wrong image.
+
+## Worked example: scanning before pushing
+
+```
+build (load locally) ─► trivy scan ─► CRITICAL/HIGH found? ─► fail, nothing pushed
+                                        │
+                                        └─ clean ─► build again (cache hit, seconds) ─► push
+```
+
+The scan gate means a vulnerable image never reaches the registry, so it can never be deployed by accident. When it fails, the fix is usually bumping the base image (`python:3.12-slim` gets patched regularly) or a dependency.
+
+> [!plain] In plain English
+> CI builds the image the same way every time, labels it with the commit it came from, checks it for known security holes, and only then uploads it where servers can download it.
 
 :::quiz
 q: Which permission does the GITHUB_TOKEN need to push images to ghcr.io?
@@ -606,4 +634,115 @@ mode: answer
 2.5
 ---solution
 2.5
+:::
+
+:::exercise
+id: proj-cd-05-image
+level: 4
+title: "Project 5: the image job"
+mode: code
+lang: yaml
+file: .github/workflows/ci.yml
+---
+Write the `image` job (needs `test`, only on pushes: `if: github.event_name == 'push'`, permissions `contents: read` + `packages: write`): checkout; `docker/setup-buildx-action@v3`; `docker/login-action@v3` to `ghcr.io` with `${{ github.actor }}` / `${{ secrets.GITHUB_TOKEN }}`; `docker/metadata-action@v5` (id `meta`, images `ghcr.io/acme/taskboard`, tags `type=sha`); `docker/build-push-action@v6` with `push: true`, the meta tags and labels, and the `gha` cache (`mode=max`).
+---starter
+name: CI
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pytest -q
+---rule
+image:\s*\n(\s{4}.*\n)*?\s{4}needs:\s*\[?\s*test\s*\]?
+`image` needs `test`
+---rule
+image:\s*\n(\s{4}.*\n)*?\s{4}if:\s*(\$\{\{\s*)?github\.event_name\s*==\s*'push'
+Only on pushes
+---rule
+image:\s*\n(\s{4}.*\n)*?\s{4}permissions:\s*\n(\s{6}.*\n)*?\s{6}packages:\s*write
+`packages: write`
+---rule
+docker/setup-buildx-action@v3[\s\S]*docker/login-action@v3[\s\S]*registry:\s*ghcr\.io
+Buildx and GHCR login
+---rule
+password:\s*\$\{\{\s*secrets\.GITHUB_TOKEN\s*\}\}
+Login with `GITHUB_TOKEN`
+---rule
+id:\s*meta\s*\n\s+uses:\s*docker/metadata-action@v5|uses:\s*docker/metadata-action@v5\s*\n\s+id:\s*meta
+`metadata-action` with id `meta`
+---rule
+images:\s*ghcr\.io/acme/taskboard
+Image name
+---rule
+type=sha
+`type=sha` tags
+---rule
+uses:\s*docker/build-push-action@v6[\s\S]*push:\s*true[\s\S]*tags:\s*\$\{\{\s*steps\.meta\.outputs\.tags\s*\}\}
+Build and push with the meta tags
+---rule
+labels:\s*\$\{\{\s*steps\.meta\.outputs\.labels\s*\}\}
+Meta labels
+---rule
+cache-from:\s*type=gha[\s\S]*cache-to:\s*type=gha,\s*mode=max
+GHA cache
+---solution
+name: CI
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pytest -q
+  image:
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/acme/taskboard
+          tags: type=sha
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+:::
+
+:::exercise
+id: proj-cd-05-tag-predict
+level: 2
+title: "Project 5b: predict the tag"
+mode: answer
+---
+With `docker/metadata-action` and `tags: type=sha` (default short SHA, prefix `sha-`), a push lands commit `9c1e2f0d4b…` on `main`. Which tag is produced (just the tag part after the colon)?
+---answer
+sha-9c1e2f0
+---solution
+sha-9c1e2f0
 :::

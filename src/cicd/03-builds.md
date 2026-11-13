@@ -4,6 +4,9 @@ title: Building & testing in CI
 summary: Setting up language toolchains, dependency caching (built-in and actions/cache with hashFiles keys), matrix builds with include/exclude and fail-fast, service containers for databases, uploading and downloading artifacts, job outputs, test reports and timeouts.
 minutes: 40
 ---
+> [!project] Taskboard, step 3: a CI that tests like production
+> Taskboard's tests run on SQLite, but production runs PostgreSQL. This step adds dependency caching, a matrix over two Python versions, and a PostgreSQL service so integration tests hit the real engine.
+
 ## Toolchains
 
 Setup actions install a language version and put it on the `PATH`:
@@ -181,6 +184,36 @@ jobs:
 ```
 
 Always set `timeout-minutes`. Writing a summary to `$GITHUB_STEP_SUMMARY` (Markdown) shows it on the run's page.
+
+## Worked example: why the Postgres service matters
+
+A test suite that only uses SQLite passes even when:
+
+- a query uses a PostgreSQL-only function, or SQLite-only syntax;
+- a migration fails on PostgreSQL's stricter types;
+- a unique constraint behaves differently with NULLs.
+
+Running the same tests against a `postgres:16` service container catches all three, for about 10 extra seconds of CI time. Taskboard reads `DATABASE_URL` from settings (FastAPI lesson 13), so pointing the tests at PostgreSQL is just an environment variable.
+
+## Worked example: caching that actually hits
+
+```yaml
+- uses: actions/setup-python@v5
+  with:
+    python-version: ${{ matrix.python }}
+    cache: pip
+    cache-dependency-path: requirements*.txt
+```
+
+The cache key includes a hash of the requirements files: unchanged requirements → cache hit → install in seconds. Change one pin → new key → one slow run that saves a fresh cache.
+
+> [!plain] In plain English
+> A matrix runs the same job several times with different settings; a service container is an extra container (like a database) running next to the job; a cache saves downloads between runs.
+
+## Common mistakes
+
+> [!mistake] Testing only the newest Python
+> If the Docker image uses 3.12 but a teammate runs 3.13 locally, test both. The matrix makes that one extra line.
 
 :::quiz
 q: A cache `key` includes `hashFiles('**/package-lock.json')`. When does the key change?
@@ -607,4 +640,151 @@ How many jobs does this matrix produce?
 5
 ---solution
 5
+:::
+
+:::exercise
+id: proj-cd-03-matrix-pg
+level: 4
+title: "Project 3: matrix + PostgreSQL"
+mode: code
+lang: yaml
+file: .github/workflows/ci.yml
+---
+Upgrade the `test` job: a matrix `python: ["3.12", "3.13"]` with `fail-fast: false`; setup-python uses `${{ matrix.python }}` with `cache: pip`; a service `postgres` (`postgres:16`, env `POSTGRES_PASSWORD: test`, port `5432:5432`, health check `--health-cmd "pg_isready -U postgres"`); and job-level env `DATABASE_URL: postgresql://postgres:test@localhost:5432/postgres`.
+---starter
+name: CI
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: pytest -q
+---rule
+strategy:\s*\n(\s+.*\n)*?\s+fail-fast:\s*false
+`fail-fast: false`
+---rule
+matrix:\s*\n\s+python:\s*\[\s*["']3\.12["']\s*,\s*["']3\.13["']\s*\]
+The Python matrix
+---rule
+python-version:\s*\$\{\{\s*matrix\.python\s*\}\}
+Use the matrix value
+---rule
+cache:\s*["']?pip["']?
+pip caching
+---rule
+services:\s*\n\s+postgres:\s*\n\s+image:\s*["']?postgres:16["']?
+A PostgreSQL service
+---rule
+POSTGRES_PASSWORD:\s*["']?test["']?
+Its password
+---rule
+["']?5432:5432["']?
+Port 5432
+---rule
+--health-cmd\s+["']pg_isready -U postgres["']
+Health check
+---rule
+DATABASE_URL:\s*["']?postgresql://postgres:test@localhost:5432/postgres["']?
+`DATABASE_URL` for the tests
+---solution
+name: CI
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:test@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: pytest -q
+:::
+
+:::exercise
+id: proj-cd-03-report
+level: 3
+title: "Project 3b: keep the test report"
+mode: code
+lang: yaml
+file: .github/workflows/ci.yml
+---
+Make pytest write a JUnit report (`pytest -q --junitxml=reports/junit.xml`), then upload the `reports/` folder as an artifact named `test-report` with `actions/upload-artifact@v4`, **even when tests fail**. Also limit the job to **15** minutes.
+---starter
+name: CI
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: pytest -q
+---rule
+timeout-minutes:\s*15
+`timeout-minutes: 15`
+---rule
+run:\s*pytest -q --junitxml=reports/junit\.xml
+JUnit report
+---rule
+uses:\s*actions/upload-artifact@v4
+Upload the artifact
+---rule
+if:\s*(\$\{\{\s*)?always\(\)
+Even on failure
+---rule
+name:\s*test-report
+Named `test-report`
+---rule
+path:\s*reports/?
+The `reports/` folder
+---solution
+name: CI
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: pytest -q --junitxml=reports/junit.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-report
+          path: reports/
 :::

@@ -4,6 +4,9 @@ title: Boss round: pipelines end to end
 summary: Design and repair complete pipelines: a full CI/CD workflow for a containerized API, broken YAML and misconfigured triggers, leaked and over-privileged credentials, a pipeline that's too slow, and deployment incidents.
 minutes: 60
 ---
+> [!project] Taskboard, final step: the release workflow
+> The last piece: tagging `v1.0.0` publishes a versioned image and a GitHub release with generated notes. Then two incidents from Taskboard's pipeline history to debug.
+
 ## A pipeline troubleshooting playbook
 
 | Symptom | Check | Usual cause |
@@ -17,6 +20,19 @@ minutes: 60
 | Cache never hits | the cache key | key includes something that changes every run (timestamp, SHA) |
 | CI takes 40 minutes | timing per step | no caching, serial jobs, huge test suite on one runner, no path filters |
 | Deploy "succeeded" but site is down | smoke tests, health checks | no post-deploy verification; `--wait` / stability checks missing |
+
+## Worked example: Taskboard's full workflow map
+
+```
+.github/
+├── dependabot.yml           weekly updates: pip, github-actions, docker
+└── workflows/
+    ├── ci.yml               PRs + main: lint, test (matrix + postgres), image on main
+    ├── deploy.yml           main: staging → approval → production (OIDC, ECS)
+    └── release.yml          tags v*.*.*: versioned image + GitHub release
+```
+
+Each file has one job, one trigger family, and the permissions it needs, nothing more. When something breaks, the file name tells you where to look.
 
 :::exercise
 id: cb-full-pipeline
@@ -423,4 +439,106 @@ kubectl rollout undo deployment/api
 kubectl rollout undo deployment/api
 ---explain
 Roll back first, investigate after. Then fix forward through the normal pipeline.
+:::
+
+:::exercise
+id: proj-cd-08-release
+level: 4
+title: "Project 8: release on a tag"
+mode: code
+lang: yaml
+file: .github/workflows/release.yml
+---
+Write `release.yml`: trigger on pushed tags `v*.*.*`; permissions `contents: write` and `packages: write`; one job `release` that checks out, logs in to `ghcr.io` (`docker/login-action@v3`, actor + `GITHUB_TOKEN`), runs `docker/metadata-action@v5` (id `meta`, images `ghcr.io/acme/taskboard`, tags `type=semver,pattern={{version}}`), builds and pushes with `docker/build-push-action@v6`, and finally runs `gh release create "$GITHUB_REF_NAME" --generate-notes` with `GH_TOKEN: ${{ github.token }}`.
+---starter
+name: Release
+---rule
+on:\s*\n\s+push:\s*\n\s+tags:\s*(\[\s*["']v\*\.\*\.\*["']\s*\]|\n\s+-\s*["']v\*\.\*\.\*["'])
+Tags `v*.*.*`
+---rule
+permissions:\s*\n(\s+.*\n)*?\s+contents:\s*write
+`contents: write`
+---rule
+permissions:\s*\n(\s+.*\n)*?\s+packages:\s*write
+`packages: write`
+---rule
+docker/login-action@v3[\s\S]*registry:\s*ghcr\.io
+GHCR login
+---rule
+id:\s*meta\s*\n\s+uses:\s*docker/metadata-action@v5|uses:\s*docker/metadata-action@v5\s*\n\s+id:\s*meta
+`metadata-action` (id `meta`)
+---rule
+type=semver,pattern=\{\{version\}\}
+Semver tags
+---rule
+uses:\s*docker/build-push-action@v6[\s\S]*push:\s*true[\s\S]*tags:\s*\$\{\{\s*steps\.meta\.outputs\.tags\s*\}\}
+Push with the meta tags
+---rule
+run:\s*gh release create\s+"\$GITHUB_REF_NAME"\s+--generate-notes
+Create the release
+---rule
+GH_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}
+`GH_TOKEN`
+---solution
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/acme/taskboard
+          tags: type=semver,pattern={{version}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+      - run: gh release create "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+:::
+
+:::exercise
+id: proj-cd-08-denied
+level: 3
+title: "Project 8b: incident: push denied"
+mode: answer
+---
+Taskboard's `image` job fails at the push step with `denied: installation not allowed to Create organization package`. The workflow has a top-level `permissions: contents: read` and no job-level permissions. Which permission (`scope: level`) must the `image` job add?
+---answer
+packages: write
+---solution
+packages: write
+:::
+
+:::exercise
+id: proj-cd-08-skipped
+level: 3
+title: "Project 8c: incident: deploy never runs"
+mode: answer
+---
+After a refactor, Taskboard's `production` job is always **skipped**. It has `needs: [staging]` and `if: github.ref == 'refs/heads/main'`, and `staging` succeeded. The workflow is triggered by `on: pull_request`. Which event should trigger deployments instead?
+---answer
+push
+---solution
+push
+---explain
+For pull_request events, `github.ref` is `refs/pull/<n>/merge`, so the condition is never true. Deploy on `push` to `main`.
 :::

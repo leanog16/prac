@@ -4,6 +4,9 @@ title: Secrets, permissions & OIDC
 summary: Repository, environment and organization secrets, configuration variables, masking, why pull requests from forks get no secrets, least-privilege GITHUB_TOKEN permissions, environments with required reviewers, OIDC federation to AWS instead of long-lived keys, and pinning actions for supply-chain safety.
 minutes: 35
 ---
+> [!project] Taskboard, step 4: credentials without keys
+> Taskboard's pipeline will push images and deploy to AWS. This step locks down the token's permissions and connects to AWS through OIDC, so there are no long-lived keys to leak.
+
 ## Secrets and variables
 
 Store credentials in **Settings → Secrets and variables → Actions**, never in the repository:
@@ -143,6 +146,32 @@ The same pattern works for Google Cloud (Workload Identity Federation), Azure (f
 - Prefer actions from GitHub (`actions/*`) and verified creators.
 - Restrict allowed actions in organization settings.
 - Keep `permissions` minimal so a compromised step can do less.
+
+## Worked example: an inventory of Taskboard's secrets
+
+List every credential the pipeline touches and decide where it should come from:
+
+| Credential | Needed by | Source |
+|---|---|---|
+| push to `ghcr.io` | image job | built-in `GITHUB_TOKEN` with `packages: write` |
+| AWS access for deploys | deploy jobs | **OIDC** role, no stored keys |
+| Codecov upload token | test job | repository secret |
+| production `SECRET_KEY`, DB password | the running app | AWS Secrets Manager, read by the app at runtime, never in CI |
+| Slack webhook | notify job | repository secret |
+
+Notice the last-but-one row: the app's runtime secrets **never pass through CI at all**. CI deploys an image and a task definition that *references* a secret; the platform injects the value at runtime. The fewer places a secret travels, the fewer places it can leak.
+
+## Worked example: the trust relationship
+
+For OIDC, AWS needs to know *which* workflows may assume the deploy role. Taskboard's trust policy allows exactly:
+
+- repository `acme/taskboard`,
+- running in the GitHub **environment** `production` (or `staging` for the staging role).
+
+So even a malicious workflow on a feature branch can't get production credentials: its token's `sub` claim says `repo:acme/taskboard:ref:refs/heads/feature-x`, which doesn't match.
+
+> [!plain] In plain English
+> Instead of giving GitHub a permanent AWS password, AWS agrees to trust short-lived ID cards that GitHub issues to specific workflows, and only hands out temporary credentials to the ones it recognizes.
 
 :::quiz
 q: A pull request comes from a fork. Which secrets can its `pull_request` workflow read?
@@ -472,4 +501,123 @@ A workflow triggered by `pull_request` runs `echo "${#NPM_TOKEN}"` with `env: NP
 0
 ---explain
 Secrets aren't passed to `pull_request` workflows from forks, so the variable is empty.
+:::
+
+:::exercise
+id: proj-cd-04-perms
+level: 2
+title: "Project 4: least-privilege token"
+mode: code
+lang: yaml
+file: .github/workflows/ci.yml
+---
+Taskboard's CI only reads code. Set the workflow-wide permissions to `contents: read`, and give **only** the `image` job `packages: write` (plus `contents: read`).
+---starter
+name: CI
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pytest -q
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t taskboard .
+---rule
+^permissions:\s*\n\s+contents:\s*read
+Workflow default `contents: read`
+---rule
+image:\s*\n(\s{4}.*\n)*?\s{4}permissions:\s*\n(\s{6}.*\n)*?\s{6}packages:\s*write
+`image` gets `packages: write`
+---rule
+image:\s*\n(\s{4}.*\n)*?\s{4}permissions:\s*\n(\s{6}.*\n)*?\s{6}contents:\s*read
+`image` keeps `contents: read`
+---solution
+name: CI
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pytest -q
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t taskboard .
+:::
+
+:::exercise
+id: proj-cd-04-oidc
+level: 3
+title: "Project 4b: Taskboard's AWS login"
+mode: code
+lang: yaml
+file: .github/workflows/deploy.yml
+---
+Write the `deploy` job: environment `staging`, permissions `id-token: write` and `contents: read`, then `aws-actions/configure-aws-credentials@v4` with `role-to-assume: arn:aws:iam::123456789012:role/taskboard-deploy-staging` and `aws-region: eu-west-1`, then run `aws sts get-caller-identity`.
+---starter
+name: Deploy
+on:
+  push:
+    branches: [main]
+
+jobs:
+---rule
+deploy:\s*\n(\s{4}.*\n)*?\s{4}environment:\s*staging
+Environment `staging`
+---rule
+permissions:\s*\n(\s+.*\n)*?\s+id-token:\s*write
+`id-token: write`
+---rule
+permissions:\s*\n(\s+.*\n)*?\s+contents:\s*read
+`contents: read`
+---rule
+uses:\s*aws-actions/configure-aws-credentials@v4
+The AWS credentials action
+---rule
+role-to-assume:\s*arn:aws:iam::123456789012:role/taskboard-deploy-staging
+The staging role
+---rule
+aws-region:\s*eu-west-1
+Region
+---rule
+run:\s*aws sts get-caller-identity
+Check who we are
+---rule
+!aws-access-key-id
+No stored keys
+---solution
+name: Deploy
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::123456789012:role/taskboard-deploy-staging
+          aws-region: eu-west-1
+      - run: aws sts get-caller-identity
 :::
