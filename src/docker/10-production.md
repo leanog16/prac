@@ -4,6 +4,9 @@ title: Limits, security & multi-platform images
 summary: Memory, CPU and PID limits, restart policies, read-only root filesystems, dropping Linux capabilities, no-new-privileges, rootless Docker, image scanning and SBOMs, multi-platform builds with buildx, and moving images with save and load.
 minutes: 40
 ---
+> [!project] Taskboard, step 10: guardrails at runtime
+> The production image is good; now constrain how it runs. Taskboard gets memory and CPU limits, a restart policy, a read-only filesystem with a writable `/tmp`, and dropped capabilities.
+
 ## A container is only as safe as its settings
 
 By default a container can use **all** the host's memory and CPU, runs as root, keeps a dozen Linux capabilities, and can write anywhere in its filesystem. That's convenient on a laptop and dangerous in production. One memory leak in one container can get the whole host's processes OOM-killed, and one remote-code-execution bug can give an attacker root inside the container.
@@ -150,6 +153,46 @@ docker run -d --log-opt max-size=10m --log-opt max-file=3 nginx
 ```
 
 Other drivers ship logs elsewhere: `local` (compressed, rotated), `journald`, `awslogs`, `gcplogs`, `fluentd`. In Compose the same settings go under `logging: {driver: json-file, options: {max-size: 10m}}`.
+
+## Worked example: sizing Taskboard's limits
+
+Don't guess limits; measure first:
+
+```bash run
+docker run -d --name api -m 512m nginx
+docker stats --no-stream --format '{{.Name}} {{.MemUsage}} {{.CPUPerc}}'
+```
+
+A reasonable process:
+
+1. Run the app under realistic load (a load-testing tool like `hey`, `k6` or `locust`) and watch `docker stats`.
+2. Set the memory limit about **1.5–2×** the observed peak, so normal spikes don't trigger the OOM killer.
+3. Set CPU limits to protect neighbours on a shared host, then check that latency under load stays acceptable.
+4. Alert when usage approaches the limit, rather than finding out from exit code 137.
+
+For two uvicorn workers serving Taskboard, a peak of ~180 MB might lead to `--memory 384m --cpus 1`.
+
+## The hardened run command
+
+```bash
+docker run -d --name api \
+  --restart unless-stopped \
+  --memory 384m --cpus 1 --pids-limit 200 \
+  --read-only --tmpfs /tmp \
+  --cap-drop ALL --security-opt no-new-privileges:true \
+  -p 8000:8000 --env-file prod.env \
+  ghcr.io/acme/taskboard:1.0.0
+```
+
+Taskboard writes nothing to disk except temporary files (uploads go to S3 in production), so a read-only root filesystem costs nothing and blocks a whole class of attacks. Port 8000 is above 1024, so no capability is needed to bind it, and `--cap-drop ALL` doesn't need any exceptions.
+
+> [!plain] In plain English
+> Limits stop one misbehaving container from starving everything else on the machine; security flags shrink what an attacker could do if they broke into the app.
+
+## Common mistakes
+
+> [!mistake] Read-only filesystem, but the app writes somewhere
+> Python writes `.pyc` files and some libraries write caches. Symptoms are `Read-only file system` errors at startup. Set `PYTHONDONTWRITEBYTECODE=1`, point caches at `/tmp`, and mount a `tmpfs` there.
 
 :::quiz
 q: A container with `--memory 256m` tries to use 300 MB. What happens?
@@ -398,4 +441,35 @@ throttled
 throttled
 ---explain
 CPU limits never kill; the scheduler just gives the container less CPU time.
+:::
+
+:::exercise
+id: proj-dk-10-hardened
+level: 3
+title: "Project 10: run Taskboard hardened"
+compare: verify
+cwd: /home/student/taskboard
+setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile && docker build -q -t taskboard:prod . >/dev/null 2>&1
+---
+Run `taskboard:prod` in the background as `api` on port 8000 with: restart policy `unless-stopped`, memory **384m**, **1** CPU, a read-only root filesystem with a tmpfs at `/tmp`, and all capabilities dropped.
+---verify
+docker inspect -f '{{.HostConfig.RestartPolicy.Name}} {{.HostConfig.Memory}} {{.HostConfig.NanoCpus}} {{.HostConfig.ReadonlyRootfs}} {{.HostConfig.CapDrop}}' api
+curl -s localhost:8000/health
+---solution
+docker run -d --name api --restart unless-stopped --memory 384m --cpus 1 --read-only --tmpfs /tmp --cap-drop ALL -p 8000:8000 taskboard:prod
+:::
+
+:::exercise
+id: proj-dk-10-size
+level: 2
+title: "Project 10b: choose a memory limit"
+mode: answer
+---
+Under load testing, Taskboard's container peaks at **200 MB**. Following the "1.5–2× the observed peak" rule, which of these limits is most appropriate: `128m`, `256m`, `384m` or `2g`?
+---answer
+384m
+---solution
+384m
+---explain
+128m and 256m would OOM-kill at peak (256m leaves almost no headroom); 2g wastes capacity and hides leaks for longer.
 :::

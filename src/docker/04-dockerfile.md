@@ -4,6 +4,9 @@ title: Writing Dockerfiles
 summary: The Dockerfile instructions you'll use every day, the build context, CMD vs ENTRYPOINT and exec vs shell form, ARG vs ENV, running as a non-root user, and labels.
 minutes: 40
 ---
+> [!project] Taskboard, step 4: the first Dockerfile
+> This is the core step of the track: writing `~/taskboard/Dockerfile`, building the image, running it, and calling the API from the host.
+
 ## A Dockerfile is a recipe
 
 A **Dockerfile** lists instructions that build an image, starting from a base image. `docker build` executes them in order; most instructions produce a layer.
@@ -134,6 +137,56 @@ printf 'FROM python:3.12-slim\nRUN useradd -m appuser\nUSER appuser\nCMD ["whoam
 docker build -q -t who . >/dev/null
 docker run --rm who
 ```
+
+## Worked example: a Dockerfile line by line
+
+```dockerfile title=taskboard/Dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+| Line | Does | Why |
+|---|---|---|
+| `FROM python:3.12-slim` | start from the base image | Python preinstalled |
+| `WORKDIR /app` | create and `cd` into `/app` | everything after is relative to it |
+| `COPY requirements.txt .` | copy just the dependency list | so the next layer can be cached (next lesson) |
+| `RUN pip install …` | runs **at build time**, result saved in the image | `--no-cache-dir` keeps pip's download cache out of the image |
+| `COPY . .` | copy the rest of the source | |
+| `EXPOSE 8000` | documentation: "this app listens on 8000" | doesn't publish anything by itself |
+| `CMD [...]` | the default command **at run time** | exec form: uvicorn becomes PID 1 and receives stop signals |
+
+`--host 0.0.0.0` is essential: uvicorn's default `127.0.0.1` would only accept connections from **inside** the container, so `-p 8000:8000` would lead nowhere.
+
+Build and run it:
+
+```bash
+cd taskboard
+docker build -t taskboard:dev .
+docker run -d --name api -p 8000:8000 taskboard:dev
+curl -s localhost:8000/health
+```
+
+> [!plain] In plain English
+> A Dockerfile is a recipe. `docker build` follows it once and saves the result as an image. `RUN` happens while baking; `CMD` is what happens every time a container starts.
+
+## RUN vs CMD vs ENTRYPOINT
+
+- `RUN` executes during the **build**: installing packages, compiling.
+- `CMD` is the default **runtime** command, easy to override: `docker run taskboard:dev pytest` runs the tests instead of the server.
+- `ENTRYPOINT` is the fixed executable; `CMD` then supplies default **arguments** to it. Use it for images that behave like a single command-line tool.
+
+## Common mistakes
+
+> [!mistake] Shell-form CMD
+> `CMD uvicorn main:app` runs under `/bin/sh -c`, so the shell is PID 1 and `docker stop` signals reach the shell, not uvicorn. The container takes 10 seconds to stop, then gets killed. Use the JSON exec form.
+
+> [!mistake] `COPY . .` copying secrets
+> Right now this Dockerfile copies `.env` (with the secret key) into the image. The next lesson fixes that with `.dockerignore`.
 
 :::quiz
 q: When does a RUN instruction execute?
@@ -441,4 +494,45 @@ The build context has `site/index.html` and `site/css/style.css`. With `WORKDIR 
 When the source is a directory, COPY copies its **contents**, not the directory itself.
 ---solution
 /web/css/style.css
+:::
+
+:::exercise
+id: proj-dk-04-dockerfile
+level: 3
+title: "Project 4: Taskboard's Dockerfile"
+mode: file
+file: Dockerfile
+cwd: /home/student/taskboard
+---run
+docker build -q -t taskboard . >/dev/null
+docker run -d --name api -p 8000:8000 taskboard >/dev/null
+curl -s localhost:8000/health; echo
+curl -s localhost:8000/tasks/5; echo
+---
+Write `~/taskboard/Dockerfile`: start from `python:3.12-slim`, work in `/app`, copy `requirements.txt` and install it with pip (no cache), copy the rest, document port 8000, and start `uvicorn main:app` on host `0.0.0.0`, port `8000`, in exec form.
+---solution
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+:::
+
+:::exercise
+id: proj-dk-04-run-tests
+level: 3
+title: "Project 4b: run the tests in the image"
+compare: verify
+cwd: /home/student/taskboard
+setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile
+---
+Build the image as `taskboard:dev` from `~/taskboard`, then run a **throwaway** container from it that lists the `/app/tests` directory instead of starting the server (override the command).
+---verify
+docker images --format '{{.Repository}}:{{.Tag}}' | grep taskboard
+docker run --rm taskboard:dev ls /app/tests
+---solution
+docker build -t taskboard:dev .
+docker run --rm taskboard:dev ls /app/tests
 :::

@@ -4,6 +4,9 @@ title: Containers & images
 summary: What problem Docker solves, how containers differ from virtual machines, images vs containers, registries and image names, and your first docker run.
 minutes: 25
 ---
+> [!project] Track project: shipping Taskboard
+> In the FastAPI track you built **Taskboard**, a task-tracking API. A copy lives in `~/taskboard` here: `main.py`, `requirements.txt`, tests, and a `.env` file with development secrets. Over this track you'll package it into an image, give it a PostgreSQL database, wire everything with Compose, and harden it for production. Each lesson's **Project** exercises run in the Docker simulator, so you'll see real output.
+
 ## "Works on my machine"
 
 An application never runs alone. It needs a specific language runtime, libraries at specific versions, system packages, config files and environment variables. Differences between your laptop, a teammate's laptop, CI and production are where bugs hide.
@@ -91,6 +94,37 @@ Every `docker run` created a *new* container; stopped ones stick around (`docker
 ```
 
 The `docker` command is only a client. The daemon does the work: it stores images, manages containers, networks and volumes. That's why `docker ps` can show containers you didn't start from this terminal.
+
+## Worked example: what problem is Docker solving for Taskboard?
+
+Without containers, running Taskboard on a new machine means:
+
+1. installing the right Python version (3.12, not the 3.9 the server came with),
+2. creating a virtualenv and installing exact dependency versions,
+3. installing and configuring PostgreSQL,
+4. setting environment variables,
+5. hoping the OS packages match your laptop's.
+
+Each step is a chance for "works on my machine". With Docker, steps 1–2 and 4 are captured in an **image** that's identical everywhere, and step 3 is `docker run postgres:16`. A new teammate runs one command.
+
+```bash run
+ls -a taskboard
+docker run --rm python:3.12-slim python --version
+```
+
+That second command downloaded (pulled) a Python image, started a container from it, ran `python --version` inside, printed the result and deleted the container (`--rm`). Your machine's own Python wasn't involved at all.
+
+> [!plain] In plain English
+> An **image** is a frozen package: an operating-system filesystem plus your app and its dependencies. A **container** is a running copy of an image, isolated from other processes. One image can run as many containers.
+
+## Containers are not tiny VMs
+
+A VM boots a whole operating system with its own kernel. A container is just a **process** on the host, with its own view of the filesystem, network and process list. That's why containers start in milliseconds and you can run dozens on a laptop, and also why a Linux container needs a Linux kernel (Docker Desktop runs a small Linux VM for you on macOS and Windows).
+
+## Common mistakes
+
+> [!mistake] Thinking containers persist changes
+> Anything a container writes to its own filesystem disappears when the container is removed. Data you care about goes in **volumes** (lesson 6).
 
 :::quiz
 q: What does a container share with its host that a virtual machine does not?
@@ -273,4 +307,24 @@ title: Replace the default command
 The `python:3.12-slim` image's default command starts a Python REPL. Run it so that instead it prints the Python version with `python3 --version`, removing the container afterwards.
 ---solution
 docker run --rm python:3.12-slim python3 --version
+:::
+
+:::exercise
+id: proj-dk-01-python
+level: 1
+title: "Project 1: which Python will Taskboard get?"
+---
+Taskboard needs Python 3.12. Run a **throwaway** container from `python:3.12-slim` that prints the Python version.
+---solution
+docker run --rm python:3.12-slim python --version
+:::
+
+:::exercise
+id: proj-dk-01-explore
+level: 2
+title: "Project 1b: look inside the base image"
+---
+Run a throwaway `python:3.12-slim` container that lists the contents of `/usr/local/bin` (where Python and pip are installed).
+---solution
+docker run --rm python:3.12-slim ls /usr/local/bin
 :::

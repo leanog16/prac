@@ -4,6 +4,9 @@ title: Boss round: troubleshooting
 summary: Realistic broken setups to diagnose and fix — port clashes, containers that won't stay up, unreachable apps, bloated images, slow builds, leaked secrets, services that can't find each other.
 minutes: 60
 ---
+> [!project] Taskboard, final step: incident drills
+> The team inherits a broken Taskboard setup. Each project exercise below is a realistic failure; diagnose it with the playbook, fix it, and prove the fix with output.
+
 ## A troubleshooting playbook
 
 When something's wrong, work from the outside in:
@@ -22,6 +25,17 @@ When something's wrong, work from the outside in:
 | `unable to find user` | `docker inspect -f '{{.Config.User}}'` | `USER` set to a user that was never created |
 
 Each exercise below is set up broken. Diagnose first; the hints point at the right command.
+
+## Worked example: diagnosing "the API is down"
+
+Symptom: `curl localhost:8000/health` → `Connection refused`.
+
+1. **Is the container running?** `docker ps` doesn't list `api`. → It exited.
+2. **Why?** `docker ps -a` shows `Exited (1)`; `docker logs api` shows `Error loading ASGI app. Could not import module "app"`.
+3. **Root cause**: the Dockerfile's `CMD` says `uvicorn app:app`, but the module is `main.py`.
+4. **Fix and verify**: correct the CMD, rebuild, rerun, curl again.
+
+Write the four steps down every time: **observe → hypothesize → confirm → fix and verify**. Jumping straight to "fix" usually means changing three things at once and not knowing which one mattered.
 
 :::exercise
 id: db-port-clash
@@ -303,4 +317,94 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 HEALTHCHECK CMD curl -f http://localhost:8000/health || exit 1
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+:::
+
+:::exercise
+id: proj-dk-12-wrong-module
+level: 4
+title: "Project 12: the API that won't start"
+mode: file
+file: Dockerfile
+cwd: /home/student/taskboard
+---run
+docker build -q -t taskboard . >/dev/null
+docker run -d --name api -p 8000:8000 taskboard >/dev/null
+curl -s localhost:8000/health; echo
+---
+This Dockerfile builds, but the container exits immediately and nothing answers on port 8000. Find **both** bugs (check `docker logs` after running it) and fix them.
+---starter
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+CMD ["uvicorn", "app:app", "--port", "8000"]
+---hint
+The module is `main.py`. And who can connect to a server bound to 127.0.0.1 inside a container?
+---solution
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+:::
+
+:::exercise
+id: proj-dk-12-db-host
+level: 4
+title: "Project 12b: the API can't find the database"
+mode: file
+file: compose.yaml
+cwd: /home/student/taskboard
+setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile
+---run
+docker compose up -d >/dev/null 2>&1
+docker exec taskboard-api-1 printenv DATABASE_URL
+docker compose ps --format '{{.Service}} {{.Ports}}' | sort
+---
+The compose file below connects the API to `localhost:5432` and publishes the database to the world. Fix it: the API must use the **db service name** in its URL, and `db` must **not** publish any port.
+---starter
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:devpass@localhost:5432/postgres
+  db:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: devpass
+---solution
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:devpass@db:5432/postgres
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: devpass
+:::
+
+:::exercise
+id: proj-dk-12-leak
+level: 3
+title: "Project 12c: the leaked secret"
+compare: verify
+cwd: /home/student/taskboard
+setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile
+---
+A security scan found `SECRET_KEY` inside the published Taskboard image. Add `.env` to a `.dockerignore` in `~/taskboard` (create the file), rebuild as `taskboard:fixed`, and confirm the file is gone by listing `/app` (with hidden files) in a throwaway container.
+---verify
+docker run --rm taskboard:fixed ls -a /app
+---solution
+echo ".env" > .dockerignore
+docker build -t taskboard:fixed .
+docker run --rm taskboard:fixed ls -a /app
 :::

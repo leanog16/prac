@@ -4,6 +4,9 @@ title: Compose for real projects
 summary: Override files and -f stacking, profiles for optional services, secrets as files, resource limits and hardening in Compose, reaching the host with host.docker.internal, compose watch for live development, and one Compose file across dev, CI and prod.
 minutes: 35
 ---
+> [!project] Taskboard, step 11: dev, CI and prod from one Compose setup
+> Taskboard's `compose.yaml` becomes the shared base. A `compose.override.yaml` adds live reload and an admin UI for developers; a `compose.prod.yaml` adds limits and secrets for the server.
+
 ## One app, several environments
 
 A real project runs the same services in different shapes: on your laptop with live-reload and a debug UI, in CI with a throwaway database, and in production with limits, secrets and no source mounts. Copying `compose.yaml` three times means three files drifting apart. Compose has better tools: **override files**, **profiles** and **variables**.
@@ -182,6 +185,78 @@ Pair `sync` with a dev server that reloads by itself (`uvicorn --reload`, `sprin
 | `docker compose pull && docker compose up -d` | update to newer image tags |
 | `docker compose down -v` | stop and delete containers, networks **and named volumes** (careful) |
 | `docker compose ps --format json` | machine-readable status for scripts |
+
+## Worked example: splitting Taskboard's Compose files
+
+```yaml title=compose.yaml (base: true everywhere)
+services:
+  api:
+    image: ghcr.io/acme/taskboard:${TAG:-dev}
+    environment:
+      DATABASE_URL: postgresql://postgres:devpass@db:5432/postgres
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:16
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+volumes:
+  pgdata:
+```
+
+```yaml title=compose.override.yaml (developers, loaded automatically)
+services:
+  api:
+    build: .
+    ports: ["8000:8000"]
+    volumes: ["./:/app"]
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+  db:
+    environment:
+      POSTGRES_PASSWORD: devpass
+  adminer:
+    image: adminer
+    ports: ["8081:8080"]
+    profiles: [debug]
+```
+
+```yaml title=compose.prod.yaml (server: -f compose.yaml -f compose.prod.yaml)
+services:
+  api:
+    ports: ["127.0.0.1:8000:8000"]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 384M }
+  db:
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password]
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+```
+
+| Who | Runs | Gets |
+|---|---|---|
+| developer | `docker compose up` | build from source, live reload, dev password |
+| developer debugging | `docker compose --profile debug up` | plus Adminer on :8081 |
+| server | `TAG=1.0.0 docker compose -f compose.yaml -f compose.prod.yaml up -d` | pinned image, limits, secret file, localhost-only port behind a reverse proxy |
+
+> [!plain] In plain English
+> The base file says what Taskboard **is**; each extra file says how it runs **in one place**. Compose merges them in order, later files winning.
+
+## Common mistakes
+
+> [!mistake] Committing the secrets file
+> `secrets/db_password.txt` belongs in `.gitignore`. Commit an example (`db_password.txt.example`) and document how to create the real one.
 
 :::quiz
 q: `compose.yaml` sets `LOG_LEVEL: info` and `compose.override.yaml` sets `LOG_LEVEL: debug` for the same service. Which applies after `docker compose up`?
@@ -428,4 +503,90 @@ docker compose run --rm api pytest
 docker compose run --rm api pytest
 ---explain
 `run` creates a new container for the service (and removes it with `--rm`); `exec` would run inside the existing one.
+:::
+
+:::exercise
+id: proj-dk-11-override
+level: 3
+title: "Project 11: the developer override"
+mode: file
+file: compose.override.yaml
+cwd: /home/student/taskboard
+setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile && printf 'services:\n  api:\n    build: .\n  db:\n    image: postgres:16\n' > compose.yaml
+---run
+docker compose up -d >/dev/null 2>&1
+docker compose ps --format '{{.Service}} {{.Ports}}' | sort
+docker exec taskboard-db-1 printenv POSTGRES_PASSWORD
+docker inspect -f '{{range .Mounts}}{{.Destination}}{{end}}' taskboard-api-1
+---
+`compose.yaml` defines `api` (built from `.`) and `db` (postgres:16) with nothing else. Write `compose.override.yaml` that, for development, publishes `api` on port **8000**, bind-mounts the current directory at `/app`, and sets `POSTGRES_PASSWORD: devpass` on `db`.
+---solution
+services:
+  api:
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/app
+  db:
+    environment:
+      POSTGRES_PASSWORD: devpass
+:::
+
+:::exercise
+id: proj-dk-11-prod
+level: 4
+title: "Project 11b: the production file"
+mode: code
+lang: yaml
+file: compose.prod.yaml
+---
+Write `compose.prod.yaml`: `api` publishes **only on localhost** (`127.0.0.1:8000:8000`), restarts `unless-stopped`, has a read-only filesystem with a tmpfs at `/tmp`, and is limited to `1` CPU and `384M` with `deploy.resources.limits`; `db` gets `POSTGRES_PASSWORD_FILE: /run/secrets/db_password` and the secret `db_password`, defined at the top level from `./secrets/db_password.txt`.
+---starter
+services:
+---rule
+["']?127\.0\.0\.1:8000:8000["']?
+Port bound to localhost only
+---rule
+restart:\s*unless-stopped
+`restart: unless-stopped`
+---rule
+read_only:\s*true
+`read_only: true`
+---rule
+tmpfs:\s*(\[\s*/tmp\s*\]|\n\s+-\s*/tmp)
+tmpfs at `/tmp`
+---rule
+deploy:\s*\n\s+resources:\s*\n\s+limits:\s*(\n\s+cpus:\s*["']?1["']?\s*\n\s+memory:\s*384M|\n\s+memory:\s*384M\s*\n\s+cpus:\s*["']?1["']?|\{\s*cpus:\s*["']?1["']?\s*,\s*memory:\s*384M\s*\})
+Limits: 1 CPU, 384M
+---rule
+POSTGRES_PASSWORD_FILE:\s*/run/secrets/db_password
+`POSTGRES_PASSWORD_FILE`
+---rule
+secrets:\s*(\[\s*db_password\s*\]|\n\s+-\s*db_password)
+`db` uses the secret
+---rule
+^secrets:\s*\n\s+db_password:\s*\n\s+file:\s*\./secrets/db_password\.txt
+Top-level secret from the file
+---solution
+services:
+  api:
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 384M
+  db:
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
 :::

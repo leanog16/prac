@@ -858,17 +858,18 @@
   function envObj(sh) { const o = {}; for (const m of sh.scopes) for (const [k, e] of m) if (typeof e.v === 'string') o[k] = e.v; return o; }
   // uvicorn main:app --host 0.0.0.0 --port 8000
   function uvicornServer(args, sh, defHost) {
-    let target = null, host = defHost || '127.0.0.1', port = 8000;
+    let target = null, host = defHost || '127.0.0.1', port = 8000, reload = false;
     for (let i = 0; i < args.length; i++) {
       const a = args[i];
       if (a === '--host') host = args[++i];
       else if (a.startsWith('--host=')) host = a.slice(7);
       else if (a === '--port') port = parseInt(args[++i], 10);
       else if (a.startsWith('--port=')) port = parseInt(a.slice(7), 10);
-      else if (a === '--reload' || a === '--workers' || a === '--proxy-headers') { if (a === '--workers') i++; }
+      else if (a === '--reload') reload = true;
+      else if (a === '--workers' || a === '--proxy-headers') { if (a === '--workers') i++; }
       else if (!a.startsWith('-') && !target) target = a;
     }
-    return { target, host, port };
+    return { target, host, port, reload };
   }
   function fastapiFromTarget(sh, target) {
     if (!target) return { error: 'Error: Missing argument \'APP\'.' };
@@ -890,6 +891,11 @@
     const app = fastapiFromTarget(sh, u.target);
     if (app.error) { io.err(app.error + '\n'); return 1; }
     const srv = { kind: 'fastapi', host: u.host, port: u.port, routes: app.routes };
+    if (u.reload) {
+      // --reload: pick up source edits (e.g. through a bind mount) on the next request
+      let cached = app.routes;
+      Object.defineProperty(srv, 'routes', { enumerable: true, get() { const fresh = fastapiFromTarget(sh, u.target); if (fresh.routes) cached = fresh.routes; return cached; } });
+    }
     if (sh.container) return { server: srv };
     const d = daemonOf(sh);
     if (d.hostServers.find(s => s.port === u.port)) { io.err(`ERROR:    [Errno 98] error while attempting to bind on address ('${u.host}', ${u.port}): address already in use\n`); return 1; }

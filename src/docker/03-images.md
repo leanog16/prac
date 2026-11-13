@@ -4,6 +4,9 @@ title: Images, layers & tags
 summary: What an image is made of, layers and sharing, tags vs digests, choosing base image variants, tagging, removing and pruning images, and pushing to a registry.
 minutes: 25
 ---
+> [!project] Taskboard, step 3: choosing a base image
+> Taskboard's image will start `FROM` some Python image. Which one matters: it decides the image size, the number of security vulnerabilities, and how fast deployments are.
+
 ## An image is a stack of layers
 
 An image is an ordered stack of read-only **layers**. Each layer records filesystem changes: files added, modified or deleted. When a container starts, Docker stacks the image's layers and adds a thin **writable layer** on top (a union filesystem, usually overlay2).
@@ -90,6 +93,45 @@ docker push yourname/myapp:1.0
 ```
 
 Anyone can then `docker pull yourname/myapp:1.0` (for a public repository).
+
+## Worked example: comparing candidate bases
+
+```bash run
+docker pull python:3.12
+docker pull python:3.12-slim
+docker pull python:3.12-alpine
+docker images python
+```
+
+| Tag | Based on | Typical size | Trade-off |
+|---|---|---|---|
+| `python:3.12` | Debian, full | ~1 GB | compilers and headers included: easiest builds, biggest attack surface |
+| `python:3.12-slim` | Debian, minimal | ~130 MB | good default; add build tools only in a build stage |
+| `python:3.12-alpine` | Alpine (musl libc) | ~50 MB | smallest, but many Python wheels don't support musl and must compile from source (slow, sometimes broken) |
+
+For Taskboard, **`python:3.12-slim`** is the right default.
+
+## Tags are moving labels
+
+`python:3.12-slim` today isn't the same image as next month: it's rebuilt for security patches and 3.12.x releases. That's good for patching, bad for reproducibility. For fully reproducible builds, pin a **digest**:
+
+```dockerfile
+FROM python:3.12-slim@sha256:<digest>
+```
+
+…and let a bot (Dependabot, Renovate) open a PR when a new digest appears. Never use `:latest` for anything you deploy: you can't tell what you're running.
+
+> [!plain] In plain English
+> A **tag** is a nickname that can be moved to a new image. A **digest** (`sha256:…`) is a fingerprint of exact content and never changes.
+
+## Naming your own images
+
+`registry/namespace/name:tag`, e.g. `ghcr.io/acme/taskboard:1.4.2`. Without a registry part, Docker assumes Docker Hub. You'll tag Taskboard with both a version and the git commit, so every deployment is traceable.
+
+## Common mistakes
+
+> [!mistake] Deleting an image a container still uses
+> `docker rmi` refuses while any container (even stopped) references the image. `docker ps -a --filter ancestor=IMAGE` shows which.
 
 :::quiz
 q: Ten images are built FROM python:3.12-slim. How many copies of the base layers are stored?
@@ -278,4 +320,32 @@ setup: cd ~/hello && printf 'FROM alpine\nCOPY app.py .\n' > Dockerfile && docke
 `docker images --filter dangling=true -q` lists them; count the lines.
 ---solution
 docker images --filter dangling=true -q | wc -l
+:::
+
+:::exercise
+id: proj-dk-03-tags
+level: 2
+title: "Project 3: name the image"
+compare: verify
+setup: docker pull python:3.12-slim >/dev/null 2>&1
+---
+Give the `python:3.12-slim` image two extra names: `taskboard-base:latest` and `ghcr.io/acme/taskboard-base:3.12`.
+---verify
+docker images --format '{{.Repository}}:{{.Tag}}' | sort
+---solution
+docker tag python:3.12-slim taskboard-base:latest
+docker tag python:3.12-slim ghcr.io/acme/taskboard-base:3.12
+:::
+
+:::exercise
+id: proj-dk-03-choose
+level: 2
+title: "Project 3b: pick the base"
+mode: answer
+---
+Taskboard depends on several libraries that ship pre-built Linux wheels for glibc, and the team wants a small image without compiling anything. Which tag should the Dockerfile start from: `python:3.12`, `python:3.12-slim` or `python:3.12-alpine`?
+---answer
+python:3.12-slim
+---solution
+python:3.12-slim
 :::

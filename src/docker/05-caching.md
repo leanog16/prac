@@ -4,6 +4,9 @@ title: Build cache, .dockerignore & multi-stage
 summary: How the layer cache decides what to rebuild, ordering instructions for fast builds, keeping the build context lean and secret-free, shrinking layers, and multi-stage builds.
 minutes: 35
 ---
+> [!project] Taskboard, step 5: fast, clean builds
+> Two problems with the first Dockerfile: the image contains `.env` with the secret key, and editing one line of `main.py` could reinstall every dependency. A `.dockerignore` and good layer order fix both.
+
 ## The cache rule
 
 For each instruction, BuildKit computes a cache key from:
@@ -126,6 +129,47 @@ The final image contains a JRE and one jar: no Maven, no JDK, no source, no 80 M
 
 > [!tip] Inspect what you built
 > `docker history IMAGE` lists each layer with its size and the instruction that created it: the fastest way to find what's bloating an image.
+
+## Worked example: proving the secret leak, then fixing it
+
+```bash
+docker run --rm taskboard:dev cat /app/.env
+# SECRET_KEY=dev-only-change-me     ← anyone who can pull the image can read this
+```
+
+Anything in the build context that `COPY . .` picks up ends up in the image **forever**, even if a later step deletes it (it's still in the earlier layer). Exclude it at the source:
+
+```text title=taskboard/.dockerignore
+.env
+.git
+.venv
+__pycache__
+*.pyc
+tests
+README.md
+```
+
+Whether to ship `tests/` in the runtime image is a judgment call: excluding them makes the image smaller and keeps the production image minimal; including them lets you run tests inside the image in CI. Many teams use a separate test stage instead.
+
+## Worked example: watching the cache work
+
+Docker caches each instruction's result. A step is reused only if the instruction **and everything before it** is unchanged, and for `COPY`, if the copied files are unchanged.
+
+```dockerfile
+COPY requirements.txt .          # changes rarely   → cached most builds
+RUN pip install -r requirements.txt   # reused while requirements.txt is unchanged
+COPY . .                         # changes every edit → only this and later steps rerun
+```
+
+Swap the order (`COPY . .` first) and every code edit invalidates the `pip install` layer: a 2-second rebuild becomes 2 minutes. **Order from least to most frequently changing.**
+
+> [!plain] In plain English
+> Each Dockerfile instruction makes a layer. Docker reuses layers from last time until it hits the first line whose inputs changed; from there on, everything is rebuilt.
+
+## Common mistakes
+
+> [!mistake] Deleting secrets in a later layer
+> `COPY . .` followed by `RUN rm .env` doesn't remove the secret: it's still in the `COPY` layer, readable with `docker save` or `docker history`. Don't copy it in the first place.
 
 :::quiz
 q: A Dockerfile copies the whole project (`COPY . .`) and then runs `pip install -r requirements.txt`. You edit one line of main.py. What reruns?
@@ -361,4 +405,56 @@ Find the first miss; everything after it rebuilds.
 5
 ---explain
 `WORKDIR` is cached; `COPY package.json .` misses, and the 4 steps after it rebuild too: 5 in total.
+:::
+
+:::exercise
+id: proj-dk-05-ignore
+level: 2
+title: "Project 5: keep secrets out"
+mode: file
+file: .dockerignore
+cwd: /home/student/taskboard
+setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile
+---run
+docker build -q -t taskboard . >/dev/null
+docker run --rm taskboard ls -a /app
+---
+Write `~/taskboard/.dockerignore` so the image no longer contains `.env`, the `tests` folder or `README.md`.
+---solution
+.env
+tests
+README.md
+:::
+
+:::exercise
+id: proj-dk-05-order
+level: 3
+title: "Project 5b: fix the cache order"
+mode: code
+lang: dockerfile
+file: Dockerfile
+---
+Every edit to `main.py` reinstalls all dependencies. Reorder the Dockerfile so dependencies are installed **before** the source code is copied.
+---starter
+FROM python:3.12-slim
+WORKDIR /app
+COPY . .
+RUN pip install --no-cache-dir -r requirements.txt
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+---rule
+COPY\s+requirements\.txt\s+\.\s*\n\s*RUN\s+pip\s+install
+Copy `requirements.txt` alone, then install
+---rule
+RUN\s+pip\s+install[^\n]*\n\s*COPY\s+\.\s+\.
+Copy the source **after** installing
+---rule
+^CMD\s+\[\s*"uvicorn"
+Same CMD
+---solution
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 :::

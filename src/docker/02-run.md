@@ -4,6 +4,9 @@ title: Running & managing containers
 summary: Detached containers, names, publishing ports, environment variables, logs, exec, the container lifecycle, inspect, and why containers exit immediately.
 minutes: 35
 ---
+> [!project] Taskboard, step 2: a database to talk to
+> Before packaging the API itself, Taskboard needs PostgreSQL. Running the database in a container is the most common first use of Docker: no installer, no system service, and `docker rm -f` removes every trace.
+
 ## docker run, the most important command
 
 ```
@@ -112,6 +115,51 @@ docker run --rm -e GREETING=Howdy alpine sh -c 'echo "$GREETING from $HOSTNAME"'
 ```
 
 Single quotes matter there: they stop **your** shell from expanding `$GREETING` before Docker ever sees it, so the shell *inside the container* does the expansion.
+
+## Worked example: anatomy of a real `docker run`
+
+```bash
+docker run -d \
+  --name taskboard-db \
+  -e POSTGRES_USER=taskboard \
+  -e POSTGRES_PASSWORD=devpass \
+  -e POSTGRES_DB=taskboard \
+  -p 5432:5432 \
+  postgres:16
+```
+
+| Part | Means |
+|---|---|
+| `-d` | detached: run in the background and print the container ID |
+| `--name taskboard-db` | a name you can use instead of the ID |
+| `-e KEY=value` | environment variables: how most images are configured |
+| `-p 5432:5432` | publish: host port 5432 → container port 5432 |
+| `postgres:16` | the image and tag; **everything after it** is the command for the container |
+
+Then check on it:
+
+```bash run
+docker run -d --name taskboard-db -e POSTGRES_PASSWORD=devpass -e POSTGRES_DB=taskboard postgres:16
+docker ps
+docker logs taskboard-db | tail -3
+```
+
+`docker logs` is the first command to run whenever a container misbehaves: it shows what the main process printed.
+
+> [!plain] In plain English
+> `docker run` = create a container from an image and start it. Options before the image name configure the container; anything after the image name replaces its default command.
+
+## How do you know which variables an image needs?
+
+Read the image's page on Docker Hub. Official images document their variables (`POSTGRES_PASSWORD` is **required** for `postgres`; without it the container exits immediately with an error in its logs). That's the most common reason a database container "won't start".
+
+## Common mistakes
+
+> [!mistake] Options after the image name
+> `docker run postgres:16 -e POSTGRES_PASSWORD=x` passes `-e …` to **postgres**, not to Docker. Options go before the image.
+
+> [!mistake] Name already in use
+> Container names are unique. Re-running the same `docker run --name taskboard-db …` fails until you `docker rm -f taskboard-db`.
 
 :::quiz
 q: `docker run -p 3000:8080 myapp` — which URL reaches the app from your laptop?
@@ -332,4 +380,36 @@ title: Several variables at once
 Run a throwaway `alpine` container with `APP_ENV=staging` and `APP_PORT=9000`, printing `staging on 9000` via `sh -c`.
 ---solution
 docker run --rm -e APP_ENV=staging -e APP_PORT=9000 alpine sh -c 'echo "$APP_ENV on $APP_PORT"'
+:::
+
+:::exercise
+id: proj-dk-02-db
+level: 2
+title: "Project 2: Taskboard's database"
+compare: verify
+---
+Start PostgreSQL 16 in the background as `taskboard-db`, with user `taskboard`, password `devpass`, database `taskboard`, published on host port **5432**.
+---verify
+docker ps --format '{{.Names}} {{.Ports}}'
+docker inspect -f '{{.Config.Env}}' taskboard-db | tr -d '[]' | tr ' ' '\n' | grep POSTGRES_ | sort
+---solution
+docker run -d --name taskboard-db -e POSTGRES_USER=taskboard -e POSTGRES_PASSWORD=devpass -e POSTGRES_DB=taskboard -p 5432:5432 postgres:16
+:::
+
+:::exercise
+id: proj-dk-02-fix
+level: 2
+title: "Project 2b: the database that exits"
+compare: verify
+setup: docker run -d --name taskboard-db postgres:16 >/dev/null 2>&1
+---
+Someone started `taskboard-db` without a password, and it exited. Read its logs to confirm, remove it, and start it again correctly in the background with `POSTGRES_PASSWORD=devpass`.
+---hint
+`docker logs taskboard-db`, then `docker rm taskboard-db`.
+---verify
+docker ps --format '{{.Names}} {{.Status}}' | cut -d' ' -f1,2
+---solution
+docker logs taskboard-db
+docker rm taskboard-db
+docker run -d --name taskboard-db -e POSTGRES_PASSWORD=devpass postgres:16
 :::

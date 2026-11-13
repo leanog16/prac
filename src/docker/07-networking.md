@@ -4,6 +4,9 @@ title: Networking
 summary: Publishing ports in depth, why localhost inside a container isn't your machine, the 0.0.0.0 binding rule, user-defined networks with DNS by container name, and connecting containers.
 minutes: 30
 ---
+> [!project] Taskboard, step 7: API and database on one network
+> Taskboard's API must reach PostgreSQL, but the database should **not** be reachable from outside. A user-defined network gives containers private DNS names, so only the API is published to the host.
+
 ## Each container has its own network stack
 
 A container gets its own network namespace: its own interfaces, its own IP address on a Docker network, its own `localhost`. Two consequences trip up everyone at least once:
@@ -85,6 +88,43 @@ docker exec proxy curl -s http://api:8000/items/7
 ```
 
 Note `http://api:8000`: the **container** port, by **container name**, with no `-p` anywhere. Nothing was published to the host at all.
+
+## Worked example: drawing the topology first
+
+```
+                host machine
+  curl localhost:8000          (no port 5432 published)
+            │
+     ┌──────▼──────────────── network: taskboard-net ────────────┐
+     │  container "api"  ──── postgresql://taskboard-db:5432 ──► container "taskboard-db" │
+     │  port 8000 published                                       port 5432 internal only │
+     └────────────────────────────────────────────────────────────┘
+```
+
+Two rules make this work:
+
+1. Containers on the same **user-defined** network resolve each other **by container name** (Docker runs a small DNS server for them). The default `bridge` network doesn't do this.
+2. Container-to-container traffic uses the **container port** (5432), never a published host port. Publishing is only for traffic coming from **outside** Docker.
+
+```bash
+docker network create taskboard-net
+docker run -d --name taskboard-db --network taskboard-net -e POSTGRES_PASSWORD=devpass postgres:16
+docker run -d --name api --network taskboard-net -p 8000:8000 \
+  -e DATABASE_URL=postgresql://postgres:devpass@taskboard-db:5432/postgres taskboard:dev
+```
+
+The database URL's host is `taskboard-db`, the container name. In the FastAPI track the URL came from `settings.database_url`, so the same image works on a laptop and in production just by changing an environment variable.
+
+> [!plain] In plain English
+> A Docker network is a private LAN for containers. Containers on it can call each other by name; the outside world only reaches the ports you explicitly publish with `-p`.
+
+## Common mistakes
+
+> [!mistake] `localhost` inside a container
+> Inside the API container, `localhost` is the API container itself, not the database and not your laptop. Use the other container's name.
+
+> [!mistake] Publishing the database "to make it work"
+> `-p 5432:5432` on production databases exposes them to anything that can reach the host. Keep databases internal; use `docker exec` or a temporary tunnel for admin access.
 
 :::quiz
 q: Inside container A, what does `curl http://localhost:5432` reach?
@@ -276,4 +316,36 @@ mode: answer
 5432
 ---solution
 5432
+:::
+
+:::exercise
+id: proj-dk-07-network
+level: 3
+title: "Project 7: a private network"
+compare: verify
+cwd: /home/student/taskboard
+setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile && docker build -q -t taskboard:dev . >/dev/null 2>&1
+---
+Create the network `taskboard-net`. On it, start `taskboard-db` (postgres:16, password `devpass`) **without** publishing any port, and `api` from `taskboard:dev` published on host port **8000**, with `DATABASE_URL=postgresql://postgres:devpass@taskboard-db:5432/postgres`.
+---verify
+docker ps --format '{{.Names}} {{.Ports}}' | sort
+docker network inspect -f '{{range .Containers}}{{.Name}} {{end}}' taskboard-net | tr ' ' '\n' | sort | grep .
+curl -s localhost:8000/health
+---solution
+docker network create taskboard-net
+docker run -d --name taskboard-db --network taskboard-net -e POSTGRES_PASSWORD=devpass postgres:16
+docker run -d --name api --network taskboard-net -p 8000:8000 -e DATABASE_URL=postgresql://postgres:devpass@taskboard-db:5432/postgres taskboard:dev
+:::
+
+:::exercise
+id: proj-dk-07-internal-call
+level: 3
+title: "Project 7b: call the API from inside"
+cwd: /home/student/taskboard
+setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile && docker build -q -t taskboard:dev . >/dev/null 2>&1 && docker network create taskboard-net >/dev/null && docker run -d --name api --network taskboard-net taskboard:dev >/dev/null
+---
+`api` runs on `taskboard-net` with **no** published port. Start an `nginx` container named `proxy` on the same network, then from inside `proxy` request `http://api:8000/tasks` silently with curl.
+---solution
+docker run -d --name proxy --network taskboard-net nginx
+docker exec proxy curl -s http://api:8000/tasks
 :::

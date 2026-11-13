@@ -4,6 +4,9 @@ title: Production images for FastAPI & Spring
 summary: Putting it together for real services — pinned bases, dependency caching, non-root users, healthchecks, configuration through environment variables, profiles, and composing apps with databases.
 minutes: 35
 ---
+> [!project] Taskboard, step 9: the production image
+> The development image works, but it runs as root, has no healthcheck and carries whatever the build left behind. This step writes the image you'd actually ship.
+
 ## A production checklist
 
 | Practice | Why |
@@ -108,6 +111,52 @@ services:
 volumes:
   pgdata:
 ```
+
+## Worked example: from dev image to production image
+
+```dockerfile title=taskboard/Dockerfile
+# ---- build stage: compile wheels with full tooling ----
+FROM python:3.12-slim AS build
+WORKDIR /build
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+COPY requirements.txt .
+RUN pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
+
+# ---- runtime stage: only what's needed to run ----
+FROM python:3.12-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY --from=build /wheels /wheels
+RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
+COPY . .
+RUN useradd --create-home --uid 10001 app
+USER app
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=3s \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--proxy-headers"]
+```
+
+What each improvement buys:
+
+| Change | Benefit |
+|---|---|
+| multi-stage build | compilers stay in the build stage; the runtime image is smaller with fewer CVEs |
+| `PYTHONUNBUFFERED=1` | logs appear immediately in `docker logs` instead of being buffered |
+| non-root `USER app` | a compromised app can't modify system files or easily escalate |
+| `HEALTHCHECK` | `docker ps` shows `healthy`/`unhealthy`; orchestrators can replace broken containers |
+| `--workers 2 --proxy-headers` | uses more than one CPU core; correct client IPs behind a load balancer |
+
+The healthcheck uses Python's standard library because `curl` isn't installed in the slim image. Adding curl just for a healthcheck would grow the image and the attack surface.
+
+> [!plain] In plain English
+> A multi-stage Dockerfile is two recipes in one: the first builds things, the second copies only the finished results into a clean, small image.
+
+## Common mistakes
+
+> [!mistake] `USER` before files are in place
+> `USER app` followed by `RUN pip install` fails or installs into the wrong place, because the non-root user can't write to system directories. Install as root, then switch user near the end.
 
 :::quiz
 q: A container's HEALTHCHECK runs `curl -f http://localhost:8000/health` but the image has no curl. What does docker ps show?
@@ -313,4 +362,85 @@ the environment
 env
 ---solution
 environment
+:::
+
+:::exercise
+id: proj-dk-09-prod
+level: 4
+title: "Project 9: Taskboard's production Dockerfile"
+mode: file
+file: Dockerfile
+cwd: /home/student/taskboard
+---run
+docker build -q -t taskboard:prod . >/dev/null
+docker run -d --name api -p 8000:8000 taskboard:prod >/dev/null
+curl -s localhost:8000/health; echo
+docker inspect -f '{{.Config.User}} {{.Config.Env}}' api | grep -o 'app\|PYTHONUNBUFFERED=1' | sort -u
+docker inspect taskboard:prod | grep -c urllib
+---
+Write a production Dockerfile for `~/taskboard`: from `python:3.12-slim`; set `PYTHONUNBUFFERED=1`; work in `/app`; install `requirements.txt` with pip before copying the source; copy the source; create a user `app` with `useradd --create-home app` and switch to it; add a `HEALTHCHECK` that fetches `http://localhost:8000/health` with Python's `urllib`; start uvicorn on `0.0.0.0:8000` in exec form.
+---solution
+FROM python:3.12-slim
+ENV PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+RUN useradd --create-home app
+USER app
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=3s CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+:::
+
+:::exercise
+id: proj-dk-09-multistage
+level: 4
+title: "Project 9b: a multi-stage build"
+mode: code
+lang: dockerfile
+file: Dockerfile
+---
+Rewrite as a two-stage build: a `build` stage (`FROM python:3.12-slim AS build`) that runs `pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt`, and a runtime stage that copies `/wheels` **from the build stage**, installs them, and copies the app. Keep the non-root user.
+---starter
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+RUN useradd --create-home app
+USER app
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+---rule
+^FROM\s+python:3\.12-slim\s+AS\s+build
+A stage named `build`
+---rule
+pip\s+wheel\s+(?=[^\n]*--wheel-dir[ =]/wheels)(?=[^\n]*-r\s+requirements\.txt)
+`pip wheel --wheel-dir /wheels -r requirements.txt`
+---rule
+COPY\s+--from=build\s+/wheels\s+/wheels
+`COPY --from=build /wheels /wheels`
+---rule
+RUN\s+pip\s+install[^\n]*/wheels/\*
+Install from the wheels
+---rule
+(FROM[\s\S]*){2}
+Two stages
+---rule
+USER\s+app
+Non-root user
+---solution
+FROM python:3.12-slim AS build
+WORKDIR /build
+COPY requirements.txt .
+RUN pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
+
+FROM python:3.12-slim
+WORKDIR /app
+COPY --from=build /wheels /wheels
+RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
+COPY . .
+RUN useradd --create-home app
+USER app
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 :::

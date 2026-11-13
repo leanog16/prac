@@ -4,6 +4,9 @@ title: Docker Compose
 summary: Describing multi-container apps in compose.yaml — services, build vs image, ports, environment and .env files, volumes, networks and service DNS, depends_on — and the up/ps/logs/exec/down workflow.
 minutes: 40
 ---
+> [!project] Taskboard, step 8: one command to run everything
+> Steps 2–7 took a dozen `docker` commands to bring Taskboard up. Compose captures the network, volume, database and API in one `compose.yaml`, committed next to the code, so `docker compose up` is all a new teammate needs.
+
 ## Why Compose
 
 A real app is several containers: an API, a database, a cache, maybe a worker. Starting them with long `docker run` commands (network, volumes, env vars, ports, the right order) is error-prone. **Compose** describes the whole application in one YAML file and manages it as a unit.
@@ -123,6 +126,61 @@ services:
 ```
 
 Even then, apps should retry their database connection on startup.
+
+## Worked example: translating commands into compose.yaml
+
+| You typed | In compose.yaml |
+|---|---|
+| `docker network create taskboard-net` | nothing: Compose creates a project network automatically |
+| `docker run --name taskboard-db -e … -v taskboard-pgdata:… postgres:16` | `services.db` with `image`, `environment`, `volumes` |
+| `docker build -t taskboard:dev .` + `docker run -p 8000:8000 -e DATABASE_URL=…` | `services.api` with `build: .`, `ports`, `environment` |
+| `docker volume create taskboard-pgdata` | top-level `volumes: pgdata:` |
+
+```yaml title=taskboard/compose.yaml
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:devpass@db:5432/postgres
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: devpass
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 10
+volumes:
+  pgdata:
+```
+
+Service names (`api`, `db`) are the DNS names on the project network, so the database host in `DATABASE_URL` is now `db`.
+
+`depends_on` with `condition: service_healthy` makes Compose wait until PostgreSQL actually accepts connections, not just until its container started. Without it, the API often crashes on startup with "connection refused" while the database is still initializing.
+
+> [!plain] In plain English
+> Compose is a file that describes several containers and how they connect, plus a command (`docker compose up`) that creates them all in the right order.
+
+## The daily loop
+
+```bash
+docker compose up -d --build     # build what changed, start everything
+docker compose ps                # what's running
+docker compose logs -f api       # follow the API's logs
+docker compose down              # stop and remove containers + network (volume kept)
+```
+
+## Common mistakes
+
+> [!mistake] Tabs in YAML
+> YAML forbids tab indentation, and nesting is defined by spaces. A misaligned line silently attaches a key to the wrong parent. `docker compose config` shows how Compose actually read your file.
 
 :::quiz
 q: In a compose project in directory `shop`, what is the container name for service `web`?
@@ -414,4 +472,83 @@ A compose project with a `cache` service (Redis) is running. Using `docker compo
 ---solution
 docker compose exec cache redis-cli SET visits 41
 docker compose exec cache redis-cli INCR visits
+:::
+
+:::exercise
+id: proj-dk-08-compose
+level: 3
+title: "Project 8: compose.yaml for Taskboard"
+mode: file
+file: compose.yaml
+cwd: /home/student/taskboard
+setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile
+---run
+docker compose up -d >/dev/null 2>&1
+docker compose ps --format '{{.Service}} {{.Ports}}' | sort
+curl -s localhost:8000/health; echo
+docker volume ls --format '{{.Name}}'
+---
+Write `~/taskboard/compose.yaml` with two services: `api`, built from the current directory and published on port **8000**, with `DATABASE_URL: postgresql://postgres:devpass@db:5432/postgres`; and `db`, using `postgres:16` with `POSTGRES_PASSWORD: devpass` and its data in a named volume `pgdata` (declared at the top level).
+---solution
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:devpass@db:5432/postgres
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: devpass
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:
+:::
+
+:::exercise
+id: proj-dk-08-healthy
+level: 3
+title: "Project 8b: wait for a healthy database"
+mode: code
+lang: yaml
+file: compose.yaml
+---
+Make `api` wait until `db` is **healthy**, and give `db` a healthcheck that runs `pg_isready -U postgres` (CMD-SHELL form) every `5s`.
+---starter
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: devpass
+---rule
+depends_on:\s*\n\s+db:\s*\n\s+condition:\s*service_healthy
+`depends_on: db: condition: service_healthy`
+---rule
+healthcheck:\s*\n\s+test:\s*\[\s*["']CMD-SHELL["']\s*,\s*["']pg_isready -U postgres["']\s*\]
+The `pg_isready` healthcheck
+---rule
+interval:\s*5s
+`interval: 5s`
+---solution
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: devpass
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
 :::

@@ -4,6 +4,9 @@ title: Volumes & bind mounts
 summary: Why container filesystems are ephemeral, named volumes vs bind mounts, -v and --mount syntax, persisting a database, sharing data between containers, and live-editing with bind mounts.
 minutes: 30
 ---
+> [!project] Taskboard, step 6: data that survives
+> Taskboard's database container from step 2 stores its data inside the container, so removing it loses every task. This step gives it a named volume, and gives you a bind mount for live code editing.
+
 ## Container storage is disposable
 
 Files a container writes go into its **writable layer**, which is deleted with the container. That's a feature (containers are cattle, not pets) but it means **data you care about must live outside the container**.
@@ -73,6 +76,49 @@ curl -s localhost:8080 | grep '<h1>'
 
 > [!warn] Bind mounts hide what's in the image
 > Mounting over a directory replaces its contents in the container with the host directory's. Mount an empty host folder over `/app` and your copied-in code "disappears".
+
+## Worked example: proving data loss, then preventing it
+
+```bash
+docker run -d --name taskboard-db -e POSTGRES_PASSWORD=devpass postgres:16
+# … the app creates tasks …
+docker rm -f taskboard-db           # upgrade, mistake, or a new machine
+docker run -d --name taskboard-db -e POSTGRES_PASSWORD=devpass postgres:16
+# every task is gone: a brand-new, empty database
+```
+
+With a named volume mounted where PostgreSQL keeps its files:
+
+```bash run
+docker run -d --name taskboard-db -e POSTGRES_PASSWORD=devpass -v taskboard-pgdata:/var/lib/postgresql/data postgres:16
+docker rm -f taskboard-db
+docker run -d --name taskboard-db -e POSTGRES_PASSWORD=devpass -v taskboard-pgdata:/var/lib/postgresql/data postgres:16
+docker logs taskboard-db | grep -i skipping
+```
+
+The second container found existing data in the volume and **skipped initialization**: the tasks survived. Where does each database keep its data? It's in the image docs: `/var/lib/postgresql/data` for PostgreSQL, `/var/lib/mysql` for MySQL, `/data` for Redis.
+
+## Bind mounts for development
+
+While developing Taskboard, rebuilding the image for every code change is slow. Mount your source folder over `/app` instead, and let uvicorn reload on changes:
+
+```bash
+docker run -d --name api-dev -p 8000:8000 -v ./:/app taskboard:dev \
+  uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Edit `main.py` on your machine: the container sees the new file immediately through the mount, and `--reload` makes uvicorn restart with it. (Without `--reload`, the running process would keep serving the old code.)
+
+> [!plain] In plain English
+> A **named volume** is storage Docker manages for you (use it for databases). A **bind mount** maps a folder on your machine into the container (use it for source code during development).
+
+## Common mistakes
+
+> [!mistake] Bind-mounting over files the image needs
+> Mounting `./:/app` hides everything the image put in `/app`. If the image installed dependencies **into** `/app` (e.g. `node_modules`), they vanish. Install them elsewhere (like Python's site-packages) or protect them with an extra volume.
+
+> [!mistake] `docker compose down -v` in the wrong terminal
+> `-v` deletes named volumes: that's your development database. Know what the flag does before typing it.
 
 :::quiz
 q: Which survives `docker rm` of the container that used it?
@@ -254,4 +300,34 @@ zero
 0
 ---explain
 A bind mount replaces the directory's contents with the host directory's, so `/app` appears empty.
+:::
+
+:::exercise
+id: proj-dk-06-pgdata
+level: 2
+title: "Project 6: persistent tasks"
+compare: verify
+---
+Start `taskboard-db` (postgres:16, password `devpass`) with its data in a named volume `taskboard-pgdata`. Then simulate an upgrade: **remove** the container and start a new `taskboard-db` with the same volume.
+---verify
+docker volume ls --format '{{.Name}}'
+docker logs taskboard-db | grep -c 'Skipping initialization'
+---solution
+docker run -d --name taskboard-db -e POSTGRES_PASSWORD=devpass -v taskboard-pgdata:/var/lib/postgresql/data postgres:16
+docker rm -f taskboard-db
+docker run -d --name taskboard-db -e POSTGRES_PASSWORD=devpass -v taskboard-pgdata:/var/lib/postgresql/data postgres:16
+:::
+
+:::exercise
+id: proj-dk-06-dev-mount
+level: 3
+title: "Project 6b: live-edit the API"
+cwd: /home/student/taskboard
+setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile && docker build -q -t taskboard:dev . >/dev/null 2>&1
+---
+`taskboard:dev` is built. Run it in the background as `api-dev` on port 8000 with the current directory **bind-mounted** at `/app`, overriding the command to `uvicorn main:app --host 0.0.0.0 --port 8000 --reload` so code changes are picked up. Then change the health response on the host with `sed -i 's/"ok"/"live"/' main.py`, and curl `/health` to see the change without rebuilding.
+---solution
+docker run -d --name api-dev -p 8000:8000 -v ./:/app taskboard:dev uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+sed -i 's/"ok"/"live"/' main.py
+curl -s localhost:8000/health
 :::
