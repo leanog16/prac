@@ -4,6 +4,9 @@ title: Redirection & pipes
 summary: stdin, stdout and stderr; >, >>, <, 2>, 2>&1 and /dev/null; pipes that chain programs; tee; heredocs, here-strings and process substitution.
 minutes: 30
 ---
+> [!project] logwatch, step 5: saving reports
+> Results on screen disappear. In this lesson logwatch starts writing **report files**, appending sections, and keeping error messages separate from data.
+
 ## Three standard streams
 
 Every process starts with three open streams:
@@ -135,6 +138,53 @@ Every command returns an exit status: `0` for success, non-zero for failure. `$?
 grep -q ERROR logs/app.log; echo "status: $?"
 grep -q KITTENS logs/app.log; echo "status: $?"
 ```
+
+## Worked example: building a report file section by section
+
+```bash run
+mkdir -p reports
+echo "== errors ==" > reports/daily.txt
+grep ERROR logs/app.log >> reports/daily.txt
+echo "== warnings ==" >> reports/daily.txt
+grep -c WARN logs/app.log >> reports/daily.txt
+cat reports/daily.txt
+```
+
+The first line uses `>` to **start a fresh file**; every later line uses `>>` to **append**. Mixing them up is the classic way to end up with a report that only contains its last section.
+
+A cleaner way to write several lines at once is a **group**: redirect the output of the whole block once:
+
+```bash run
+mkdir -p reports
+{
+  echo "== errors =="
+  grep ERROR logs/app.log
+  echo "== warning count =="
+  grep -c WARN logs/app.log
+} > reports/daily.txt
+wc -l reports/daily.txt
+```
+
+## Separating errors from data
+
+Programs write results to **stdout** (1) and problems to **stderr** (2). Keep them apart so your report stays clean:
+
+```bash run
+mkdir -p reports
+grep ERROR logs/app.log logs/missing.log > reports/found.txt 2> reports/problems.txt
+cat reports/problems.txt
+```
+
+> [!plain] In plain English
+> `>` sends output into a file, `|` sends it into another command, `2>` handles error messages. They compose: `cmd 2>/dev/null | sort > out.txt`.
+
+## Common mistakes
+
+> [!mistake] Reading and writing the same file
+> `sort data.txt > data.txt` empties the file **before** `sort` reads it, so you lose everything. Write to a temporary file and `mv` it, or use `sort -o data.txt data.txt`.
+
+> [!mistake] Order of `2>&1`
+> `cmd > out.txt 2>&1` sends both streams to the file. `cmd 2>&1 > out.txt` sends stderr to the **terminal**, because redirections are processed left to right.
 
 :::quiz
 q: What does `cmd >> log.txt` do?
@@ -335,4 +385,35 @@ From `logs/access.log`, print the IP address (first field) that made the **most*
 `cut -d' ' -f1` extracts the IP. Then sort, count, sort by count, take one.
 ---solution
 cut -d' ' -f1 logs/access.log | sort | uniq -c | sort -rn | head -n 1
+:::
+
+:::exercise
+id: proj-bash-05-report
+level: 2
+title: "Project 5: the error report"
+compare: verify
+---
+Create `reports/errors.txt` (make the `reports` folder first) containing a first line `ERRORS`, followed by every line of `logs/app.log` that contains `ERROR`. Then **append** a line `WARNINGS` followed by every line containing `WARN`.
+---verify
+cat reports/errors.txt
+---solution
+mkdir -p reports
+echo "ERRORS" > reports/errors.txt
+grep ERROR logs/app.log >> reports/errors.txt
+echo "WARNINGS" >> reports/errors.txt
+grep WARN logs/app.log >> reports/errors.txt
+:::
+
+:::exercise
+id: proj-bash-05-tee
+level: 2
+title: "Project 5b: show and save"
+compare: verify
+---
+Count the lines in `logs/access.log` that contain `404`, showing the count on screen **and** saving it to `reports/404-count.txt` in one pipeline (create `reports` first).
+---verify
+cat reports/404-count.txt
+---solution
+mkdir -p reports
+grep -c 404 logs/access.log | tee reports/404-count.txt
 :::

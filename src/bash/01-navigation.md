@@ -4,6 +4,9 @@ title: The shell & navigation
 summary: What a shell actually does, how paths work, and moving around the filesystem with pwd, ls and cd.
 minutes: 20
 ---
+> [!project] Track project: logwatch, a log-analysis toolkit
+> The server behind a small web shop writes three logs into `~/logs`: `access.log` (every web request), `app.log` (the application's messages) and `cron.log` (scheduled jobs). Through this track you'll build **logwatch**: first as one-line commands, then as a real script, `logwatch.sh`, with options, functions and error handling. Each lesson ends with a **Project** exercise. Everything you build runs against those real log files.
+
 ## What is the shell?
 
 A **shell** is a program that reads a line of text, figures out what command you meant, runs it, and prints the result. **Bash** (the Bourne Again SHell) is the most common one on Linux servers; macOS ships **zsh**, which behaves almost identically for everything in this course.
@@ -126,6 +129,52 @@ type if
 
 `cd` *must* be a shell builtin: a separate program couldn't change the shell's own working directory.
 
+## Worked example: exploring a machine you've never seen
+
+You've just logged in to a server. The first minute always looks the same:
+
+```bash run
+pwd
+ls
+ls -l logs
+```
+
+Read `ls -l` column by column:
+
+```
+-rw-r--r-- 1 student student 3412 Oct 20 09:00 access.log
+│└┬┘└┬┘└┬┘   └──┬──┘ └──┬──┘ └┬─┘ └────┬─────┘ └───┬────┘
+│ │  │  │      owner   group   size   modified      name
+│ │  │  └ others can read
+│ │  └ group can read
+│ └ owner can read and write
+└ "-" = regular file ("d" = directory, "l" = link)
+```
+
+Then look around without losing your place. Relative paths are resolved from where you are, absolute ones from `/`:
+
+```bash run
+cd logs
+pwd
+ls ..
+cd ~
+pwd
+```
+
+> [!plain] In plain English
+> The shell always has a **current directory**. Commands look for files there unless you give a path starting with `/` (absolute) or `~` (your home).
+
+## Common mistakes
+
+> [!mistake] Spaces in names
+> `cd My Documents` tries to `cd` into `My` with an extra argument. Quote it (`cd "My Documents"`) or press Tab to let the shell escape it for you.
+
+> [!mistake] Forgetting where you are
+> Most "file not found" errors are really "wrong directory". When in doubt, `pwd`. And use **Tab completion** constantly: it's faster and it never makes typos.
+
+- `cd -` jumps back to the previous directory, `cd` alone goes home.
+- `ls -a` shows hidden files (names starting with `.`), like `.bashrc`.
+
 :::quiz
 q: You are in `/home/student/data`. Which path refers to `/home/student/logs/app.log`?
 - `logs/app.log`
@@ -244,4 +293,26 @@ Show the tree of the `projects` directory, limited to 2 levels deep.
 `tree -L N` limits depth.
 ---solution
 tree -L 2 projects
+:::
+
+:::exercise
+id: proj-bash-01-survey
+level: 1
+title: "Project 1: survey the logs"
+---
+Start the logwatch project by looking at what you have: list the files in `~/logs` in **long format with human-readable sizes**.
+---hint
+`ls` with `-l` and `-h`.
+---solution
+ls -lh logs
+:::
+
+:::exercise
+id: proj-bash-01-tree
+level: 1
+title: "Project 1b: the big picture"
+---
+Show the directory tree of your home folder, but only **2 levels** deep, so you can see where the logs sit relative to everything else.
+---solution
+tree -L 2
 :::

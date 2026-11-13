@@ -4,6 +4,9 @@ title: find, xargs & permissions
 summary: Searching the tree by name, type, size and more; acting on results with -exec and xargs; reading and changing permissions with chmod.
 minutes: 30
 ---
+> [!project] logwatch, step 10: finding logs anywhere
+> Real servers keep logs in many folders, rotated into `app.log.1`, `app.log.2.gz` and so on. logwatch needs to **find** them, and its script needs the right **permissions** to run.
+
 ## find walks the tree
 
 `find START [tests…] [actions…]` recursively visits every path under START and prints the ones that pass all the tests.
@@ -126,6 +129,46 @@ ls -l scripts/hello.sh
 
 > [!exam] Running scripts
 > `./script.sh` needs the execute bit (and a shebang line). `bash script.sh` doesn't: bash just reads the file. The `./` is required because the current directory isn't in `$PATH`.
+
+## Worked example: find, then act
+
+`find` has three parts: **where** to start, **tests** to filter, and an **action**:
+
+```bash run
+find . -name '*.log'
+find . -name '*.log' -size +1k
+find . -type f -name '*.log' -exec wc -l {} +
+```
+
+- Quote the pattern (`'*.log'`), so `find` gets the wildcard instead of the shell expanding it first.
+- `-exec cmd {} +` runs `cmd` once with **all** the found files as arguments (fast). `-exec cmd {} \;` runs it once per file.
+- Combine with `xargs` when the next command reads arguments: `find . -name '*.log' -print0 | xargs -0 grep -l ERROR`. The `-print0`/`-0` pair keeps file names with spaces intact.
+
+## Making the script executable
+
+A script is just a text file until it has the **execute** permission:
+
+```bash run
+mkdir -p logwatch/bin
+printf '#!/bin/bash\necho "logwatch ready"\n' > logwatch/bin/logwatch.sh
+ls -l logwatch/bin/logwatch.sh
+chmod +x logwatch/bin/logwatch.sh
+ls -l logwatch/bin/logwatch.sh
+./logwatch/bin/logwatch.sh
+```
+
+Permissions in numbers: read = 4, write = 2, execute = 1, added up for owner, group and others. `chmod 755` = `rwxr-xr-x` (typical for scripts), `chmod 644` = `rw-r--r--` (typical for data), `chmod 600` = only you can read and write (for secrets like SSH keys).
+
+> [!plain] In plain English
+> `find` walks every folder under a starting point and prints paths that pass your tests. Add an action and it does something with each one.
+
+## Common mistakes
+
+> [!mistake] `find -name *.log` without quotes
+> If the current directory contains `a.log`, the shell turns the command into `find -name a.log` and you only find files named exactly `a.log`.
+
+> [!mistake] `chmod 777`
+> "Everyone can write and execute" is almost never what you want. Give the minimum: 755 for scripts, 644 for files, 600 for secrets.
 
 :::quiz
 q: What octal mode is `rwxr-x---`?
@@ -311,4 +354,29 @@ Print the names (just the basename, sorted) of all files under `scripts` that ar
 `ls -l` then awk on the first column (`substr($1, 4, 1) == "x"`), or find's `-perm`.
 ---solution
 ls -l scripts | awk 'NR > 1 && substr($1, 4, 1) == "x" { print $NF }' | sort
+:::
+
+:::exercise
+id: proj-bash-10-find-logs
+level: 2
+title: "Project 10: every log over 1 KB"
+---
+From your home directory, find all regular files whose names end in `.log` and that are **larger than 1 KB**, and print their line counts with a single `-exec … +`.
+---solution
+find . -type f -name '*.log' -size +1k -exec wc -l {} +
+:::
+
+:::exercise
+id: proj-bash-10-chmod
+level: 2
+title: "Project 10b: install the script"
+compare: verify
+setup: mkdir -p logwatch/bin && printf '#!/bin/bash\necho "logwatch ready"\n' > logwatch/bin/logwatch.sh
+---
+`~/logwatch/bin/logwatch.sh` exists but isn't executable. Give it permissions `rwxr-xr-x` using **numeric** mode, then run it.
+---verify
+ls -l logwatch/bin/logwatch.sh | cut -c1-10
+---solution
+chmod 755 logwatch/bin/logwatch.sh
+./logwatch/bin/logwatch.sh
 :::

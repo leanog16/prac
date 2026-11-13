@@ -4,6 +4,9 @@ title: Variables & expansion
 summary: Assigning and using variables, environment vs shell variables, command substitution, integer arithmetic, and parameter expansion tricks (defaults, trimming, replacing, substrings, case).
 minutes: 35
 ---
+> [!project] logwatch, step 11: from one-liners to a script
+> Your one-liners are getting long, and they hard-code file names. Variables name things once and reuse them, which is the first step to turning commands into the `logwatch.sh` script.
+
 ## Assignment: no spaces
 
 ```bash run
@@ -131,6 +134,56 @@ echo "${#s} ${s:7} ${s:0:5} ${s,,} ${s^^} ${s/World/Bash}"
 unset maybe
 echo "${maybe:-fallback} [${maybe:+set}]"
 ```
+
+## Worked example: refactoring a one-liner into named pieces
+
+Before:
+
+```bash
+echo "errors: $(grep -c ERROR logs/app.log), warnings: $(grep -c WARN logs/app.log)"
+```
+
+After:
+
+```bash run
+LOG="logs/app.log"
+errors=$(grep -c ERROR "$LOG")
+warnings=$(grep -c WARN "$LOG")
+total=$(wc -l < "$LOG")
+pct=$(( 100 * errors / total ))
+echo "file:     $LOG"
+echo "errors:   $errors ($pct% of $total lines)"
+echo "warnings: $warnings"
+```
+
+What improved:
+
+- The file name appears **once**. Pointing the report at a different log is a one-word change.
+- Each number has a name, so the final `echo` reads like the report it produces.
+- `wc -l < "$LOG"` (input redirection) prints only the number, without the file name.
+- `$(( … ))` does integer arithmetic. Bash has no decimals; `100 * errors / total` multiplies **first** so the percentage isn't rounded down to 0.
+
+> [!plain] In plain English
+> `name=value` stores text (no spaces around `=`!). `$name` reads it back. `$(command)` captures a command's output as text you can store.
+
+## Parameter expansion: defaults and trimming
+
+```bash run
+file="logs/access.log"
+echo "${file##*/}"          # access.log      (strip everything up to the last /)
+echo "${file%.log}"         # logs/access     (strip a suffix)
+echo "${LEVEL:-ERROR}"      # ERROR           (default when unset or empty)
+```
+
+`${VAR:-default}` is how scripts accept optional settings from the environment: `LEVEL=WARN ./logwatch.sh`.
+
+## Common mistakes
+
+> [!mistake] Spaces around `=`
+> `count = 5` runs a command called `count` with arguments `=` and `5`. Write `count=5`.
+
+> [!mistake] Forgetting `$`
+> `echo count` prints the word "count". `echo "$count"` prints its value.
 
 :::quiz
 q: What does `count = 5` do in bash?
@@ -333,4 +386,42 @@ Count the files in `photos` (`n`) and how many of them are `.jpg` (`j`), then pr
 n=$(ls photos | wc -l)
 j=$(ls photos/*.jpg | wc -l)
 echo "$j of $n photos are JPEGs ($((j * 100 / n))%)"
+:::
+
+:::exercise
+id: proj-bash-11-summary
+level: 2
+title: "Project 11: a summary script"
+mode: script
+---
+Write a script that stores the path `logs/app.log` in a variable `LOG`, counts the lines containing `ERROR` and `WARN`, and prints exactly two lines:
+
+```
+ERROR 5
+WARN 10
+```
+
+(with the real counts computed by the script).
+---solution
+#!/bin/bash
+LOG="logs/app.log"
+errors=$(grep -c ERROR "$LOG")
+warnings=$(grep -c WARN "$LOG")
+echo "ERROR $errors"
+echo "WARN $warnings"
+:::
+
+:::exercise
+id: proj-bash-11-level-env
+level: 3
+title: "Project 11b: configurable level"
+mode: script
+---
+Write a script that counts the lines of `logs/app.log` containing the level given in the environment variable `LEVEL`, defaulting to `ERROR` when it's not set, and prints `LEVEL: COUNT` (e.g. `ERROR: 5`).
+---test
+args:
+---solution
+#!/bin/bash
+level="${LEVEL:-ERROR}"
+echo "$level: $(grep -c "$level" logs/app.log)"
 :::

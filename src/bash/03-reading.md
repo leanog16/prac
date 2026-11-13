@@ -4,6 +4,9 @@ title: Reading & inspecting files
 summary: cat, head, tail, wc, nl, less and friends — looking inside files quickly, counting lines and words, and peeking at the start, end or middle.
 minutes: 20
 ---
+> [!project] logwatch, step 3: first look at the data
+> Before analyzing a log you need to know its shape: how many lines, what one line looks like, and where the interesting part is. That's what `head`, `tail` and `wc` are for.
+
 ## cat: print whole files
 
 `cat` (con**cat**enate) prints one or more files in order. With several files it glues them together:
@@ -97,6 +100,43 @@ du -h data
 ```bash run
 cat data/grades.txt data/words.txt | wc -l
 ```
+
+## Worked example: getting to know a log file
+
+```bash run
+wc -l logs/*.log
+head -n 3 logs/access.log
+tail -n 3 logs/app.log
+```
+
+Now describe one line of `access.log` in words. This "line format" is what every later command depends on:
+
+```
+10.0.0.5 - - [20/Oct/2026:09:07:13 -0400] "DELETE /index.html HTTP/1.1" 200 1150
+│           │                              │       │                     │   └ bytes sent
+│           │                              │       │                     └ status code
+│           │                              │       └ path
+│           │                              └ method
+│           └ timestamp
+└ client IP
+```
+
+`app.log` is simpler: `date time LEVEL [component] message`.
+
+> [!plain] In plain English
+> `head` shows the start, `tail` the end, `wc -l` counts lines. With a file of millions of lines, you never `cat` the whole thing: you sample it.
+
+## tail -f: watching a live log
+
+On a real server, `tail -f /var/log/app.log` keeps the file open and prints new lines as they're written. It's the first thing people run during an incident. `tail -n +2 file` (with a plus) means "from line 2 on", which is handy for skipping a CSV header.
+
+## Common mistakes
+
+> [!mistake] `cat file | head`
+> Works, but `head file` does the same with one process less. "Useless use of cat" is harmless in small cases. Just know `head`, `tail`, `wc` and `grep` all take file names directly.
+
+> [!mistake] `wc -l` on a file without a final newline
+> `wc -l` counts newline characters, so a last line without `\n` isn't counted.
 
 :::quiz
 q: Which prints everything except the first line of `data.csv`?
@@ -256,4 +296,26 @@ Print `data/grades.txt` without its **first two** and **last two** lines.
 `tail -n +3` removes the top; `head -n -2` removes the bottom.
 ---solution
 tail -n +3 data/grades.txt | head -n -2
+:::
+
+:::exercise
+id: proj-bash-03-sizes
+level: 1
+title: "Project 3: how big is each log?"
+---
+Print the line count of each `.log` file in `~/logs` (one command).
+---solution
+wc -l logs/*.log
+:::
+
+:::exercise
+id: proj-bash-03-latest
+level: 2
+title: "Project 3b: the latest app messages"
+---
+Show the **last 5** lines of `logs/app.log`, numbered with line numbers **from the start of the file** (so the numbers are 41–45).
+---hint
+Number first with `cat -n`, then take the tail.
+---solution
+cat -n logs/app.log | tail -n 5
 :::

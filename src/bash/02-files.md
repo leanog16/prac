@@ -4,6 +4,9 @@ title: Files & directories
 summary: Creating, copying, moving, renaming and deleting files and directories — mkdir -p, touch, cp -r, mv, rm -r — plus brace expansion for building structures fast.
 minutes: 25
 ---
+> [!project] logwatch, step 2: a home for the project
+> Every project needs a layout. In this lesson you'll create logwatch's folders, keep a working copy of the logs so experiments can't damage the originals, and tidy up as you go.
+
 ## Creating things
 
 | Command | Does |
@@ -105,6 +108,44 @@ The infamous `rm -rf /` deletes everything. This practice shell refuses to remov
 ```bash run
 file notes.txt scripts/backup.sh photos/IMG_0001.jpg data
 ```
+
+## Worked example: scaffolding a project
+
+A typical small tool looks like this:
+
+```
+logwatch/
+├── bin/        scripts you run
+├── reports/    generated output
+└── samples/    copies of input data to experiment on
+```
+
+Brace expansion builds it in one command, and `-p` creates parents and doesn't complain if a folder already exists:
+
+```bash run
+mkdir -p logwatch/{bin,reports,samples}
+cp logs/*.log logwatch/samples/
+tree logwatch
+```
+
+Notice `cp logs/*.log logwatch/samples/`: the trailing `/` makes it obvious the destination is a directory. If `samples` didn't exist, `cp` with several sources would fail instead of silently creating a file.
+
+> [!plain] In plain English
+> `mkdir` makes folders, `cp` copies, `mv` moves **or renames** (same command), `rm` deletes. There's no recycle bin: `rm` is permanent.
+
+## Safer habits
+
+- Use `cp -i`, `mv -i`, `rm -i` when unsure: they ask before overwriting or deleting.
+- Before `rm -r something`, run `ls something` first and read what you're about to delete.
+- Work on **copies** of important data (like we just did with the logs).
+
+## Common mistakes
+
+> [!mistake] `rm -rf` with a variable that's empty
+> In scripts, `rm -rf "$DIR/"` with `DIR` unset becomes `rm -rf /`. Always quote, check variables are set (`${DIR:?}`), and prefer specific paths.
+
+> [!mistake] `mv` onto an existing file
+> `mv draft.txt report.txt` silently replaces `report.txt` if it exists. Use `-i` or `-n` (no-clobber).
 
 :::quiz
 q: `mkdir a/b/c` fails because `a` doesn't exist. What fixes it?
@@ -315,4 +356,33 @@ Make a copy of `data/config.ini` named `data/config.ini.orig`, typing the path `
 ls data/config*
 ---solution
 cp data/config.ini{,.orig}
+:::
+
+:::exercise
+id: proj-bash-02-scaffold
+level: 2
+title: "Project 2: scaffold logwatch"
+compare: verify
+---
+Create `~/logwatch` with three subfolders `bin`, `reports` and `samples` (use brace expansion), then copy every `.log` file from `~/logs` into `~/logwatch/samples`.
+---verify
+find logwatch | sort
+---solution
+mkdir -p logwatch/{bin,reports,samples}
+cp logs/*.log logwatch/samples/
+:::
+
+:::exercise
+id: proj-bash-02-archive
+level: 2
+title: "Project 2b: archive the cron log"
+compare: verify
+setup: mkdir -p logwatch/samples && cp logs/*.log logwatch/samples/
+---
+In `~/logwatch/samples`, the cron log is small and not needed for now. **Rename** `cron.log` to `cron.log.old`, then create an empty file `README` in `~/logwatch`.
+---verify
+ls logwatch logwatch/samples
+---solution
+mv logwatch/samples/cron.log logwatch/samples/cron.log.old
+touch logwatch/README
 :::

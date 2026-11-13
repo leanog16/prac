@@ -191,7 +191,7 @@ function parseModule(file, track) {
   const fm = /^---\n([\s\S]*?)\n---\n/.exec(raw);
   if (!fm) throw new Error(`${file}: missing front matter`);
   const meta = {};
-  for (const l of fm[1].split('\n')) { const m = /^(\w+):\s*(.*)$/.exec(l); if (m) meta[m[1]] = m[2]; }
+  for (const l of fm[1].split('\n')) { const m = /^(\w+):\s*(.*)$/.exec(l); if (m) meta[m[1]] = m[2].replace(/^"(.*)"$/, '$1'); }
   const body = raw.slice(fm[0].length);
   const lines = body.split('\n');
   const lesson = [];
@@ -227,7 +227,7 @@ function parseExercise(blk, file, track, modId) {
   let i = 0;
   while (i < blk.length && !/^---/.test(blk[i])) {
     const m = /^(\w+):\s*(.*)$/.exec(blk[i]);
-    if (m) ex.fields[m[1]] = m[2];
+    if (m) ex.fields[m[1]] = m[2].replace(/^"(.*)"$/, '$1');
     i++;
   }
   let cur = null;

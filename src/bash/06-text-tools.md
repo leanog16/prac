@@ -4,6 +4,9 @@ title: The text-processing toolkit
 summary: sort, uniq, cut, tr, paste, column and friends — the small tools that, piped together, answer real questions about data files.
 minutes: 35
 ---
+> [!project] logwatch, step 6: who's hitting the server?
+> The first real question for any web log: **which clients send the most requests?** It's a four-command pipeline you'll use for the rest of your career.
+
 ## Text is the universal interface
 
 Most Unix tools read lines of text and write lines of text. Learn a dozen of them well and you can answer surprisingly complex questions about logs and data files without writing a program.
@@ -143,6 +146,47 @@ head -5 data/employees.csv | column -t -s,
 | `comm a b` | compare two **sorted** files: lines only in a, only in b, in both |
 | `seq 1 10` | print a number sequence |
 | `shuf` | shuffle lines (not available in this simulator) |
+
+## Worked example: the "top N" pipeline, one stage at a time
+
+Build pipelines left to right and look at the output after **each** stage:
+
+```bash run
+cut -d' ' -f1 logs/access.log | head -5
+```
+
+Stage 1 extracts field 1 (the IP), with fields separated by spaces.
+
+```bash run
+cut -d' ' -f1 logs/access.log | sort | head -5
+```
+
+Stage 2 sorts, so identical IPs sit next to each other. `uniq` only collapses **adjacent** duplicates, which is why sorting first matters.
+
+```bash run
+cut -d' ' -f1 logs/access.log | sort | uniq -c
+```
+
+Stage 3 counts each run of identical lines.
+
+```bash run
+cut -d' ' -f1 logs/access.log | sort | uniq -c | sort -rn | head -3
+```
+
+Stage 4 sorts by that count, **n**umerically and **r**everse (biggest first), and keeps the top 3.
+
+The pattern `… | sort | uniq -c | sort -rn | head` answers any "most common X" question: most requested paths, most frequent error messages, busiest hours.
+
+> [!plain] In plain English
+> Each command does one small job and passes its output to the next through `|`. Long, powerful pipelines are just small, boring steps chained together.
+
+## Common mistakes
+
+> [!mistake] `sort` without `-n` on numbers
+> Text sorting puts `10` before `9` (it compares character by character). Use `sort -n` for numbers, `sort -rn` for biggest first, and `sort -k2,2n` to sort numerically by column 2.
+
+> [!mistake] `cut` on multiple spaces
+> `cut -d' '` treats every single space as a separator, so two spaces in a row create an empty field. The app log has two spaces after `INFO`. For whitespace-aligned text, `awk '{print $3}'` is more robust.
 
 :::quiz
 q: Why does `sort | uniq` appear together so often?
@@ -347,4 +391,26 @@ Print the words that appear in `data/words.txt` but **not** in this list: `apple
 `comm -23 A B` prints lines only in A. Both inputs must be sorted; use process substitution for the second list.
 ---solution
 comm -23 <(sort -u data/words.txt) <(printf '%s\n' apple fig kiwi zucchini | sort)
+:::
+
+:::exercise
+id: proj-bash-06-top-ips
+level: 2
+title: "Project 6: top 3 clients"
+---
+Print the 3 IP addresses that made the most requests in `logs/access.log`, with their counts (as `uniq -c` prints them), busiest first.
+---solution
+cut -d' ' -f1 logs/access.log | sort | uniq -c | sort -rn | head -3
+:::
+
+:::exercise
+id: proj-bash-06-paths
+level: 3
+title: "Project 6b: most requested pages"
+---
+Print the 5 most requested **paths** (field 7 of `access.log`) with their counts, most requested first. Several paths have the same count, so make the order deterministic: sort ties alphabetically by path (`sort -k1,1rn -k2`).
+---hint
+`cut -d' ' -f7`, then the top-N pipeline, with the final sort as `sort -k1,1rn -k2`.
+---solution
+cut -d' ' -f7 logs/access.log | sort | uniq -c | sort -k1,1rn -k2 | head -5
 :::

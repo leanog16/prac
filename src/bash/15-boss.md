@@ -4,6 +4,9 @@ title: Boss round: real scripts
 summary: Multi-step scripts that combine pipelines, conditionals, loops, functions and arrays — the kind of tasks you'll actually automate.
 minutes: 60
 ---
+> [!project] logwatch, final step: the complete tool
+> Time to assemble everything: arguments, subcommands, functions, awk reports and exit codes, into the `logwatch.sh` you'd actually put in `/usr/local/bin` and run from cron every morning.
+
 ## Thinking like a shell programmer
 
 Real scripts are glue: they move data between tools. A good approach:
@@ -42,6 +45,43 @@ bash top.sh nope.txt; echo "exit status: $?"   # fails on purpose
 
 > [!tip] Reading the exercises
 > Every boss exercise is a script graded against several test invocations. Click **Expected output** to see exactly what each test should print; that's your spec.
+
+## Worked example: subcommands
+
+Tools like `git` and `docker` take a **subcommand** first (`git commit`, `docker run`). The same pattern scales nicely for logwatch:
+
+```bash title=logwatch.sh
+#!/bin/bash
+set -euo pipefail
+
+die() { echo "logwatch: $*" >&2; exit 1; }
+
+cmd_summary() { awk '{ n[$3]++ } END { for (l in n) print l, n[l] }' "$1" | sort; }
+cmd_top()     { cut -d' ' -f1 "$1" | sort | uniq -c | sort -rn | head -n "${2:-3}"; }
+cmd_status()  { awk '{ c[$9]++ } END { for (s in c) print s, c[s] }' "$1" | sort; }
+
+main() {
+  [ $# -ge 2 ] || { echo "usage: logwatch.sh summary|top|status FILE [N]"; exit 2; }
+  local sub="$1" file="$2"; shift 2
+  [ -f "$file" ] || die "$file: no such file"
+  case "$sub" in
+    summary) cmd_summary "$file" ;;
+    top)     cmd_top "$file" "$@" ;;
+    status)  cmd_status "$file" ;;
+    *)       die "unknown command: $sub" ;;
+  esac
+}
+main "$@"
+```
+
+Then schedule it. A crontab line `0 7 * * * /usr/local/bin/logwatch.sh summary /var/log/app.log | mail -s "logwatch" ops@example.com` runs it every day at 07:00.
+
+## A checklist for any script you'll share
+
+- `set -euo pipefail`, and quote every expansion.
+- A usage message for wrong arguments (exit 2), errors on stderr (exit 1).
+- One function per job, `local` variables, `main "$@"`.
+- Run `shellcheck logwatch.sh`: it catches most quoting and logic bugs automatically.
 
 :::exercise
 id: bb-log-summary
@@ -377,4 +417,58 @@ while IFS=$'\t' read -r sku item qty price; do
   fi
 done < <(tail -n +2 data/inventory.tsv)
 echo "$n items need attention"
+:::
+
+:::exercise
+id: proj-bash-15-logwatch
+level: 4
+title: "Project 15: logwatch.sh, the complete tool"
+mode: script
+file: logwatch.sh
+---
+Write the final `logwatch.sh` with subcommands:
+
+- `logwatch.sh summary FILE`: one line per log level (field 3) as `LEVEL COUNT`, sorted by level name.
+- `logwatch.sh top FILE [N]`: the top N (default 3) client IPs, as `uniq -c | sort -rn | head` prints them.
+- `logwatch.sh status FILE`: one line per HTTP status (field 9) as `STATUS COUNT`, sorted.
+- With fewer than 2 arguments: print `usage: logwatch.sh summary|top|status FILE [N]` and exit 2.
+- An unknown subcommand: print `logwatch: unknown command: NAME` and exit 1.
+---test
+args: summary logs/app.log
+---test
+args: top logs/access.log 2
+---test
+args: status logs/access.log
+---test
+args: bogus logs/app.log
+---test
+args:
+---solution
+#!/bin/bash
+if [ $# -lt 2 ]; then
+  echo "usage: logwatch.sh summary|top|status FILE [N]"
+  exit 2
+fi
+sub="$1"
+file="$2"
+case "$sub" in
+  summary) awk '{ n[$3]++ } END { for (l in n) print l, n[l] }' "$file" | sort ;;
+  top) cut -d' ' -f1 "$file" | sort | uniq -c | sort -rn | head -n "${3:-3}" ;;
+  status) awk '{ c[$9]++ } END { for (s in c) print s, c[s] }' "$file" | sort ;;
+  *) echo "logwatch: unknown command: $sub"; exit 1 ;;
+esac
+:::
+
+:::exercise
+id: proj-bash-15-hourly
+level: 4
+title: "Project 15b: requests per hour"
+mode: script
+---
+Write a script that prints, for the access log given as `$1`, the number of requests per **hour** as `HH COUNT` (e.g. `09 8`), in hour order. The hour is the two digits after the first `:` in the timestamp field (`[20/Oct/2026:09:07:13 -0400]`).
+---test
+args: logs/access.log
+---solution
+#!/bin/bash
+cut -d: -f2 "$1" | sort | uniq -c | awk '{ print $2, $1 }'
 :::

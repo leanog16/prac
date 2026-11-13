@@ -4,6 +4,9 @@ title: awk: fields, patterns & reports
 summary: awk's pattern { action } model, fields and NF/NR, field separators, BEGIN/END, arithmetic and aggregation, associative arrays, printf, and small programs.
 minutes: 40
 ---
+> [!project] logwatch, step 9: real reports with awk
+> Counting lines is a start; managers want **tables**: requests and bytes per status code, errors per component. `awk` does group-by-and-sum in one line.
+
 ## awk in one sentence
 
 awk reads input **line by line**, splits each line into **fields**, and for every `pattern { action }` rule whose pattern matches, runs the action. It's a whole little programming language designed for columnar text, and it's the tool to reach for once `cut | sort | uniq` gets awkward.
@@ -125,6 +128,41 @@ awk -F, -v OFS='\t' '{ $1 = $1; print }' data/employees.csv | head -3
 ```
 
 `-v name=value` passes shell values into awk safely: `awk -v min="$limit" '$2 > min'`.
+
+## Worked example: bytes per status code
+
+We want one row per status with the number of requests and total bytes. In `access.log`, the status is field `$9` and bytes is `$10`.
+
+```bash run
+awk '{ count[$9]++; bytes[$9] += $10 }
+     END { for (s in count) printf "%s %5d requests %8d bytes\n", s, count[s], bytes[s] }' logs/access.log | sort
+```
+
+How it runs:
+
+1. The main block `{ … }` runs **once per line**. `count[$9]++` adds 1 to the bucket named after this line's status; `bytes[$9] += $10` adds this line's bytes.
+2. After the last line, the `END` block loops over the buckets and prints them.
+3. `for (s in arr)` visits keys in **no particular order**, so pipe into `sort`.
+
+This "associative array as a group-by" pattern is the awk equivalent of SQL's `GROUP BY`. Compare with the SQL track: `SELECT status, COUNT(*), SUM(bytes) … GROUP BY status`.
+
+> [!plain] In plain English
+> awk splits each line into fields `$1`, `$2`, …; `$0` is the whole line, `NF` is the number of fields, `NR` the line number. A program is a list of `pattern { action }` pairs.
+
+## Patterns filter lines
+
+```bash run
+awk '$3 == "ERROR" { print $1, $2, $4 }' logs/app.log
+awk '$10 > 5000 { big++ } END { print big, "large responses" }' logs/access.log
+```
+
+## Common mistakes
+
+> [!mistake] Using double quotes around the program
+> In `awk "{print $1}"`, the **shell** expands `$1` (to nothing) before awk sees it. Always single-quote awk programs.
+
+> [!mistake] Printing with commas vs without
+> `print $1, $2` separates fields with a space (the output separator); `print $1 $2` glues them together.
 
 :::quiz
 q: In awk, what is `$NF`?
@@ -333,4 +371,24 @@ title: Inventory valuation
 From the tab-separated `data/inventory.tsv` (skip the header), print the items that are **out of stock** (qty 0) as `OUT: item`, and finally a line `total value: N` where N is the sum of qty × price over all items, with 2 decimals.
 ---solution
 awk -F'\t' 'NR > 1 { if ($3 == 0) print "OUT: " $2; v += $3 * $4 } END { printf "total value: %.2f\n", v }' data/inventory.tsv
+:::
+
+:::exercise
+id: proj-bash-09-status-bytes
+level: 3
+title: "Project 9: requests and bytes per status"
+---
+For each status code in `logs/access.log`, print a line `STATUS COUNT BYTES` (single spaces), sorted by status code.
+---solution
+awk '{ c[$9]++; b[$9] += $10 } END { for (s in c) print s, c[s], b[s] }' logs/access.log | sort
+:::
+
+:::exercise
+id: proj-bash-09-levels
+level: 3
+title: "Project 9b: messages per level"
+---
+From `logs/app.log`, print each log level (field 3) with how many lines have it, as `LEVEL: N`, sorted by count **descending** (ties alphabetical).
+---solution
+awk '{ n[$3]++ } END { for (l in n) print l ": " n[l] }' logs/app.log | sort -t: -k2,2rn -k1,1
 :::

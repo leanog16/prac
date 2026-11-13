@@ -4,6 +4,9 @@ title: Globbing, quoting & expansion
 summary: Wildcards (* ? [ ]), the difference between single quotes, double quotes and backslashes, and the order in which bash expands a command line.
 minutes: 30
 ---
+> [!project] logwatch, step 4: a report header
+> Reports start with a header line that mixes fixed text, variables and command output. Getting it right means understanding exactly how bash expands and splits your command line.
+
 ## Bash rewrites your line before running it
 
 When you press Enter, bash doesn't hand your text to the command as-is. It **expands** it first, in this order:
@@ -122,6 +125,34 @@ echo "There are $(ls | wc -l) entries here, and today is $(date +%A)."
 ```
 
 The older backtick form `` `cmd` `` works too but doesn't nest cleanly. Prefer `$( )`.
+
+## Worked example: watching expansion happen
+
+Bash rewrites your command **before** running it. You can see the rewritten words with `printf '[%s]\n'`, which prints each argument on its own line in brackets:
+
+```bash run
+printf '[%s]\n' logs/*.log
+printf '[%s]\n' "logs/*.log"
+printf '[%s]\n' Report for $(date +%Y) has $(ls logs | wc -l) logs
+printf '[%s]\n' "Report for $(date +%Y) has $(ls logs | wc -l) logs"
+```
+
+- Unquoted `logs/*.log` became **three** arguments (glob expansion).
+- Quoted, it stayed one literal string.
+- Unquoted command substitution was **split** into separate words; quoted, the whole sentence is one argument.
+
+That `printf '[%s]\n'` trick is the best debugging tool for quoting problems.
+
+> [!plain] In plain English
+> Single quotes: "take this text exactly". Double quotes: "fill in variables and `$(...)`, but keep it as one piece". No quotes: "fill in, then split on spaces and expand wildcards".
+
+## Common mistakes
+
+> [!mistake] Unquoted variables holding file names
+> `rm $file` with `file="my report.txt"` tries to delete `my` and `report.txt`. Quote every expansion: `rm "$file"`. The rule of thumb: **always** double-quote `"$var"` and `"$(cmd)"` unless you specifically want splitting.
+
+> [!mistake] Single quotes around a variable
+> `echo 'Hello $USER'` prints `$USER` literally. Use double quotes when you want the value.
 
 :::quiz
 q: What does `echo '$HOME'` print?
@@ -304,4 +335,30 @@ Your answer should contain the assignment and one `echo`, printing `*   *   *`.
 ---solution
 art="*   *   *"
 echo "$art"
+:::
+
+:::exercise
+id: proj-bash-04-header
+level: 2
+title: "Project 4: the header line"
+---
+Print exactly this header, with the count computed by a command substitution (count the files in `logs` with `ls logs | wc -l`):
+
+`== logwatch: 3 log files in ~/logs ==`
+
+The `~/logs` part must appear literally, not expanded to a path.
+---hint
+Wrap `~/logs` so the tilde isn't expanded: inside double quotes a tilde is literal.
+---solution
+echo "== logwatch: $(ls logs | wc -l) log files in ~/logs =="
+:::
+
+:::exercise
+id: proj-bash-04-glob
+level: 2
+title: "Project 4b: only the web logs"
+---
+List (with `ls`) only the files in `logs` whose names start with `a` or `c` and end in `.log`, using a single glob with a character class.
+---solution
+ls logs/[ac]*.log
 :::

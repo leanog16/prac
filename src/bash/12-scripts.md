@@ -4,6 +4,9 @@ title: Scripts, arguments & conditions
 summary: Writing script files with a shebang, positional parameters ($1, $#, "$@"), exit codes, test / [ ] / [[ ]], if/elif/else, case, && and ||, and safety settings.
 minutes: 40
 ---
+> [!project] logwatch, step 12: a script others can run
+> A script that only works for you isn't a tool. In this lesson `logwatch.sh` gets a **usage message**, takes the log file as an **argument**, checks it exists, and returns meaningful **exit codes** so other scripts and cron jobs can react.
+
 ## A script is a file of commands
 
 ```bash title=greet.sh
@@ -164,6 +167,52 @@ if [ $# -lt 1 ]; then
   exit 1
 fi
 ```
+
+## Worked example: the skeleton of a well-behaved script
+
+```bash title=logwatch.sh
+#!/bin/bash
+set -euo pipefail                       # stop on errors, unset vars, failed pipes
+
+usage() {
+  echo "usage: logwatch.sh LOGFILE" >&2
+  exit 2                                # 2 = wrong usage (convention)
+}
+
+[ $# -eq 1 ] || usage                   # exactly one argument
+
+log="$1"
+if [ ! -f "$log" ]; then
+  echo "logwatch: $log: no such file" >&2
+  exit 1                                # 1 = general failure
+fi
+
+errors=$(grep -c ERROR "$log" || true)  # grep -c exits 1 when it finds nothing
+echo "$log: $errors errors"
+[ "$errors" -eq 0 ]                     # the script's exit status: 0 if clean
+```
+
+Each part has a job:
+
+- **Shebang** `#!/bin/bash` picks the interpreter.
+- **`set -euo pipefail`** turns silent failures into immediate, visible ones.
+- **Usage errors and missing files go to stderr** (`>&2`), so they don't pollute output that's piped somewhere.
+- **Exit codes** carry meaning: 0 success, 1 failure, 2 misuse. The last command's status becomes the script's status, so `[ "$errors" -eq 0 ]` makes the script "fail" when errors were found, which is perfect for monitoring: `./logwatch.sh app.log || send_alert`.
+
+> [!plain] In plain English
+> `$1`, `$2`… are the arguments, `$#` is how many there are, `$@` is all of them. `[ … ]` is a test that "succeeds" or "fails", and `if`, `&&` and `||` react to that.
+
+## The `|| true` detail
+
+With `set -e`, a command that fails ends the script. `grep -c` **exits 1 when it counts zero**, which isn't an error for us, so `|| true` absorbs it. Knowing which commands use non-zero exits for "nothing found" (`grep`, `diff`, `test`) saves a lot of confusion.
+
+## Common mistakes
+
+> [!mistake] `[ $var = x ]` with an empty variable
+> Unquoted and empty, it becomes `[ = x ]`, a syntax error. Quote: `[ "$var" = x ]`, or use bash's `[[ $var == x ]]`, which handles it.
+
+> [!mistake] `-eq` vs `=`
+> `-eq`, `-lt`, `-gt` compare **numbers**; `=` and `!=` compare **strings**. `[ 10 \< 9 ]` is true as text!
 
 :::quiz
 q: Inside a script run as `bash s.sh a "b c" d`, what is `$#`?
@@ -530,5 +579,64 @@ if (( (y % 4 == 0 && y % 100 != 0) || y % 400 == 0 )); then
   echo leap
 else
   echo common
+fi
+:::
+
+:::exercise
+id: proj-bash-12-logwatch
+level: 3
+title: "Project 12: logwatch.sh v1"
+mode: script
+file: logwatch.sh
+---
+Write `logwatch.sh`:
+
+- With **no argument**, print `usage: logwatch.sh LOGFILE` to **stdout** and exit with status 2.
+- If the argument isn't an existing file, print `logwatch: FILE: no such file` and exit 1.
+- Otherwise print `FILE: N errors`, where N counts the lines containing `ERROR`.
+---test
+args: logs/app.log
+---test
+args: logs/access.log
+---test
+args:
+---test
+args: logs/nope.log
+---solution
+#!/bin/bash
+if [ $# -ne 1 ]; then
+  echo "usage: logwatch.sh LOGFILE"
+  exit 2
+fi
+log="$1"
+if [ ! -f "$log" ]; then
+  echo "logwatch: $log: no such file"
+  exit 1
+fi
+echo "$log: $(grep -c ERROR "$log") errors"
+:::
+
+:::exercise
+id: proj-bash-12-severity
+level: 3
+title: "Project 12b: severity verdict"
+mode: script
+---
+Write a script that takes a log file and prints `OK` when it has no `ERROR` lines, `WARNING` when it has 1–3, and `CRITICAL` when it has more than 3. Use `case` or `if`/`elif`.
+---test
+args: logs/app.log
+---test
+args: logs/access.log
+---test
+args: logs/cron.log
+---solution
+#!/bin/bash
+n=$(grep -c ERROR "$1")
+if [ "$n" -eq 0 ]; then
+  echo OK
+elif [ "$n" -le 3 ]; then
+  echo WARNING
+else
+  echo CRITICAL
 fi
 :::

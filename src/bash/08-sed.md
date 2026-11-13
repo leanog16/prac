@@ -4,6 +4,9 @@ title: sed: the stream editor
 summary: Substitution with s///, flags and capture groups, addresses and ranges, deleting and printing lines, in-place editing.
 minutes: 30
 ---
+> [!project] logwatch, step 8: anonymizing before sharing
+> Maya's developers want a copy of the access log, but IP addresses are personal data. Before logwatch hands logs to anyone, it masks them. `sed` rewrites text as it streams past.
+
 ## What sed does
 
 `sed` reads input line by line, applies a script of editing commands to each line, and prints the result. It never modifies the file unless you ask (`-i`). It's the tool for search-and-replace in pipelines and quick file edits.
@@ -107,6 +110,44 @@ grep debug data/config.ini
 
 > [!warn] Test before -i
 > Run the command without `-i` first and look at the output. Once `-i` runs, the original is gone unless you used `-i.bak`.
+
+## Worked example: masking the last part of an IP
+
+We want `192.168.1.20` → `192.168.1.x`. Build the regex against one line first:
+
+```bash run
+head -1 logs/access.log | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+)\.[0-9]+/\1.x/'
+```
+
+Piece by piece:
+
+| Piece | Meaning |
+|---|---|
+| `s/OLD/NEW/` | substitute |
+| `^` | at the start of the line (the IP is the first field) |
+| `( … )` | a **capture group**: remember this part as `\1` |
+| `[0-9]+\.` | one or more digits and a literal dot (`.` alone means "any character") |
+| `\1.x` | the replacement: the first three octets, then `.x` |
+
+Then apply it to the whole file and save the result, never touching the original:
+
+```bash run
+sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+)\.[0-9]+/\1.x/' logs/access.log > access.anon.log
+head -3 access.anon.log
+```
+
+> [!plain] In plain English
+> `sed` reads a file line by line, applies your edit commands to each line, and prints the result. Unless you ask for `-i`, the original file is never changed.
+
+## Common mistakes
+
+> [!mistake] `sed -i` without a backup
+> `sed -i 's/…/…/' file` edits in place: a wrong regex mangles the file with no undo. Test without `-i` first, or use `-i.bak` to keep a backup. (On macOS, `sed -i` needs an argument: `sed -i '' …`.)
+
+> [!mistake] Slashes inside the pattern
+> Replacing paths like `/usr/local` gets ugly with `/` as the delimiter. Use another one: `s|/usr/local|/opt|g`.
+
+- Add `g` to replace **every** match on a line, not just the first: `s/a/b/g`.
 
 :::quiz
 q: What does `sed 's/a/b/'` do to the line `banana`?
@@ -282,4 +323,26 @@ Print `projects/website/index.html` with all HTML tags removed and lines that be
 Tags: `<[^>]*>`. Then delete lines matching `^[[:space:]]*$`.
 ---solution
 sed 's/<[^>]*>//g; /^[[:space:]]*$/d' projects/website/index.html
+:::
+
+:::exercise
+id: proj-bash-08-anon
+level: 3
+title: "Project 8: anonymize the access log"
+---
+Print `logs/access.log` with the **last octet** of every client IP replaced by `x` (e.g. `10.0.0.5` → `10.0.0.x`). Use `sed -E` with a capture group.
+---solution
+sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+)\.[0-9]+/\1.x/' logs/access.log
+:::
+
+:::exercise
+id: proj-bash-08-users
+level: 3
+title: "Project 8b: hide user names"
+---
+Lines in `logs/app.log` can contain `user=NAME`. Print only the lines containing `user=`, with every name replaced by `user=***`.
+---hint
+`sed -n` with the `p` flag prints only lines where a substitution happened.
+---solution
+sed -nE 's/user=[a-z]+/user=***/gp' logs/app.log
 :::

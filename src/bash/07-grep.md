@@ -4,6 +4,9 @@ title: grep & regular expressions
 summary: Searching text with grep and its essential flags, then regular expressions — anchors, classes, quantifiers, groups, alternation — in basic and extended syntax.
 minutes: 40
 ---
+> [!project] logwatch, step 7: finding the failures
+> Status codes tell you what went wrong: 4xx means the client asked for something bad, 5xx means the server broke. Regular expressions let logwatch find exactly those lines and nothing else.
+
 ## grep prints matching lines
 
 `grep PATTERN [FILE...]` prints every line containing a match for PATTERN.
@@ -138,6 +141,54 @@ if grep -q 'db-02.*maintenance' data/servers.txt; then
   echo "db-02 is in maintenance"
 fi
 ```
+
+## Worked example: a regex that doesn't over-match
+
+Goal: lines in `access.log` with a **4xx or 5xx status**. A naive attempt:
+
+```bash run
+grep -c '404' logs/access.log
+```
+
+That counts any line containing `404` anywhere, including a byte count like `14040`. Be precise about **where** the match is. The status is the 3-digit field after the closing quote of the request:
+
+```bash run
+grep -cE '" [45][0-9]{2} ' logs/access.log
+```
+
+Read the pattern piece by piece:
+
+| Piece | Matches |
+|---|---|
+| `"` | the closing quote of the request |
+| ` ` | a space |
+| `[45]` | the digit 4 or 5 |
+| `[0-9]{2}` | exactly two more digits |
+| ` ` | a space (so `4040` can't match) |
+
+Anchoring a pattern to its surroundings (quotes, spaces, `^` line start, `$` line end, `\b` word boundary) is the difference between a regex that's right and one that's right *today*.
+
+> [!plain] In plain English
+> A regular expression is a tiny pattern language. `.` is any character, `*` "zero or more of the previous", `[abc]` "one of these", `^`/`$` start/end of line. `-E` turns on the modern syntax where `+ ? { } |` work without backslashes.
+
+## grep options you'll use daily
+
+| Option | Does |
+|---|---|
+| `-i` | ignore case |
+| `-v` | invert: lines that **don't** match |
+| `-c` | count matching lines |
+| `-n` | show line numbers |
+| `-o` | print only the matched part |
+| `-r` | search a directory recursively |
+| `-l` | list only file names that match |
+| `-w` | match whole words only |
+| `-A 2` / `-B 2` / `-C 2` | context lines after / before / around |
+
+## Common mistakes
+
+> [!mistake] Forgetting to quote the pattern
+> `grep [45]0 file` lets the shell try to glob `[45]0` against file names first. Always single-quote regexes.
 
 :::quiz
 q: Which command prints lines that do NOT contain "debug", ignoring case?
@@ -342,4 +393,26 @@ title: Who logged in?
 From `logs/app.log`, print each distinct username from `user login ok user=NAME` lines, with how many times they logged in, as `uniq -c` would print it, sorted by name.
 ---solution
 grep -o 'user=[a-z]*' logs/app.log | cut -d= -f2 | sort | uniq -c
+:::
+
+:::exercise
+id: proj-bash-07-failures
+level: 2
+title: "Project 7: count failed requests"
+---
+Count the requests in `logs/access.log` whose status code is 4xx or 5xx, using one `grep` with an extended regex anchored to the status field.
+---solution
+grep -cE '" [45][0-9]{2} ' logs/access.log
+:::
+
+:::exercise
+id: proj-bash-07-errors-context
+level: 3
+title: "Project 7b: errors by component"
+---
+Print, sorted and de-duplicated, the **component names** (the word inside square brackets, e.g. `api`) of every `ERROR` line in `logs/app.log`, without the brackets.
+---hint
+`grep ERROR`, then `grep -o '\[[a-z]*\]'`, then strip brackets with `tr -d '[]'`.
+---solution
+grep ERROR logs/app.log | grep -o '\[[a-z]*\]' | tr -d '[]' | sort -u
 :::

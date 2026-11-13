@@ -4,6 +4,9 @@ title: Loops
 summary: for loops over lists, globs, ranges and arguments; C-style for; while and until; reading files line by line with while read; break and continue; the subshell pitfall.
 minutes: 35
 ---
+> [!project] logwatch, step 13: every file, every line
+> One log at a time won't do on a real server. Loops let logwatch scan **all** the logs in a folder and process files line by line when a pipeline isn't enough.
+
 ## for … in
 
 `for VAR in WORDS; do …; done` runs the body once per word.
@@ -145,6 +148,46 @@ for i in {1..5}; do some_command && break; sleep 1; done
 # process arguments
 for arg in "$@"; do echo "got: $arg"; done
 ```
+
+## Worked example: looping over files safely
+
+```bash run
+for f in logs/*.log; do
+  [ -e "$f" ] || continue                 # glob matched nothing: skip the literal pattern
+  lines=$(wc -l < "$f")
+  errs=$(grep -c ERROR "$f" || true)
+  printf '%-18s %4d lines %3d errors\n' "$f" "$lines" "$errs"
+done
+```
+
+- `for f in logs/*.log` expands the glob into file names; each iteration gets **one** whole name, even if it contains spaces, as long as you quote `"$f"`.
+- If no file matches, bash leaves the pattern itself (`logs/*.log`) in the list. The `[ -e "$f" ] || continue` guard skips it.
+- `printf` with widths (`%-18s` = left-aligned in 18 columns, `%4d` = number in 4 columns) makes tidy tables.
+
+## Worked example: reading a file line by line
+
+```bash run
+while IFS= read -r line; do
+  case "$line" in
+    *ERROR*) echo "!! $line" ;;
+  esac
+done < logs/app.log
+```
+
+`IFS= read -r line` is the incantation for "read one line exactly as it is": `IFS=` keeps leading spaces, `-r` keeps backslashes. The `< logs/app.log` at the end feeds the file into the whole loop.
+
+> [!plain] In plain English
+> `for` repeats for each item in a list; `while` repeats as long as a command succeeds (`read` succeeds until the input runs out).
+
+## Common mistakes
+
+> [!mistake] `for line in $(cat file)`
+> That loops over **words**, not lines, and expands globs inside the file. Use `while IFS= read -r line`.
+
+> [!mistake] Variables set inside `cmd | while …`
+> The loop after a pipe runs in a subshell, so counters you increment there are lost when it ends. Use `while … done < file`, or process substitution `done < <(cmd)`.
+
+- Prefer a pipeline (`grep`, `awk`) over a shell loop for big files: loops in bash are slow per line.
 
 :::quiz
 q: What does `for x in $(echo "a b" "c"); do echo $x; done` print?
@@ -400,4 +443,50 @@ for ((n = 2; n < 50; n++)); do
   (( prime )) && out="$out$n "
 done
 echo "${out% }"
+:::
+
+:::exercise
+id: proj-bash-13-table
+level: 3
+title: "Project 13: the multi-file table"
+mode: script
+---
+Write a script that loops over every `.log` file in the directory given as `$1` (in glob order) and prints one line per file: `NAME LINES ERRORS`, where NAME is the file name **without** the directory (e.g. `app.log`), LINES the line count and ERRORS the number of lines containing `ERROR`.
+---test
+args: logs
+---solution
+#!/bin/bash
+for f in "$1"/*.log; do
+  [ -e "$f" ] || continue
+  name="${f##*/}"
+  lines=$(wc -l < "$f")
+  errs=$(grep -c ERROR "$f")
+  echo "$name $lines $errs"
+done
+:::
+
+:::exercise
+id: proj-bash-13-first-error
+level: 3
+title: "Project 13b: stop at the first error"
+mode: script
+---
+Write a script that reads the file given as `$1` line by line, counting lines, and when it meets the **first** line containing `ERROR` prints `first error on line N: LINE` and stops. If there's no error, print `no errors in N lines`.
+---test
+args: logs/app.log
+---test
+args: logs/access.log
+---solution
+#!/bin/bash
+n=0
+while IFS= read -r line; do
+  n=$((n + 1))
+  case "$line" in
+    *ERROR*)
+      echo "first error on line $n: $line"
+      exit 0
+      ;;
+  esac
+done < "$1"
+echo "no errors in $n lines"
 :::

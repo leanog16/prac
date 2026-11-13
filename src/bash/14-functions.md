@@ -4,6 +4,9 @@ title: Functions & arrays
 summary: Defining functions, arguments and local variables, returning values (echo vs return), indexed arrays, associative arrays, mapfile, and getopts for option parsing.
 minutes: 35
 ---
+> [!project] logwatch, step 14: functions and options
+> `logwatch.sh` now does several jobs. Functions give each job a name, and `getopts` gives the script real command-line options like `-n 5` and `-l WARN`, just like the tools you've been using.
+
 ## Defining functions
 
 ```bash
@@ -152,6 +155,62 @@ EOF
 bash opts.sh -v -n 3 file1 file2
 bash opts.sh file3
 ```
+
+## Worked example: one function per job
+
+```bash title=logwatch.sh
+#!/bin/bash
+set -euo pipefail
+
+count_level() {             # count_level LEVEL FILE
+  local level="$1" file="$2"
+  grep -c "$level" "$file" || true
+}
+
+top_ips() {                 # top_ips N FILE
+  local n="$1" file="$2"
+  cut -d' ' -f1 "$file" | sort | uniq -c | sort -rn | head -n "$n"
+}
+
+main() {
+  echo "errors: $(count_level ERROR logs/app.log)"
+  echo "top clients:"
+  top_ips 3 logs/access.log
+}
+
+main "$@"
+```
+
+- Functions take arguments exactly like scripts: `$1`, `$2`, `$#`, `"$@"`.
+- **`local`** keeps variables inside the function. Without it, every variable is global and functions quietly overwrite each other's.
+- A function "returns" data by **printing** it (capture with `$(…)`), and success or failure with `return N`.
+- Wrapping the top level in `main "$@"` keeps the script readable from top to bottom.
+
+## Worked example: options with getopts
+
+```bash
+n=3; level=ERROR
+while getopts ":n:l:h" opt; do
+  case "$opt" in
+    n) n="$OPTARG" ;;
+    l) level="$OPTARG" ;;
+    h) usage; exit 0 ;;
+    :) echo "option -$OPTARG needs a value" >&2; exit 2 ;;
+    \?) echo "unknown option -$OPTARG" >&2; exit 2 ;;
+  esac
+done
+shift $((OPTIND - 1))          # what's left in "$@" are the file arguments
+```
+
+In `":n:l:h"`, a colon **after** a letter means "takes a value"; the leading colon lets you print your own error messages.
+
+> [!plain] In plain English
+> A function is a named mini-script inside your script. `getopts` reads the `-x value` flags one at a time so you don't have to parse `$1`, `$2` by hand.
+
+## Common mistakes
+
+> [!mistake] Using `return` to send back text
+> `return` only takes a number from 0 to 255 (a status). To return a string, `echo` it and capture the output.
 
 :::quiz
 q: How do you get a computed value *out* of a bash function?
@@ -408,4 +467,49 @@ fib() {
   echo $(( $(fib $((n - 1))) + $(fib $((n - 2))) ))
 }
 fib "$1"
+:::
+
+:::exercise
+id: proj-bash-14-functions
+level: 3
+title: "Project 14: logwatch with functions"
+mode: script
+---
+Write a script with a function `count_level LEVEL FILE` (uses `local`, prints how many lines of FILE contain LEVEL). The script calls it for `ERROR`, `WARN` and `INFO` on the file given as `$1`, printing `ERROR=N`, `WARN=N`, `INFO=N` on three lines.
+---test
+args: logs/app.log
+---solution
+#!/bin/bash
+count_level() {
+  local level="$1" file="$2"
+  grep -c "$level" "$file"
+}
+for lvl in ERROR WARN INFO; do
+  echo "$lvl=$(count_level "$lvl" "$1")"
+done
+:::
+
+:::exercise
+id: proj-bash-14-getopts
+level: 4
+title: "Project 14b: logwatch top -n"
+mode: script
+---
+Write a script that accepts an option `-n N` (default 3) followed by a log file, and prints the top N client IPs of that access log with their counts (as `uniq -c | sort -rn | head` prints them). Use `getopts` and `shift`.
+---test
+args: logs/access.log
+---test
+args: -n 1 logs/access.log
+---test
+args: -n 5 logs/access.log
+---solution
+#!/bin/bash
+n=3
+while getopts "n:" opt; do
+  case "$opt" in
+    n) n="$OPTARG" ;;
+  esac
+done
+shift $((OPTIND - 1))
+cut -d' ' -f1 "$1" | sort | uniq -c | sort -rn | head -n "$n"
 :::
