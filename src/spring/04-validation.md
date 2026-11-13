@@ -4,6 +4,9 @@ title: Validation & error handling
 summary: Bean Validation annotations on records, @Valid and @Validated, validating path and query parameters, nested and custom constraints, custom exceptions, @RestControllerAdvice with @ExceptionHandler, RFC 9457 ProblemDetail responses, and mapping exceptions to the right status codes.
 minutes: 35
 ---
+> [!project] Bookshelf, step 4: rejecting bad input politely
+> Librarians make typos: ISBNs with 12 digits, books "published" next year, blank titles. This step validates `BookRequest` and turns every failure into a clear `ProblemDetail` response.
+
 ## Bean Validation
 
 Add `spring-boot-starter-validation` and annotate your request DTOs with **Jakarta Bean Validation** constraints:
@@ -178,6 +181,48 @@ Setting `spring.mvc.problemdetails.enabled=true` makes Spring's **built-in** err
 | bug, unexpected exception | 500 Internal Server Error |
 
 Never leak stack traces or SQL errors to clients. Log them server-side and return a generic 500 detail.
+
+## Worked example: from rule to annotation
+
+| Rule from the librarians | Annotation |
+|---|---|
+| title is required and at most 200 characters | `@NotBlank @Size(max = 200)` |
+| ISBN-13 is exactly 13 digits | `@Pattern(regexp = "\\d{13}")` |
+| author is required | `@NotBlank` |
+| year between 1450 (printing press) and this year | `@Min(1450)` + a custom check, or `@PastOrPresent` on a date |
+
+```java
+public record BookRequest(
+        @NotBlank @Pattern(regexp = "\\d{13}", message = "must be 13 digits") String isbn,
+        @NotBlank @Size(max = 200) String title,
+        @NotBlank String author,
+        @Min(1450) @Max(2100) int year
+) {}
+```
+
+Note the `message` attribute: default messages ("must match \"\\d{13}\"") are written for developers. Write messages for the people who'll read them.
+
+Then one handler turns every validation failure into the same shape:
+
+```json
+{
+  "type": "about:blank",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "Validation failed",
+  "errors": { "isbn": "must be 13 digits", "title": "must not be blank" }
+}
+```
+
+A frontend can map `errors` straight onto form fields.
+
+> [!plain] In plain English
+> Validation annotations describe what valid data looks like; `@Valid` tells Spring to check it before your method runs; the advice class decides what the error response looks like.
+
+## Common mistakes
+
+> [!mistake] Validating only in the frontend
+> Anyone can call your API with curl. Frontend validation is for user experience; backend validation is for correctness and security. You need both.
 
 :::quiz
 q: A record has `@NotBlank String name` but the controller method lacks `@Valid`. What happens with `{"name": ""}`?
@@ -594,4 +639,97 @@ A service throws `IllegalStateException("stock exhausted")`. There's no `@Except
 500
 ---solution
 500
+:::
+
+:::exercise
+id: proj-sp-04-request
+level: 2
+title: "Project 4: a validated BookRequest"
+mode: code
+lang: java
+file: BookRequest.java
+---
+Add constraints to `BookRequest`: `isbn` is not blank and matches `\\d{13}` with message `"must be 13 digits"`; `title` is not blank and at most 200 characters; `author` is not blank; `year` is between 1450 and 2100.
+---starter
+package org.library.bookshelf;
+
+import jakarta.validation.constraints.*;
+
+public record BookRequest(
+        String isbn,
+        String title,
+        String author,
+        int year
+) {}
+---rule
+@NotBlank\s+@Pattern\((?=[^)]*regexp\s*=\s*"\\\\d\{13\}")(?=[^)]*message\s*=\s*"must be 13 digits")[^)]*\)\s+String\s+isbn
+`isbn`: `@NotBlank @Pattern(regexp = "\\d{13}", message = "must be 13 digits")`
+---rule
+@NotBlank\s+@Size\(\s*max\s*=\s*200\s*\)\s+String\s+title
+`title`: `@NotBlank @Size(max = 200)`
+---rule
+@NotBlank\s+String\s+author
+`author`: `@NotBlank`
+---rule
+@Min\(\s*1450\s*\)\s+@Max\(\s*2100\s*\)\s+int\s+year
+`year`: `@Min(1450) @Max(2100)`
+---solution
+package org.library.bookshelf;
+
+import jakarta.validation.constraints.*;
+
+public record BookRequest(
+        @NotBlank @Pattern(regexp = "\\d{13}", message = "must be 13 digits") String isbn,
+        @NotBlank @Size(max = 200) String title,
+        @NotBlank String author,
+        @Min(1450) @Max(2100) int year
+) {}
+:::
+
+:::exercise
+id: proj-sp-04-advice
+level: 3
+title: "Project 4b: Bookshelf's error handler"
+mode: code
+lang: java
+file: LibraryExceptionHandler.java
+---
+Write a `@RestControllerAdvice` class `LibraryExceptionHandler` with two handlers returning `ProblemDetail`: `BookNotFoundException` → **404** with `ex.getMessage()`; `DuplicateIsbnException` → **409** with `ex.getMessage()`.
+---starter
+package org.library.bookshelf;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+---rule
+@RestControllerAdvice\s*\n\s*public\s+class\s+LibraryExceptionHandler
+The advice class
+---rule
+@ExceptionHandler\(\s*BookNotFoundException\.class\s*\)\s*\n\s*public\s+ProblemDetail\s+\w+\(\s*BookNotFoundException\s+ex\s*\)\s*\{\s*return\s+ProblemDetail\.forStatusAndDetail\(\s*HttpStatus\.NOT_FOUND\s*,\s*ex\.getMessage\(\s*\)\s*\)
+404 for `BookNotFoundException`
+---rule
+@ExceptionHandler\(\s*DuplicateIsbnException\.class\s*\)\s*\n\s*public\s+ProblemDetail\s+\w+\(\s*DuplicateIsbnException\s+ex\s*\)\s*\{\s*return\s+ProblemDetail\.forStatusAndDetail\(\s*HttpStatus\.CONFLICT\s*,\s*ex\.getMessage\(\s*\)\s*\)
+409 for `DuplicateIsbnException`
+---solution
+package org.library.bookshelf;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+@RestControllerAdvice
+public class LibraryExceptionHandler {
+
+    @ExceptionHandler(BookNotFoundException.class)
+    public ProblemDetail notFound(BookNotFoundException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+
+    @ExceptionHandler(DuplicateIsbnException.class)
+    public ProblemDetail duplicate(DuplicateIsbnException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+}
 :::

@@ -4,6 +4,9 @@ title: Configuration, profiles & operations
 summary: application.properties vs YAML, @Value and its pitfalls, type-safe @ConfigurationProperties records with validation, profiles and profile-specific files, secrets from the environment, logging levels, Actuator probes and metrics, caching with @Cacheable, scheduled jobs and outbound HTTP with RestClient.
 minutes: 40
 ---
+> [!project] Bookshelf, step 7: settings, not constants
+> The loan period (14 days) and the fine per overdue day are hard-coded. The library wants to change them without a release, and run H2 locally but PostgreSQL in production. Typed properties and profiles do both.
+
 ## properties or YAML
 
 Both live in `src/main/resources`; pick one style per project.
@@ -186,6 +189,59 @@ StockLevel level = inventoryClient.get()
 ```
 
 Configure timeouts on the underlying request factory, and wrap flaky calls with retries and circuit breakers (Spring Retry, Resilience4j).
+
+## Worked example: replacing constants with configuration
+
+```java
+@Validated
+@ConfigurationProperties(prefix = "bookshelf.loans")
+public record LoanProperties(
+        @Min(1) @Max(90) int days,
+        @Min(1) int maxPerMember,
+        @NotNull BigDecimal finePerDay
+) {}
+```
+
+```yaml title=application.yml
+bookshelf:
+  loans:
+    days: 14
+    max-per-member: 5
+    fine-per-day: 0.25
+```
+
+```yaml title=application-dev.yml
+spring:
+  datasource:
+    url: jdbc:h2:mem:bookshelf
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+logging:
+  level:
+    org.library.bookshelf: DEBUG
+```
+
+```yaml title=application-prod.yml
+spring:
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+```
+
+`StandardLoanPolicy` from step 2 now reads `LoanProperties` instead of returning `14`. The summer reading program becomes `BOOKSHELF_LOANS_DAYS=28` in the environment, with no code change, no release. And if someone sets `days: 0`, the app **refuses to start** and names the bad property, instead of creating loans due today.
+
+> [!plain] In plain English
+> Code says **what** to do; configuration says **with which values**. Values that differ between environments or change over time belong in configuration.
+
+## Common mistakes
+
+> [!mistake] Profile-specific secrets in Git
+> `application-prod.yml` should reference `${DATABASE_PASSWORD}`, never contain it.
 
 :::quiz
 q: `application.properties` has `server.port=8080`, `application-prod.properties` has `server.port=80`, and the prod profile is active. Which port?
@@ -542,4 +598,105 @@ What environment variable sets the property `app.mail.from`?
 APP_MAIL_FROM
 ---solution
 APP_MAIL_FROM
+:::
+
+:::exercise
+id: proj-sp-07-props
+level: 3
+title: "Project 7: LoanProperties"
+mode: code
+lang: java
+file: LoanProperties.java
+---
+Write a validated `@ConfigurationProperties` record `LoanProperties` with prefix `bookshelf.loans` and components `@Min(1) @Max(90) int days`, `@Min(1) int maxPerMember` and `@NotNull BigDecimal finePerDay`.
+---starter
+package org.library.bookshelf;
+
+import jakarta.validation.constraints.*;
+import java.math.BigDecimal;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
+---rule
+@Validated
+`@Validated`
+---rule
+@ConfigurationProperties\(\s*(prefix\s*=\s*)?"bookshelf\.loans"\s*\)
+Prefix `bookshelf.loans`
+---rule
+public\s+record\s+LoanProperties\(
+A record
+---rule
+@Min\(\s*1\s*\)\s+@Max\(\s*90\s*\)\s+int\s+days
+`days` 1–90
+---rule
+@Min\(\s*1\s*\)\s+int\s+maxPerMember
+`maxPerMember` ≥ 1
+---rule
+@NotNull\s+BigDecimal\s+finePerDay
+`finePerDay` required
+---solution
+package org.library.bookshelf;
+
+import jakarta.validation.constraints.*;
+import java.math.BigDecimal;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
+
+@Validated
+@ConfigurationProperties(prefix = "bookshelf.loans")
+public record LoanProperties(
+        @Min(1) @Max(90) int days,
+        @Min(1) int maxPerMember,
+        @NotNull BigDecimal finePerDay
+) {}
+:::
+
+:::exercise
+id: proj-sp-07-prod-yaml
+level: 2
+title: "Project 7b: the production profile"
+mode: code
+lang: yaml
+file: application-prod.yml
+---
+Write `application-prod.yml`: datasource `url`, `username` and `password` from the environment variables `DATABASE_URL`, `DATABASE_USER` and `DATABASE_PASSWORD` (`${...}` placeholders), and Hibernate `ddl-auto: validate`.
+---starter
+# production profile
+---rule
+^spring:\s*\n\s+datasource:
+`spring.datasource`
+---rule
+url:\s*\$\{DATABASE_URL\}
+`url: ${DATABASE_URL}`
+---rule
+username:\s*\$\{DATABASE_USER\}
+`username: ${DATABASE_USER}`
+---rule
+password:\s*\$\{DATABASE_PASSWORD\}
+`password: ${DATABASE_PASSWORD}`
+---rule
+jpa:\s*\n\s+hibernate:\s*\n\s+ddl-auto:\s*validate
+`jpa.hibernate.ddl-auto: validate`
+---solution
+spring:
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+:::
+
+:::exercise
+id: proj-sp-07-env
+level: 2
+title: "Project 7c: summer reading"
+mode: answer
+---
+For the summer reading program, the library wants `bookshelf.loans.days` set to 28 in production **without** changing any file. Write the environment variable assignment (e.g. `NAME=value`).
+---answer
+BOOKSHELF_LOANS_DAYS=28
+---solution
+BOOKSHELF_LOANS_DAYS=28
 :::

@@ -4,6 +4,9 @@ title: Testing Spring Boot apps
 summary: The testing pyramid in Spring, plain unit tests with Mockito, @WebMvcTest slices with MockMvc and @MockitoBean, JSON assertions, testing security, @DataJpaTest, full @SpringBootTest integration tests, Testcontainers with @ServiceConnection, and keeping the suite fast.
 minutes: 40
 ---
+> [!project] Bookshelf, step 9: proving the rules
+> The borrowing rules are the most important code in Bookshelf, so they get the most tests: fast unit tests for `LoanService` with mocks and a fixed clock, and a web slice test for the catalog endpoints.
+
 ## Pick the smallest test that proves the point
 
 `spring-boot-starter-test` bundles JUnit 5, AssertJ, Mockito, Hamcrest, JSONassert and Spring's test support. You can test at several levels:
@@ -179,6 +182,55 @@ class ApiIT {
 - Avoid `@DirtiesContext`: it throws the cached context away.
 - Name integration tests `*IT` and run them with the Failsafe plugin (`./mvnw verify`), keeping `./mvnw test` quick.
 - Use `@ActiveProfiles("test")` and an `application-test.properties` for test-specific settings.
+
+## Worked example: testing borrow() without Spring
+
+```java
+class LoanServiceTest {
+
+    private final MemberRepository members = mock(MemberRepository.class);
+    private final BookRepository books = mock(BookRepository.class);
+    private final LoanRepository loans = mock(LoanRepository.class);
+    private final LoanPolicy policy = new StandardLoanPolicy();                       // 14 days
+    private final Clock clock = Clock.fixed(Instant.parse("2026-03-01T10:00:00Z"), ZoneOffset.UTC);
+
+    private final LoanService service = new LoanService(members, books, loans, policy, clock);
+
+    @Test
+    void borrowingSetsDueDateAndMarksBookOut() {
+        Member ada = new Member("Ada");
+        Book dune = new Book("9780441013593", "Dune", "Frank Herbert", 1965);
+        when(members.findById(1L)).thenReturn(Optional.of(ada));
+        when(books.findById(7L)).thenReturn(Optional.of(dune));
+        when(loans.save(any(Loan.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        LoanResponse loan = service.borrow(1L, 7L);
+
+        assertThat(loan.dueOn()).isEqualTo(LocalDate.of(2026, 3, 15));
+        assertThat(dune.isAvailable()).isFalse();
+    }
+
+    @Test
+    void cannotBorrowABookThatIsOut() {
+        Book dune = new Book("9780441013593", "Dune", "Frank Herbert", 1965);
+        dune.setAvailable(false);
+        when(members.findById(1L)).thenReturn(Optional.of(new Member("Ada")));
+        when(books.findById(7L)).thenReturn(Optional.of(dune));
+
+        assertThatThrownBy(() -> service.borrow(1L, 7L)).isInstanceOf(BookUnavailableException.class);
+        verify(loans, never()).save(any());
+    }
+}
+```
+
+Three things make this test good:
+
+- **No Spring, no database**: it runs in milliseconds, so you'll run it constantly.
+- **A fixed clock** makes "due in 14 days" an exact, assertable date.
+- The failure test checks the **side effect didn't happen** (`never().save`), not just that an exception was thrown.
+
+> [!plain] In plain English
+> A mock is a stand-in object you program with answers ("when asked for member 1, return Ada"). It lets you test one class in isolation and check how it used its collaborators.
 
 :::quiz
 q: What does `@WebMvcTest(ProductController.class)` load?
@@ -591,4 +643,148 @@ ls target
 ---solution
 sed -i 's/assertEquals(1, 2)/assertEquals(2, 1 + 1)/' spring-app/src/test/java/com/example/demo/MathTest.java
 cd spring-app && ./mvnw -q package
+:::
+
+:::exercise
+id: proj-sp-09-unavailable
+level: 3
+title: "Project 9: test the unavailable rule"
+mode: code
+lang: java
+file: LoanServiceTest.java
+---
+Write `cannotBorrowABookThatIsOut()`: make `dune` unavailable with `dune.setAvailable(false)`, stub `members.findById(1L)` and `books.findById(7L)` to return them in `Optional`s, assert with `assertThatThrownBy(() -> service.borrow(1L, 7L)).isInstanceOf(BookUnavailableException.class)`, and verify `loans` **never** saved anything.
+---starter
+package org.library.bookshelf;
+
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
+
+class LoanServiceTest {
+
+    // members, books, loans mocks, policy, clock and service are set up here
+
+    @Test
+    void cannotBorrowABookThatIsOut() {
+        Member ada = new Member("Ada");
+        Book dune = new Book("9780441013593", "Dune", "Frank Herbert", 1965);
+    }
+}
+---rule
+dune\.setAvailable\(\s*false\s*\)
+Make the book unavailable
+---rule
+when\(\s*members\.findById\(\s*1L\s*\)\s*\)\.thenReturn\(\s*Optional\.of\(\s*ada\s*\)\s*\)
+Stub the member
+---rule
+when\(\s*books\.findById\(\s*7L\s*\)\s*\)\.thenReturn\(\s*Optional\.of\(\s*dune\s*\)\s*\)
+Stub the book
+---rule
+assertThatThrownBy\(\s*\(\)\s*->\s*service\.borrow\(\s*1L\s*,\s*7L\s*\)\s*\)\.isInstanceOf\(\s*BookUnavailableException\.class\s*\)
+Assert the exception
+---rule
+verify\(\s*loans\s*,\s*never\(\s*\)\s*\)\.save\(\s*any\(\s*(Loan\.class)?\s*\)\s*\)
+Verify nothing was saved
+---solution
+package org.library.bookshelf;
+
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
+
+class LoanServiceTest {
+
+    // members, books, loans mocks, policy, clock and service are set up here
+
+    @Test
+    void cannotBorrowABookThatIsOut() {
+        Member ada = new Member("Ada");
+        Book dune = new Book("9780441013593", "Dune", "Frank Herbert", 1965);
+        dune.setAvailable(false);
+        when(members.findById(1L)).thenReturn(Optional.of(ada));
+        when(books.findById(7L)).thenReturn(Optional.of(dune));
+
+        assertThatThrownBy(() -> service.borrow(1L, 7L)).isInstanceOf(BookUnavailableException.class);
+        verify(loans, never()).save(any());
+    }
+}
+:::
+
+:::exercise
+id: proj-sp-09-webmvc
+level: 3
+title: "Project 9b: the catalog slice test"
+mode: code
+lang: java
+file: BookControllerTest.java
+---
+Write a `@WebMvcTest(BookController.class)` test class with `@MockitoBean BookService books` and a test `missingBookIs404` that stubs `books.get(99L)` to throw `new BookNotFoundException("Book 99 not found")` and expects `GET /api/books/99` to return **404**.
+---starter
+package org.library.bookshelf;
+
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+
+class BookControllerTest {
+
+    @Autowired
+    MockMvc mvc;
+}
+---rule
+@WebMvcTest\(\s*BookController\.class\s*\)\s*\n\s*class\s+BookControllerTest
+`@WebMvcTest(BookController.class)`
+---rule
+@MockitoBean\s*\n?\s*BookService\s+books\s*;
+`@MockitoBean BookService books;`
+---rule
+@Test\s*\n\s*void\s+missingBookIs404\(\s*\)
+The test method
+---rule
+when\(\s*books\.get\(\s*99L\s*\)\s*\)\.thenThrow\(\s*new\s+BookNotFoundException\(\s*"Book 99 not found"\s*\)\s*\)
+Stub the exception
+---rule
+mvc\.perform\(\s*get\(\s*"/api/books/99"\s*\)\s*\)\s*\.andExpect\(\s*status\(\s*\)\.isNotFound\(\s*\)\s*\)
+Expect 404
+---solution
+package org.library.bookshelf;
+
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+
+@WebMvcTest(BookController.class)
+class BookControllerTest {
+
+    @Autowired
+    MockMvc mvc;
+
+    @MockitoBean
+    BookService books;
+
+    @Test
+    void missingBookIs404() throws Exception {
+        when(books.get(99L)).thenThrow(new BookNotFoundException("Book 99 not found"));
+        mvc.perform(get("/api/books/99")).andExpect(status().isNotFound());
+    }
+}
 :::

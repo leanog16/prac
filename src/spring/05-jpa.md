@@ -4,6 +4,9 @@ title: Spring Data JPA
 summary: Entities and IDs, the JpaRepository interface, derived query methods, @Query with JPQL and native SQL, pagination and sorting with Pageable, projections, datasource configuration, ddl-auto vs Flyway migrations, and the service layer.
 minutes: 40
 ---
+> [!project] Bookshelf, step 5: the catalog in a database
+> Books move from an in-memory list into PostgreSQL. This step maps the `Book` entity, writes `BookRepository` with the searches the catalog page needs, and implements `BookService` on top of it.
+
 ## The stack
 
 - **JPA** (Jakarta Persistence) is the standard Java API for mapping objects to relational tables.
@@ -189,6 +192,52 @@ public class ProductService {
     }
 }
 ```
+
+## Worked example: from requirements to repository methods
+
+The catalog page needs:
+
+| Feature | Repository method |
+|---|---|
+| look up by ISBN (unique) | `Optional<Book> findByIsbn(String isbn)` |
+| refuse duplicates | `boolean existsByIsbn(String isbn)` |
+| search by author, any case, partial | `List<Book> findByAuthorContainingIgnoreCase(String author)` |
+| "available now" list, paged | `Page<Book> findByAvailableTrue(Pageable pageable)` |
+| newest additions | `List<Book> findTop10ByOrderByIdDesc()` |
+
+None of those needs SQL: Spring Data derives the queries from the method names, and checks them at startup.
+
+```java
+@Service
+public class BookService {
+    private final BookRepository repo;
+
+    public BookService(BookRepository repo) { this.repo = repo; }
+
+    @Transactional
+    public BookResponse add(BookRequest req) {
+        if (repo.existsByIsbn(req.isbn())) {
+            throw new DuplicateIsbnException("ISBN " + req.isbn() + " is already in the catalog");
+        }
+        Book saved = repo.save(new Book(req.isbn(), req.title(), req.author(), req.year()));
+        return BookResponse.from(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public BookResponse get(long id) {
+        return repo.findById(id).map(BookResponse::from)
+                   .orElseThrow(() -> new BookNotFoundException("Book " + id + " not found"));
+    }
+}
+```
+
+> [!plain] In plain English
+> An `@Entity` class is a table; each object is a row. A repository interface is a list of questions you can ask about that table, and Spring writes the SQL for each one.
+
+## Common mistakes
+
+> [!mistake] Relying only on `existsByIsbn`
+> Two requests at the same moment can both see "not taken" and both insert. Add a **unique constraint** on the column too (`@Column(unique = true)` plus a migration), and turn the database's violation into the same 409.
 
 :::quiz
 q: Why is `@Enumerated(EnumType.STRING)` preferred over the default?
@@ -556,4 +605,202 @@ V3__
 V3__
 ---explain
 Flyway files are `V<version>__<description>.sql`: a capital V, a version higher than every applied one, then **two** underscores.
+:::
+
+:::exercise
+id: proj-sp-05-entity
+level: 2
+title: "Project 5: the Book entity"
+mode: code
+lang: java
+file: Book.java
+---
+Map `Book` to the table `books`: `id` is an identity-generated `Long` primary key; `isbn` is a column that's `unique` and `nullable = false` with `length = 13`; `title` and `author` are `nullable = false`; `available` is a `boolean` defaulting to `true`. Include a `protected` no-args constructor.
+---starter
+package org.library.bookshelf;
+
+import jakarta.persistence.*;
+
+public class Book {
+
+    private Long id;
+    private String isbn;
+    private String title;
+    private String author;
+    private int year;
+    private boolean available;
+}
+---rule
+@Entity
+`@Entity`
+---rule
+@Table\(\s*name\s*=\s*"books"\s*\)
+`@Table(name = "books")`
+---rule
+@Id\s*\n\s*@GeneratedValue\(\s*strategy\s*=\s*GenerationType\.IDENTITY\s*\)\s*\n\s*private\s+Long\s+id
+Identity primary key
+---rule
+@Column\((?=[^)]*unique\s*=\s*true)(?=[^)]*nullable\s*=\s*false)(?=[^)]*length\s*=\s*13)[^)]*\)\s*\n\s*private\s+String\s+isbn
+`isbn`: unique, not null, length 13
+---rule
+@Column\(\s*nullable\s*=\s*false\s*\)\s*\n\s*private\s+String\s+title
+`title` not null
+---rule
+@Column\(\s*nullable\s*=\s*false\s*\)\s*\n\s*private\s+String\s+author
+`author` not null
+---rule
+private\s+boolean\s+available\s*=\s*true\s*;
+`available` defaults to true
+---rule
+protected\s+Book\(\s*\)\s*\{\s*\}
+`protected Book() {}`
+---solution
+package org.library.bookshelf;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "books")
+public class Book {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(unique = true, nullable = false, length = 13)
+    private String isbn;
+
+    @Column(nullable = false)
+    private String title;
+
+    @Column(nullable = false)
+    private String author;
+
+    private int year;
+
+    private boolean available = true;
+
+    protected Book() {}
+}
+:::
+
+:::exercise
+id: proj-sp-05-repo
+level: 2
+title: "Project 5b: BookRepository"
+mode: code
+lang: java
+file: BookRepository.java
+---
+Declare `BookRepository extends JpaRepository<Book, Long>` with: `Optional<Book> findByIsbn(String isbn)`, `boolean existsByIsbn(String isbn)`, `List<Book> findByAuthorContainingIgnoreCase(String author)` and `Page<Book> findByAvailableTrue(Pageable pageable)`.
+---starter
+package org.library.bookshelf;
+
+import java.util.List;
+import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+---rule
+public\s+interface\s+BookRepository\s+extends\s+JpaRepository<\s*Book\s*,\s*Long\s*>
+`extends JpaRepository<Book, Long>`
+---rule
+Optional<Book>\s+findByIsbn\(\s*String\s+isbn\s*\)\s*;
+`findByIsbn`
+---rule
+boolean\s+existsByIsbn\(\s*String\s+isbn\s*\)\s*;
+`existsByIsbn`
+---rule
+List<Book>\s+findByAuthorContainingIgnoreCase\(\s*String\s+author\s*\)\s*;
+`findByAuthorContainingIgnoreCase`
+---rule
+Page<Book>\s+findByAvailableTrue\(\s*Pageable\s+pageable\s*\)\s*;
+`findByAvailableTrue(Pageable)`
+---solution
+package org.library.bookshelf;
+
+import java.util.List;
+import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface BookRepository extends JpaRepository<Book, Long> {
+    Optional<Book> findByIsbn(String isbn);
+    boolean existsByIsbn(String isbn);
+    List<Book> findByAuthorContainingIgnoreCase(String author);
+    Page<Book> findByAvailableTrue(Pageable pageable);
+}
+:::
+
+:::exercise
+id: proj-sp-05-add
+level: 3
+title: "Project 5c: adding a book"
+mode: code
+lang: java
+file: BookService.java
+---
+Implement `add`: mark it `@Transactional`; if `repo.existsByIsbn(req.isbn())`, throw `new DuplicateIsbnException("ISBN " + req.isbn() + " is already in the catalog")`; otherwise save `new Book(req.isbn(), req.title(), req.author(), req.year())` and return `BookResponse.from(saved)`.
+---starter
+package org.library.bookshelf;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class BookService {
+
+    private final BookRepository repo;
+
+    public BookService(BookRepository repo) {
+        this.repo = repo;
+    }
+
+    public BookResponse add(BookRequest req) {
+        return null;
+    }
+}
+---rule
+@Transactional\s*\n\s*public\s+BookResponse\s+add\(
+`@Transactional` on `add`
+---rule
+if\s*\(\s*repo\.existsByIsbn\(\s*req\.isbn\(\s*\)\s*\)\s*\)
+Check for duplicates
+---rule
+throw\s+new\s+DuplicateIsbnException\(\s*"ISBN "\s*\+\s*req\.isbn\(\s*\)\s*\+\s*" is already in the catalog"\s*\)
+Throw the exception
+---rule
+repo\.save\(\s*new\s+Book\(\s*req\.isbn\(\s*\)\s*,\s*req\.title\(\s*\)\s*,\s*req\.author\(\s*\)\s*,\s*req\.year\(\s*\)\s*\)\s*\)
+Save the new book
+---rule
+return\s+BookResponse\.from\(\s*\w+\s*\)\s*;
+Return a `BookResponse`
+---rule
+!return\s+null
+No `return null`
+---solution
+package org.library.bookshelf;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class BookService {
+
+    private final BookRepository repo;
+
+    public BookService(BookRepository repo) {
+        this.repo = repo;
+    }
+
+    @Transactional
+    public BookResponse add(BookRequest req) {
+        if (repo.existsByIsbn(req.isbn())) {
+            throw new DuplicateIsbnException("ISBN " + req.isbn() + " is already in the catalog");
+        }
+        Book saved = repo.save(new Book(req.isbn(), req.title(), req.author(), req.year()));
+        return BookResponse.from(saved);
+    }
+}
 :::

@@ -4,6 +4,9 @@ title: Spring Boot essentials
 summary: What Spring and Spring Boot are, starters and auto-configuration, the project layout, the Maven wrapper and the build lifecycle, @SpringBootApplication and component scanning, running the fat jar, and changing settings from the command line.
 minutes: 30
 ---
+> [!project] Track project: Bookshelf, a library API
+> In this track you'll build **Bookshelf**, the backend for a small public library: a catalog of books, members who borrow them, loans with due dates, and librarians who manage it all. (If you did the Java OOP track, you already modeled this domain in plain Java; here it becomes a production Spring Boot service.) Each lesson's **Project** exercises are the next piece of that codebase.
+
 ## Spring and Spring Boot
 
 **Spring** is a Java framework whose core is an **inversion-of-control container**: you write plain classes, and Spring creates them, wires them together and manages their lifecycle. On top of that core sit modules for web apps (Spring MVC), data access (Spring Data), security (Spring Security), messaging and more.
@@ -140,6 +143,46 @@ management.endpoint.health.probes.enabled=true    # /actuator/health/liveness an
 ```
 
 Never expose `env`, `heapdump` or `beans` publicly: they leak configuration and secrets.
+
+## Worked example: generating Bookshelf
+
+On [start.spring.io](https://start.spring.io) choose: **Maven**, **Java 21**, Spring Boot **3.3.x**, group `org.library`, artifact `bookshelf`, and the dependencies:
+
+| Dependency | Why Bookshelf needs it |
+|---|---|
+| Spring Web | REST controllers, embedded Tomcat, JSON |
+| Validation | `@NotBlank`, `@Valid` on requests |
+| Spring Data JPA | entities and repositories |
+| PostgreSQL Driver | production database |
+| H2 Database | in-memory database for tests and quick local runs |
+| Spring Boot Actuator | `/actuator/health` for Docker and load balancers |
+| Spring Security (lesson 8) | members vs librarians |
+
+Unzip it, and the first build and run take three commands:
+
+```bash
+./mvnw package
+java -jar target/bookshelf-0.0.1-SNAPSHOT.jar
+curl -s localhost:8080/actuator/health
+```
+
+## What happens when the app starts
+
+1. `main` calls `SpringApplication.run(BookshelfApplication.class, args)`.
+2. Spring reads configuration: `application.properties`, then profile files, environment variables and command-line arguments.
+3. **Component scanning** finds your `@RestController`, `@Service` and `@Repository` classes under `org.library.bookshelf`.
+4. **Auto-configuration** looks at the classpath: Spring Web found → start Tomcat on 8080; JPA + a driver found → create a `DataSource` and an `EntityManagerFactory`.
+5. Beans are created and wired; the log ends with `Started BookshelfApplication in 2.1 seconds`.
+
+When startup fails, the answer is almost always in that log, in the `APPLICATION FAILED TO START` block, which says exactly which bean or property is missing.
+
+> [!plain] In plain English
+> Spring Boot is a ready-made skeleton: you add the parts your app needs as "starters", and Boot configures them with sensible defaults you can override in `application.properties`.
+
+## Common mistakes
+
+> [!mistake] Running with `mvn` instead of `./mvnw`
+> A system Maven may be a different version than the project expects. The wrapper pins it. On Windows it's `mvnw.cmd`.
 
 :::quiz
 q: What does `@ComponentScan` (inside `@SpringBootApplication`) scan?
@@ -310,4 +353,90 @@ Write the Maven wrapper command that deletes old build output and builds the jar
 ./mvnw clean package -Dmaven.test.skip=true
 ---solution
 ./mvnw clean package -DskipTests
+:::
+
+:::exercise
+id: proj-sp-01-pom
+level: 2
+title: "Project 1: Bookshelf's dependencies"
+mode: code
+lang: xml
+file: pom.xml
+---
+Complete Bookshelf's `<dependencies>` with the starters for **web**, **validation**, **data-jpa** and **actuator** (all `org.springframework.boot`, no versions), the runtime driver `org.postgresql:postgresql` with `<scope>runtime</scope>`, and `spring-boot-starter-test` with `<scope>test</scope>`.
+---starter
+<dependencies>
+</dependencies>
+---rule
+<artifactId>spring-boot-starter-web</artifactId>
+Web starter
+---rule
+<artifactId>spring-boot-starter-validation</artifactId>
+Validation starter
+---rule
+<artifactId>spring-boot-starter-data-jpa</artifactId>
+Data JPA starter
+---rule
+<artifactId>spring-boot-starter-actuator</artifactId>
+Actuator starter
+---rule
+<groupId>org\.postgresql</groupId>\s*<artifactId>postgresql</artifactId>\s*<scope>runtime</scope>
+PostgreSQL driver with runtime scope
+---rule
+<artifactId>spring-boot-starter-test</artifactId>\s*<scope>test</scope>
+Test starter with test scope
+---rule
+!starter-(web|validation|data-jpa|actuator)</artifactId>\s*<version>
+No versions on starters
+---solution
+<dependencies>
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-web</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-validation</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-jpa</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>org.postgresql</groupId>
+    <artifactId>postgresql</artifactId>
+    <scope>runtime</scope>
+  </dependency>
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-test</artifactId>
+    <scope>test</scope>
+  </dependency>
+</dependencies>
+:::
+
+:::exercise
+id: proj-sp-01-props
+level: 2
+title: "Project 1b: name it and move it"
+mode: file
+file: spring-app/src/main/resources/application.properties
+---run
+cd spring-app && ./mvnw -q package && java -jar target/demo-0.0.1-SNAPSHOT.jar > /dev/null 2>&1
+curl -s localhost:8081/actuator/health; echo
+curl -s localhost:8081/hello?name=Bookshelf; echo
+---
+The practice project stands in for Bookshelf. Rewrite its `application.properties` so the application is named `bookshelf`, listens on port **8081**, and exposes the actuator `health` and `info` endpoints.
+---starter
+spring.application.name=demo
+server.port=8080
+management.endpoints.web.exposure.include=health
+---solution
+spring.application.name=bookshelf
+server.port=8081
+management.endpoints.web.exposure.include=health,info
 :::

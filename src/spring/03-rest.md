@@ -4,6 +4,9 @@ title: REST controllers
 summary: @RestController and request mappings, path variables, query parameters with defaults, request bodies as Java records, ResponseEntity and status codes, Location headers for created resources, request headers, and how Jackson turns objects into JSON.
 minutes: 35
 ---
+> [!project] Bookshelf, step 3: the catalog API
+> The catalog is Bookshelf's front door: list books, look one up, add one, remove one. This step writes `BookController` with request and response records.
+
 ## A controller
 
 ```java
@@ -147,6 +150,42 @@ public byte[] cover(@PathVariable long id) { ... }
 ```
 
 A request with the wrong `Content-Type` gets **415 Unsupported Media Type**; one whose `Accept` header can't be satisfied gets **406 Not Acceptable**.
+
+## Worked example: one request through the layers
+
+`POST /api/books` with `{"isbn": "9780441013593", "title": "Dune", "author": "Frank Herbert", "year": 1965}`:
+
+```
+HTTP ──► BookController.create(@RequestBody BookRequest)     web layer: HTTP ↔ Java
+              │  converts the request record, calls the service
+              ▼
+          BookService.add(BookRequest)                         business layer: rules
+              │  checks the ISBN isn't taken, builds a Book
+              ▼
+          BookRepository.save(Book)                            persistence layer: SQL
+              ▲
+          returns Book ──► BookResponse.from(book) ──► 201 Created + Location: /api/books/7
+```
+
+Each layer has one job, and only the controller knows about HTTP. That's why the service can be reused by a CSV importer or a scheduled job, and why each layer can be tested on its own (lesson 9).
+
+```java
+public record BookRequest(String isbn, String title, String author, int year) {}
+
+public record BookResponse(long id, String isbn, String title, String author, int year, boolean available) {
+    static BookResponse from(Book b) {
+        return new BookResponse(b.getId(), b.getIsbn(), b.getTitle(), b.getAuthor(), b.getYear(), b.isAvailable());
+    }
+}
+```
+
+> [!plain] In plain English
+> A controller method is "when this HTTP request arrives, call this Java method". Spring turns the incoming JSON into a record for you, and turns whatever you return back into JSON.
+
+## Common mistakes
+
+> [!mistake] Business logic in controllers
+> Checking "is this ISBN already used?" inside the controller means the importer and the scheduled job skip that check. Controllers should translate HTTP and delegate.
 
 :::quiz
 q: What's the difference between `@Controller` and `@RestController`?
@@ -566,4 +605,138 @@ What JSON does `GET /price` return?
 {"currency":"EUR","cents":1999}
 ---solution
 {"currency":"EUR","cents":1999}
+:::
+
+:::exercise
+id: proj-sp-03-catalog-run
+level: 2
+title: "Project 3: a first catalog endpoint"
+mode: file
+file: spring-app/src/main/java/com/example/demo/CatalogController.java
+---run
+cd spring-app && ./mvnw -q package && java -jar target/demo-0.0.1-SNAPSHOT.jar > /dev/null 2>&1
+curl -s localhost:8080/api/books/featured; echo
+curl -s localhost:8080/api/books/isbn/9780441013593; echo
+---
+Write `CatalogController` under `/api/books` (class-level mapping) with `GET /featured` returning `Map.of("title", "Dune", "author", "Frank Herbert")`, and `GET /isbn/{isbn}` returning `Map.of("isbn", isbn, "found", "false")`.
+---starter
+package com.example.demo;
+
+import java.util.Map;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class CatalogController {
+}
+---solution
+package com.example.demo;
+
+import java.util.Map;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/books")
+public class CatalogController {
+
+    @GetMapping("/featured")
+    public Map<String, String> featured() {
+        return Map.of("title", "Dune", "author", "Frank Herbert");
+    }
+
+    @GetMapping("/isbn/{isbn}")
+    public Map<String, String> byIsbn(@PathVariable String isbn) {
+        return Map.of("isbn", isbn, "found", "false");
+    }
+}
+:::
+
+:::exercise
+id: proj-sp-03-controller
+level: 3
+title: "Project 3b: BookController"
+mode: code
+lang: java
+file: BookController.java
+---
+Write `BookController` for `/api/books` with an injected `BookService books`:
+
+- `GET` (no path) returns `List<BookResponse>` from `books.findAll()`;
+- `GET /{id}` returns `books.get(id)`;
+- `POST` takes `@RequestBody BookRequest body` and returns `ResponseEntity<BookResponse>`: **201** with `Location` `/api/books/{id}` via `ResponseEntity.created(URI.create("/api/books/" + created.id())).body(created)`;
+- `DELETE /{id}` returns **204** via `@ResponseStatus(HttpStatus.NO_CONTENT)`.
+---starter
+package org.library.bookshelf;
+
+import java.net.URI;
+import java.util.List;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/books")
+public class BookController {
+
+    private final BookService books;
+
+    public BookController(BookService books) {
+        this.books = books;
+    }
+}
+---rule
+@GetMapping\s*\n\s*public\s+List<BookResponse>\s+\w+\(\s*\)\s*\{\s*return\s+books\.findAll\(\s*\)\s*;
+`GET` → `books.findAll()`
+---rule
+@GetMapping\(\s*"/\{id\}"\s*\)\s*\n\s*public\s+BookResponse\s+\w+\(\s*@PathVariable\s+(long|Long)\s+id\s*\)\s*\{\s*return\s+books\.get\(\s*id\s*\)\s*;
+`GET /{id}` → `books.get(id)`
+---rule
+@PostMapping\s*\n\s*public\s+ResponseEntity<BookResponse>\s+\w+\(\s*@RequestBody\s+BookRequest\s+body\s*\)
+`POST` with `@RequestBody BookRequest`
+---rule
+ResponseEntity\.created\(\s*URI\.create\(\s*"/api/books/"\s*\+\s*\w+\.id\(\s*\)\s*\)\s*\)\.body\(\s*\w+\s*\)
+201 with Location
+---rule
+@DeleteMapping\(\s*"/\{id\}"\s*\)\s*\n\s*@ResponseStatus\(\s*HttpStatus\.NO_CONTENT\s*\)|@ResponseStatus\(\s*HttpStatus\.NO_CONTENT\s*\)\s*\n\s*@DeleteMapping\(\s*"/\{id\}"\s*\)
+`DELETE /{id}` → 204
+---solution
+package org.library.bookshelf;
+
+import java.net.URI;
+import java.util.List;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/books")
+public class BookController {
+
+    private final BookService books;
+
+    public BookController(BookService books) {
+        this.books = books;
+    }
+
+    @GetMapping
+    public List<BookResponse> list() {
+        return books.findAll();
+    }
+
+    @GetMapping("/{id}")
+    public BookResponse get(@PathVariable long id) {
+        return books.get(id);
+    }
+
+    @PostMapping
+    public ResponseEntity<BookResponse> create(@RequestBody BookRequest body) {
+        BookResponse created = books.add(body);
+        return ResponseEntity.created(URI.create("/api/books/" + created.id())).body(created);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable long id) {
+        books.remove(id);
+    }
+}
 :::

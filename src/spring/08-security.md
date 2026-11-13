@@ -4,6 +4,9 @@ title: Spring Security
 summary: The filter chain and what the starter does by default, a SecurityFilterChain bean with authorizeHttpRequests, stateless APIs and CSRF, PasswordEncoder and UserDetailsService, JWT resource servers, method security with @PreAuthorize, CORS, and reading the current user.
 minutes: 45
 ---
+> [!project] Bookshelf, step 8: members and librarians
+> Anyone may browse the catalog. Members may borrow and return books. Only librarians may add or remove books and see everyone's loans. This step encodes those rules in the security filter chain and on the services.
+
 ## What happens when you add the starter
 
 Add `spring-boot-starter-security` and, with no other code, **every** endpoint requires authentication. Boot generates a user named `user` with a random password printed in the log, and enables HTTP Basic, a login form, CSRF protection and security headers. Secure by default; now you configure it.
@@ -148,6 +151,55 @@ CorsConfigurationSource corsConfigurationSource() {
     return source;
 }
 ```
+
+## Worked example: writing rules from an access matrix
+
+Start with a table, not with code:
+
+| Endpoint | Anonymous | MEMBER | LIBRARIAN |
+|---|---|---|---|
+| `GET /api/books/**` | ✓ | ✓ | ✓ |
+| `POST /api/loans`, `POST /api/loans/{id}/return` | | ✓ | ✓ |
+| `GET /api/loans/me` | | ✓ | ✓ |
+| `POST/PUT/DELETE /api/books/**` | | | ✓ |
+| `GET /api/loans` (everyone's) | | | ✓ |
+| `/actuator/health` | ✓ | ✓ | ✓ |
+
+Then translate row by row, **most specific first**:
+
+```java
+.authorizeHttpRequests(auth -> auth
+    .requestMatchers("/actuator/health").permitAll()
+    .requestMatchers(HttpMethod.GET, "/api/books/**").permitAll()
+    .requestMatchers("/api/books/**").hasRole("LIBRARIAN")              // every other method on books
+    .requestMatchers(HttpMethod.GET, "/api/loans").hasRole("LIBRARIAN")
+    .requestMatchers("/api/loans/**").hasAnyRole("MEMBER", "LIBRARIAN")
+    .anyRequest().denyAll())                                           // nothing unlisted is reachable
+```
+
+Ending with `denyAll()` instead of `authenticated()` means a new endpoint is **closed** until someone adds a rule for it. That's a safer default for an app with clear roles.
+
+Then add method security as a second line of defense in the service:
+
+```java
+@PreAuthorize("hasRole('LIBRARIAN')")
+public void remove(long id) { ... }
+```
+
+## Who is borrowing?
+
+The member id must come from the **token**, never from the request body. Otherwise any member could borrow books on someone else's card:
+
+```java
+@PostMapping("/api/loans")
+public LoanResponse borrow(@RequestBody BorrowRequest req, @AuthenticationPrincipal Jwt jwt) {
+    long memberId = Long.parseLong(jwt.getSubject());
+    return loans.borrow(memberId, req.bookId());
+}
+```
+
+> [!plain] In plain English
+> Authentication answers "who are you?"; authorization answers "what may you do?". The filter chain handles both before your controller runs.
 
 :::quiz
 q: You add spring-boot-starter-security and nothing else. What happens to your endpoints?
@@ -484,4 +536,158 @@ A request to `/api/admin/users` carries a valid JWT for a user whose only author
 403
 ---explain
 The user is authenticated (so not 401) but lacks the required role.
+:::
+
+:::exercise
+id: proj-sp-08-chain
+level: 4
+title: "Project 8: Bookshelf's access rules"
+mode: code
+lang: java
+file: SecurityConfig.java
+---
+Fill in `authorizeHttpRequests` following the access matrix: `/actuator/health` → `permitAll()`; `GET /api/books/**` → `permitAll()`; any other `/api/books/**` → `hasRole("LIBRARIAN")`; `GET /api/loans` → `hasRole("LIBRARIAN")`; `/api/loans/**` → `hasAnyRole("MEMBER", "LIBRARIAN")`; everything else → `denyAll()`.
+---starter
+package org.library.bookshelf;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+public class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain api(HttpSecurity http) throws Exception {
+        http
+            .csrf(csrf -> csrf.disable())
+            .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth
+                .anyRequest().authenticated())
+            .oauth2ResourceServer(o -> o.jwt(Customizer.withDefaults()));
+        return http.build();
+    }
+}
+---rule
+requestMatchers\(\s*"/actuator/health"\s*\)\.permitAll\(\s*\)
+Health is public
+---rule
+requestMatchers\(\s*HttpMethod\.GET\s*,\s*"/api/books/\*\*"\s*\)\.permitAll\(\s*\)
+Browsing books is public
+---rule
+requestMatchers\(\s*"/api/books/\*\*"\s*\)\.hasRole\(\s*"LIBRARIAN"\s*\)
+Changing books needs LIBRARIAN
+---rule
+HttpMethod\.GET\s*,\s*"/api/books/\*\*"\s*\)\.permitAll\(\s*\)[\s\S]*requestMatchers\(\s*"/api/books/\*\*"\s*\)\.hasRole
+The GET rule comes first
+---rule
+requestMatchers\(\s*HttpMethod\.GET\s*,\s*"/api/loans"\s*\)\.hasRole\(\s*"LIBRARIAN"\s*\)
+All loans: LIBRARIAN
+---rule
+requestMatchers\(\s*"/api/loans/\*\*"\s*\)\.hasAnyRole\(\s*"MEMBER"\s*,\s*"LIBRARIAN"\s*\)
+Loans: MEMBER or LIBRARIAN
+---rule
+anyRequest\(\s*\)\.denyAll\(\s*\)
+Deny everything else
+---rule
+!anyRequest\(\s*\)\.authenticated
+No `anyRequest().authenticated()`
+---solution
+package org.library.bookshelf;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+public class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain api(HttpSecurity http) throws Exception {
+        http
+            .csrf(csrf -> csrf.disable())
+            .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/actuator/health").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/books/**").permitAll()
+                .requestMatchers("/api/books/**").hasRole("LIBRARIAN")
+                .requestMatchers(HttpMethod.GET, "/api/loans").hasRole("LIBRARIAN")
+                .requestMatchers("/api/loans/**").hasAnyRole("MEMBER", "LIBRARIAN")
+                .anyRequest().denyAll())
+            .oauth2ResourceServer(o -> o.jwt(Customizer.withDefaults()));
+        return http.build();
+    }
+}
+:::
+
+:::exercise
+id: proj-sp-08-borrow-endpoint
+level: 3
+title: "Project 8b: borrow as yourself"
+mode: code
+lang: java
+file: LoanController.java
+---
+Write `@PostMapping("/api/loans")` `LoanResponse borrow(@RequestBody BorrowRequest req, @AuthenticationPrincipal Jwt jwt)` that takes the member id from `Long.parseLong(jwt.getSubject())` (not from the request) and returns `loans.borrow(memberId, req.bookId())`.
+---starter
+package org.library.bookshelf;
+
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class LoanController {
+
+    private final LoanService loans;
+
+    public LoanController(LoanService loans) {
+        this.loans = loans;
+    }
+}
+---rule
+@PostMapping\(\s*"/api/loans"\s*\)
+`@PostMapping("/api/loans")`
+---rule
+LoanResponse\s+borrow\(\s*@RequestBody\s+BorrowRequest\s+req\s*,\s*@AuthenticationPrincipal\s+Jwt\s+jwt\s*\)
+The signature
+---rule
+long\s+memberId\s*=\s*Long\.parseLong\(\s*jwt\.getSubject\(\s*\)\s*\)
+Member id from the token
+---rule
+return\s+loans\.borrow\(\s*memberId\s*,\s*req\.bookId\(\s*\)\s*\)\s*;
+Delegate to the service
+---rule
+!req\.memberId\(
+Never trust a member id from the body
+---solution
+package org.library.bookshelf;
+
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class LoanController {
+
+    private final LoanService loans;
+
+    public LoanController(LoanService loans) {
+        this.loans = loans;
+    }
+
+    @PostMapping("/api/loans")
+    public LoanResponse borrow(@RequestBody BorrowRequest req, @AuthenticationPrincipal Jwt jwt) {
+        long memberId = Long.parseLong(jwt.getSubject());
+        return loans.borrow(memberId, req.bookId());
+    }
+}
 :::
