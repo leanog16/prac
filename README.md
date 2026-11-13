@@ -1,4 +1,4 @@
-# prac
+# prac.
 
 A study site with lessons, quizzes and auto-graded exercises for nine tracks: **SQL, Bash, Docker, FastAPI, Spring Boot, CI/CD, AWS, Java OOP and System Design**. Each track builds one running project step by step (exercises with the **Project** badge):
 

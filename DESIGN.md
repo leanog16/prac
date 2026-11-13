@@ -156,7 +156,7 @@ components:
     padding: "12px 14px"
 ---
 
-# Design System: prac
+# Design System: prac.
 
 ## Overview
 
@@ -281,7 +281,7 @@ Tactile, square and plain; the primary is the only coloured thing in most views.
 - **Quiz options:** full-width square rows with a mono letter key; hover borders Ink; answered rows become Pass Green or Fault Red wash with a matching border.
 
 ### Navigation
-- **Band:** ink-black, 56px, sticky. Pixel brand mark plus the "prac" wordmark in Pixelify 24px, separated by a band hairline; then track tabs in Geist 600 14.5px, Band Muted until hovered or current, each with an 8px square swatch. The current tab carries a 4px bar in its own hue along the bottom edge.
+- **Band:** ink-black, 56px, sticky. Pixel brand mark plus the "prac." wordmark in Pixelify 24px, separated by a band hairline; then track tabs in Geist 600 14.5px, Band Muted until hovered or current, each with an 8px square swatch. The current tab carries a 4px bar in its own hue along the bottom edge.
 - **Rail:** Sheet White, sticky, 300px. Track title in Pixelify 34px, a solved stat, then modules as a mono number plus title over a 6px pixel strip. Hover and current fill Pressed Grey; current also gets an ink number and 600 weight.
 - **Step bar:** sticky under the band on Cool Ground, ink underline; tabs (Lesson, Quick check, Exercises) with a mono step number and a tabular count, current tab marked by a 4px track-hue bar.
 - **Pager:** two hairline-gutter cells, previous and next, with small Slate labels over 17px bold titles; hover washes in Track Wash.
