@@ -10,7 +10,9 @@ A study site with lessons, quizzes and auto-graded exercises for nine tracks: **
 | Java OOP → Spring Boot | Bookshelf: model a library in plain Java, then build its Spring Boot API |
 | System Design | Snip, a URL shortener, from requirements to global scale |
 
-Everything runs in the browser:
+Lessons and exercises run in the browser; accounts are stored on the server. Progress and drafts remain in the current browser and are not synced between accounts or devices.
+
+Exercise engines:
 
 - SQL runs on SQLite (sql.js).
 - Bash runs on `minibash`, a bash simulator in `site/engine/`.
@@ -20,7 +22,9 @@ Everything runs in the browser:
 ## Run it locally
 
 ```bash
-python3 -m http.server 8765 --directory site
+pip install -r requirements.txt
+# Start MySQL and create a database and user (see environment variables below).
+uvicorn server:app --host 127.0.0.1 --port 8765
 ```
 
 Then open http://localhost:8765. Opening `index.html` directly from disk won't work, because browsers block local scripts. The SQL engine is loaded from cdnjs, so you need to be online.
@@ -30,6 +34,8 @@ Then open http://localhost:8765. Opening `index.html` directly from disk won't w
 ```bash
 docker compose up -d --build     # serves the site on 127.0.0.1:8091
 ```
+
+Accounts are stored in MySQL. For local development, configure `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER`, and `MYSQL_PASSWORD` (defaults: `127.0.0.1`, `3306`, `prac`, `prac`, `prac`). Docker Compose starts MySQL and stores its data in the `prac-data` volume. Set `MYSQL_PASSWORD` and `MYSQL_ROOT_PASSWORD` before first starting Compose; keep those credentials consistent with the existing database volume. For a deployment served over HTTPS, set `PRAC_SECURE_COOKIE=1` to mark session cookies secure.
 
 ## Edit the content
 

@@ -460,13 +460,26 @@ select:focus-visible, input[type="search"]:focus-visible { outline-offset: -1px;
   .page-title { font-size: 36px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+.account-btn { border: 1px solid var(--band-line); background: transparent; color: var(--band-ink); padding: 7px 10px; white-space: nowrap; cursor: pointer; font-size: 14px; }
+.account-btn:hover { border-color: var(--band-muted); }
+.auth-dialog { width: min(420px, calc(100% - 32px)); border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); padding: 28px; }
+.auth-dialog::backdrop { background: rgba(0,0,0,.65); }
+.auth-dialog h2 { font: 500 32px var(--f-pixel); margin: 0 0 8px; }
+.auth-dialog p { color: var(--muted); margin: 0 0 20px; }
+.auth-dialog label { display: block; font-weight: 600; font-size: 14px; margin: 14px 0 5px; }
+.auth-dialog input { width: 100%; background: var(--surface); border: 1px solid var(--line-strong); padding: 9px; }
+.auth-actions { display: flex; gap: 8px; margin-top: 20px; }
+.auth-actions button { padding: 8px 14px; border: 1px solid var(--ink); background: var(--ink); color: var(--surface); cursor: pointer; }
+.auth-actions button[type="button"] { background: transparent; color: var(--ink); }
+.auth-dialog .auth-error { color: var(--bad); margin: 12px 0 0; font-size: 14px; }
+.auth-switch { margin-top: 18px; background: none; border: 0; text-decoration: underline; cursor: pointer; padding: 0; }
 </style>
 
 <header class="band">
   <div class="band-in">
     <a class="brand" href="#home" aria-label="prac. home"><span class="brand-mark" aria-hidden="true" id="brand-mark"></span><span class="brand-word">prac.</span></a>
     <nav class="tracks" id="tracks" aria-label="Tracks"></nav>
-    <div class="band-end"><button class="band-btn" id="menu-btn" type="button" aria-expanded="false" aria-controls="rail" aria-label="Modules and tools"><svg class="ico" viewBox="0 0 8 8" aria-hidden="true" shape-rendering="crispEdges"><rect x="0" y="1" width="8" height="1"/><rect x="0" y="3.5" width="8" height="1"/><rect x="0" y="6" width="8" height="1"/></svg></button></div>
+    <div class="band-end"><button class="account-btn" id="account-btn" type="button">Sign in</button><button class="band-btn" id="menu-btn" type="button" aria-expanded="false" aria-controls="rail" aria-label="Modules and tools"><svg class="ico" viewBox="0 0 8 8" aria-hidden="true" shape-rendering="crispEdges"><rect x="0" y="1" width="8" height="1"/><rect x="0" y="3.5" width="8" height="1"/><rect x="0" y="6" width="8" height="1"/></svg></button></div>
   </div>
 </header>
 <div class="shell" id="shell">
@@ -485,3 +498,18 @@ select:focus-visible, input[type="search"]:focus-visible { outline-offset: -1px;
 <script src="engine/grade.js"></script>
 <script src="content.js"></script>
 <script src="app.js"></script>
+<dialog class="auth-dialog" id="auth-dialog" aria-labelledby="auth-title">
+  <form id="auth-form">
+    <h2 id="auth-title">Sign in</h2>
+    <p id="auth-intro">Welcome back to prac.</p>
+    <label for="auth-username">Username</label>
+    <input id="auth-username" name="username" autocomplete="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_]+">
+    <label for="auth-password">Password</label>
+    <input id="auth-password" name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="1024">
+    <div id="auth-confirm-wrap" hidden><label for="auth-confirm">Confirm password</label><input id="auth-confirm" name="confirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="1024"></div>
+    <p class="auth-error" id="auth-error" role="alert" hidden></p>
+    <div class="auth-actions"><button id="auth-submit" type="submit">Sign in</button><button id="auth-cancel" type="button">Cancel</button></div>
+    <button class="auth-switch" id="auth-switch" type="button">Need an account? Sign up</button>
+  </form>
+</dialog>
+<script src="auth.js"></script>

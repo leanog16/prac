@@ -4,5 +4,31 @@ services:
     image: prac:latest
     container_name: prac
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: db
+      MYSQL_DATABASE: prac
+      MYSQL_USER: prac
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-prac}
+      PRAC_SECURE_COOKIE: ${PRAC_SECURE_COOKIE:-0}
     ports:
       - "127.0.0.1:${PORT:-8091}:80"
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: prac
+      MYSQL_USER: prac
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-prac}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-prac-root}
+    volumes:
+      - prac-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+volumes:
+  prac-data:

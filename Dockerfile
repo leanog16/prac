@@ -1,9 +1,9 @@
-# The site is fully static: build site/content.js with tools/build.js before building the image.
-FROM nginx:1.27-alpine
-
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY site/ /usr/share/nginx/html/
-
+FROM python:3.13-alpine
+WORKDIR /app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+COPY server.py ./
+COPY site/ ./site/
 EXPOSE 80
-
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://localhost/ >/dev/null || exit 1
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "80"]
