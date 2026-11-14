@@ -4,7 +4,7 @@ title: Your first FastAPI app
 summary: What FastAPI is built on, creating the app object, path operations with decorators, returning JSON, running with uvicorn, the automatic /docs, and def vs async def.
 minutes: 25
 ---
-> [!project] Taskboard, step 2: the first commit
+> [!project] Taskboard, step 2: the first endpoints
 > Time to write code. Taskboard starts as a single `main.py` with two endpoints every service needs: a **root** that says what it is, and a **health check** that deployments and load balancers will call.
 
 ## What FastAPI is
@@ -81,7 +81,7 @@ def read_sync():
 Use `async def` when you `await` async libraries (httpx, async DB drivers). Use plain `def` when you call blocking code (requests, most ORMs); FastAPI runs it in a worker thread so the event loop isn't blocked. **Never call blocking code inside `async def`**: it stalls every request.
 
 > [!note] How these exercises are graded
-> There's no Python runtime in your browser, so FastAPI code exercises are checked against a **requirement checklist** (the right decorator, path, parameter types, return value…). Click "Show requirements" to see the list before you start. Predict-the-response exercises ask what a real FastAPI app would return.
+> There's no Python runtime in your browser, so FastAPI code exercises are checked against a **requirement checklist** (the right decorator, path, parameter types, return value…). Click "Requirements" to see the list before you start. Predict-the-response exercises ask what a real FastAPI app would return.
 
 ## Worked example: from empty folder to running API
 

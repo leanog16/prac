@@ -39,7 +39,7 @@ The merge rules:
 
 - **Single values** (`image`, `command`, `restart`) are **replaced** by the later file.
 - **Maps** (`environment`, `labels`) are **merged key by key**; the later file wins on conflicts.
-- **Lists** (`ports`, `volumes`, `expose`) are **combined**.
+- **Lists** are often combined, but resources such as `ports` and `volumes` have uniqueness keys and matching entries are merged. Check the result with `docker compose config`.
 
 So the base file holds what's true everywhere, the override holds dev-only conveniences, and Git-committing both keeps every developer's setup identical. For other environments, name the files explicitly. `-f` disables the automatic override, and the files merge left to right:
 

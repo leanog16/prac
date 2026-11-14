@@ -74,7 +74,7 @@ SELECT n FROM nums;
 ```
 
 > [!warn] Always have a stop condition
-> Without `WHERE n < 10` this would run forever (SQLite eventually stops you; other databases have recursion limits). The stop condition belongs in the recursive member.
+> Without `WHERE n < 10` this query can keep generating rows indefinitely; do not rely on an engine to stop it. The stop condition belongs in the recursive member.
 
 ### Walking a hierarchy
 
@@ -120,45 +120,8 @@ LEFT JOIN orders o ON STRFTIME('%Y-%m', o.order_date) = STRFTIME('%Y-%m', m)
 GROUP BY m;
 ```
 
-## Worked example: refactor the nested query
-
-The "above-average spenders" query rewritten as named steps:
-
-```sql run
-WITH spend AS (
-  SELECT o.customer_id, SUM(oi.quantity * oi.unit_price) AS spent
-  FROM orders o JOIN order_items oi ON oi.order_id = o.order_id
-  WHERE o.status <> 'cancelled'
-  GROUP BY o.customer_id
-),
-avg_spend AS (
-  SELECT AVG(spent) AS avg_spent FROM spend
-)
-SELECT c.name, ROUND(s.spent, 2) AS spent
-FROM spend s
-JOIN customers c ON c.customer_id = s.customer_id
-CROSS JOIN avg_spend a
-WHERE s.spent > a.avg_spent
-ORDER BY s.spent DESC;
-```
-
-Each CTE is a small, testable query with a name that explains its purpose. To debug, temporarily change the final `SELECT` to `SELECT * FROM spend` and look at the intermediate result.
-
 > [!plain] In plain English
-> `WITH name AS (query)` creates a temporary, named result that only exists while this one statement runs. Later CTEs and the final query can use it like a table.
-
-## A practical recursive CTE: filling gaps in a calendar
-
-Reports should show months with **zero** sales, not skip them. Generate every month in a range, then LEFT JOIN the data onto it:
-
-```sql run
-WITH RECURSIVE months(m) AS (
-  SELECT '2025-01-01'
-  UNION ALL
-  SELECT date(m, '+1 month') FROM months WHERE m < '2025-12-01'
-)
-SELECT strftime('%Y-%m', m) AS month FROM months;
-```
+> `WITH name AS (query)` creates a named result for one statement. Later CTEs and the final query can use it like a table.
 
 ## Common mistakes
 

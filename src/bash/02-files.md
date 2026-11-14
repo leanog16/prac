@@ -48,7 +48,7 @@ tree project
 ```
 
 > [!tip] Braces nest and combine
-> `mkdir -p app/{frontend/{css,js},backend}` creates four directories. `cp config.ini{,.bak}` expands to `cp config.ini config.ini.bak`: a quick backup.
+> `mkdir -p app/{frontend/{css,js},backend}` creates the parent directories and the three leaf directories `frontend/css`, `frontend/js` and `backend`. `cp config.ini{,.bak}` expands to `cp config.ini config.ini.bak`: a quick backup.
 
 ## Copying: cp
 

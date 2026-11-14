@@ -171,20 +171,6 @@ Anchoring a pattern to its surroundings (quotes, spaces, `^` line start, `$` lin
 > [!plain] In plain English
 > A regular expression is a tiny pattern language. `.` is any character, `*` "zero or more of the previous", `[abc]` "one of these", `^`/`$` start/end of line. `-E` turns on the modern syntax where `+ ? { } |` work without backslashes.
 
-## grep options you'll use daily
-
-| Option | Does |
-|---|---|
-| `-i` | ignore case |
-| `-v` | invert: lines that **don't** match |
-| `-c` | count matching lines |
-| `-n` | show line numbers |
-| `-o` | print only the matched part |
-| `-r` | search a directory recursively |
-| `-l` | list only file names that match |
-| `-w` | match whole words only |
-| `-A 2` / `-B 2` / `-C 2` | context lines after / before / around |
-
 ## Common mistakes
 
 > [!mistake] Forgetting to quote the pattern

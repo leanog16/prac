@@ -133,8 +133,10 @@ function md(src) {
       const code = body.join('\n');
       const run = flags.includes('run');
       const label = (flags.find(f => f.startsWith('title=')) || '').slice(6).replace(/_/g, ' ');
+      const context = run ? 'Runnable example · fresh practice data' :
+        (!label && ['bash', 'sh', 'shell', 'console'].includes(lang) ? 'Command example · adapt for your environment' : '');
       html += `<div class="codeblock${run ? ' runnable' : ''}" data-lang="${lang}"${run ? ' data-run="1"' : ''}>` +
-        (label ? `<div class="code-label">${esc(label)}</div>` : '') +
+        (label || context ? `<div class="code-label">${esc([label, context].filter(Boolean).join(' · '))}</div>` : '') +
         `<pre><code>${highlight(code, lang)}</code></pre>` +
         (run ? `<textarea class="code-src" hidden>${esc(code)}</textarea>` : '') + `</div>\n`;
       continue;
@@ -153,7 +155,8 @@ function md(src) {
       const km = /^\[!(\w+)\]\s*(.*)$/.exec(body[0] || '');
       if (km) { kind = km[1].toLowerCase(); title = km[2]; body.shift(); }
       const titles = { tip: 'Tip', warn: 'Watch out', note: 'Note', exam: 'Exam focus', why: 'Why it works', project: 'Project', plain: 'In plain English', mistake: 'Common mistake' };
-      html += `<aside class="callout callout-${kind}"><div class="callout-title">${inline(title || titles[kind] || 'Note')}</div>${md(body.join('\n'))}</aside>\n`;
+      const heading = kind === 'project' && title ? (/^track project:/i.test(title) ? title.replace(/^track project:/i, 'Project:') : `Project · ${title}`) : title || titles[kind] || 'Note';
+      html += `<aside class="callout callout-${kind}"><div class="callout-title">${inline(heading)}</div>${md(body.join('\n'))}</aside>\n`;
       continue;
     }
     if (/^\|/.test(line)) {

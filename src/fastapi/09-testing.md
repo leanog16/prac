@@ -147,7 +147,7 @@ Missing required settings fail fast at startup with a clear validation error, wh
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine
-from sqlmodel.pool import StaticPool
+from sqlalchemy.pool import StaticPool
 
 from main import app
 from db import get_session

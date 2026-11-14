@@ -1,6 +1,6 @@
 # prac.
 
-A study site with lessons, quizzes and auto-graded exercises for nine tracks: **SQL, Bash, Docker, FastAPI, Spring Boot, CI/CD, AWS, Java OOP and System Design**. Each track builds one running project step by step (exercises with the **Project** badge):
+A study site with lessons, quizzes and auto-graded exercises for nine tracks: **SQL, Bash, Docker, FastAPI, Spring Boot, CI/CD, AWS, Java OOP and System Design**. Each track applies its lessons to a recurring project (exercises with the **Project** badge). Exercises are independent: drafts and progress are saved, but files and database changes do not carry between exercises. You can also build the projects in your own environment.
 
 | Track | Project |
 |---|---|

@@ -323,6 +323,7 @@
       <article class="ex${solved ? ' solved' : ''}" id="ex-${ex.id}" data-level="${ex.level}">
         ${exHead(ex, opts)}
         <div class="ex-body">
+          ${ex.project ? '<p class="project-instruction"><strong>Project step</strong> · Complete this task in the editor below. Your answer is saved for this exercise; it does not update a shared project.</p>' : ''}
           <div class="ex-prompt">${ex.prompt}</div>
           <div>
             <div class="editor-label"><span>${isCode ? esc(ex.file || ex.lang) + ` · graded on ${ex.rules.length} requirement${ex.rules.length === 1 ? '' : 's'}` : 'Your answer · case and extra spaces are ignored'}</span>${isCode ? '<button type="button" class="btn quiet small b-reset">Reset</button>' : ''}</div>
@@ -423,6 +424,7 @@
       <article class="ex${solved ? ' solved' : ''}" id="ex-${ex.id}" data-level="${ex.level}">
         ${exHead(ex, opts)}
         <div class="ex-body">
+          ${ex.project ? '<p class="project-instruction"><strong>Project step</strong> · Complete this task in the editor below. Each run starts from the exercise’s own practice data; changes do not carry over to other exercises.</p>' : ''}
           <div class="ex-prompt">${ex.prompt}</div>
           ${!isSql && (ex.cwd !== '/home/student' || ex.setup) ? `<div class="ex-meta">${ex.cwd !== '/home/student' ? `<span>starts in ${esc(ex.cwd)}</span>` : ''}${ex.setup ? '<span>some setup runs first</span>' : ''}</div>` : ''}
           <div>
@@ -745,7 +747,10 @@
     p.classList.add('mod');
     const box = $('#step', p);
     if (stepKey === 'lesson') {
-      box.innerHTML = `<article class="prose lesson">${m.lesson}</article>` +
+      const practice = ['sql', 'bash', 'docker', 'spring'].includes(t.id)
+        ? 'Examples with a Run button run here against fresh practice data. Other code blocks are examples to read or try in your own environment.'
+        : 'Code and commands in the lesson are examples to read or try in your own environment; they do not run on this site.';
+      box.innerHTML = `<aside class="callout lesson-guide"><div class="callout-title">How to practice</div><p>${practice} In Exercises, look for <strong>Project</strong> steps to apply the lesson to the track project. Exercises are independent; the site saves your answers, not a shared project.</p></aside><article class="prose lesson">${m.lesson}</article>` +
         (hasQuiz ? nextLink('Quick check', `#${m.id}/quiz`, `Done reading? ${m.quiz.length} quick questions to check the ideas stuck.`)
           : nextLink('Exercises', `#${m.id}/exercises`, `Done reading? Try the ${m.exercises.length} exercises.`));
       wireCodeBlocks($('.lesson', box), t.id);
@@ -758,8 +763,8 @@
       const firstOpen = m.exercises.findIndex(e => !progress.solved[e.id]);
       let cur = exN >= 1 && exN <= m.exercises.length ? exN - 1 : Math.max(firstOpen, 0);
       box.innerHTML = `
-        <div class="stepper" role="group" aria-label="Exercises in this module">${m.exercises.map((e, i) => `<button type="button" data-i="${i}" data-ex="${e.id}" class="${e.level === 4 ? 'boss' : ''}${progress.solved[e.id] ? ' on' : ''}" aria-label="Exercise ${i + 1}: ${esc(e.title)}, ${LEVELS[e.level]}${progress.solved[e.id] ? ', solved' : ''}">${i + 1}</button>`).join('')}</div>
-        <div class="stepper-key" aria-hidden="true"><span><i class="px on"></i>Solved</span><span><i class="px"></i>Open</span><span><i class="px boss"></i>Boss</span></div>
+        <div class="stepper" role="group" aria-label="Exercises in this module">${m.exercises.map((e, i) => `<button type="button" data-i="${i}" data-ex="${e.id}" class="${e.level === 4 ? 'boss' : ''}${progress.solved[e.id] ? ' on' : ''}" aria-label="Exercise ${i + 1}: ${esc(e.title)}, ${LEVELS[e.level]}${e.project ? ', project' : ''}${progress.solved[e.id] ? ', solved' : ''}">${i + 1}${e.project ? '<span class="step-project" aria-hidden="true">P</span>' : ''}</button>`).join('')}</div>
+        <div class="stepper-key" aria-hidden="true"><span><i class="px on"></i>Solved</span><span><i class="px"></i>Open</span><span><i class="px boss"></i>Boss</span><span>P = Project</span></div>
         <div class="ex-slot"></div>
         <div class="ex-nav"><button type="button" class="btn ex-prev">${ico('left')}Previous exercise</button><button type="button" class="btn ex-next">Next exercise ${ico('right')}</button></div>
         <nav class="pager" aria-label="Modules">${prev ? `<a href="#${prev.id}"><small>Previous module</small><b>${esc(prev.title)}</b></a>` : '<span></span>'}${next ? `<a class="next" href="#${next.id}"><small>Next module</small><b>${esc(next.title)}</b></a>` : `<a class="next" href="#${t.id}-practice"><small>Finished the track?</small><b>Mixed practice</b></a>`}</nav>`;
@@ -1094,6 +1099,7 @@
 
   function renderCheatsheet(tid) {
     const html = PJ.extra['cheatsheet-' + tid] || '<p>Coming soon.</p>';
+    const p = page(`<h1 class="page-title">${esc(TRACKS[tid].title)} cheat sheet</h1><p class="lede">A quick reference for this track.</p><article class="prose">${html}</article>`);
     wireCodeBlocks(p, tid);
   }
 

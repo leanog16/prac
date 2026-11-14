@@ -71,7 +71,7 @@ For each request, AWS evaluates all applicable policies:
 
 1. **Default: deny.** Nothing is allowed unless something allows it.
 2. Any explicit **`Deny`** that matches wins, always, over any number of allows.
-3. Otherwise, if any applicable policy **allows** it (and no SCP, permission boundary or session policy blocks it), it's allowed.
+3. An applicable allow is needed, but evaluation depends on the principal and resource: cross-account requests generally require allows on both sides, and boundaries, session policies and SCPs can limit permissions. Resource-policy grants to some principal types have special rules.
 
 So "explicit deny > explicit allow > implicit deny". Use explicit denies for guardrails ("never delete the audit bucket", "deny everything without MFA").
 
@@ -122,7 +122,7 @@ The CLI does this automatically for profiles with `role_arn` and `source_profile
 
 - **SCPs** (Organizations) cap what any identity in an account can do, root included.
 - **Permission boundaries** cap what a role can be granted, which lets developers create roles for their apps without being able to escalate their own privileges.
-- Effective permissions = the intersection of all of them.
+- These guardrails limit permissions, but the precise evaluation also depends on resource policies and the principal type.
 
 ## Debugging AccessDenied
 

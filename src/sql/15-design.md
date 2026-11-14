@@ -104,39 +104,8 @@ That's exactly the store schema you've been querying. Note that `order_items.uni
 
 Normalized schemas are best for writes and integrity. Read-heavy systems (reporting, analytics) sometimes deliberately **denormalize** (store a precomputed total, copy a name into a log table) to avoid expensive joins. That's a trade-off you make on purpose, with a plan to keep copies in sync, not an accident.
 
-## Worked example: from Maya's spreadsheet to tables
-
-Her original sheet had one row per **order line**:
-
-| order_no | date | customer | customer_email | customer_city | product | category | price | qty |
-|---|---|---|---|---|---|---|---|---|
-| 1 | 2025-01-08 | Ana Silva | ana@silva.example | Raleigh | Mechanical Keyboard | Electronics | 89.99 | 1 |
-| 1 | 2025-01-08 | Ana Silva | ana@silva.example | Raleigh | Wireless Mouse | Electronics | 24.99 | 2 |
-| 2 | 2025-01-15 | Ben Ford | ben.ford@example.com | Durham | Mechanical Keyboard | Electronics | 89.99 | 1 |
-
-What goes wrong:
-
-- **Update anomaly**: Ana moves to Cary. Her city appears on every line she ever ordered; miss one and the data contradicts itself.
-- **Insert anomaly**: Maya can't add a new product to the catalog until somebody orders it, because a row needs an order.
-- **Delete anomaly**: delete Ben's only order and Ben disappears completely.
-
-The fix is to ask, for every column, **"what does this fact depend on?"**
-
-| Column | Depends on | Goes in |
-|---|---|---|
-| customer_email, customer_city | the customer | `customers` |
-| category, price (catalog price) | the product | `products` |
-| date, which customer | the order | `orders` |
-| qty, the price actually charged | order **and** product together | `order_items` |
-
-That's exactly Desk & Co's schema. Note one deliberate duplication: `order_items.unit_price` copies the price at the time of sale. That isn't a normalization failure, because it's a **different fact**: the price charged, which must not change when the catalog price does.
-
 > [!plain] In plain English
-> Normalization means "store each fact once, in the table about the thing it describes". You then use joins to put the facts back together for reports.
-
-## When to denormalize on purpose
-
-Reporting databases and caches often store pre-joined or pre-aggregated data (an `order_totals` table refreshed nightly) because reads vastly outnumber writes. That's fine when it's a **conscious, documented** choice with a clear source of truth.
+> Normalization puts each fact in the table about the thing it describes; joins put the facts back together for reports.
 
 :::quiz
 q: A table keyed by `(student_id, course_id)` has a column `student_name`. Which normal form does it violate?

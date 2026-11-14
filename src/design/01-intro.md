@@ -39,7 +39,7 @@ There's rarely one right answer. There are **trade-offs**: every choice makes so
 | durability | a created link must never be lost | links are printed and shared permanently |
 | consistency | a new link should work within a second or so | creation is followed by sharing |
 
-Non-functional requirements drive architecture far more than functional ones. "Store a URL and look it up" fits in 20 lines of code; "do it 40,000 times a second with 99.99% availability" is the actual design problem.
+Non-functional requirements drive architecture far more than functional ones. "Store a URL and look it up" fits in 20 lines of code; "meet the projected traffic with 99.99% availability" is the actual design problem.
 
 > [!plain] In plain English
 > Functional requirements say **what** the system does. Non-functional requirements say **how fast, how big, how reliable and how cheap** it must be, and they decide most of the design.
@@ -56,7 +56,7 @@ Non-functional requirements drive architecture far more than functional ones. "S
 
 Each extra nine costs roughly an order of magnitude more effort: redundancy everywhere, automated failover, careful deployments. Pick the nines the business actually needs.
 
-Components in **series** multiply: an app at 99.9% that depends on a database at 99.9% is at most 99.9% × 99.9% ≈ **99.8%**. Redundant components in **parallel** add availability: two independent 99% replicas give 1 − 0.01² = **99.99%**.
+For independent failures, components in **series** multiply: an app at 99.9% that depends on a database at 99.9% has combined availability of about 99.9% × 99.9% ≈ **99.8%**. Correlated failures require a different analysis. Redundant components in **parallel** add availability: two independent 99% replicas give 1 − 0.01² = **99.99%**.
 
 ## Latency and throughput
 

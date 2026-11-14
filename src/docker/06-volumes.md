@@ -49,18 +49,6 @@ Two containers, one volume: the data outlived the first container. When a **new,
 | `docker volume prune` | delete unused anonymous volumes (`-a` for named too) |
 | `docker rm -v CONTAINER` | remove a container and its anonymous volumes |
 
-## A database that survives
-
-```bash run
-docker run -d --name db -e POSTGRES_PASSWORD=devpass -v pgdata:/var/lib/postgresql/data postgres:16
-docker logs db | grep -i 'init process'
-docker rm -f db > /dev/null
-docker run -d --name db -e POSTGRES_PASSWORD=devpass -v pgdata:/var/lib/postgresql/data postgres:16
-docker logs db | grep -i skipping
-```
-
-The second container found an initialized database in the volume and skipped initialization. Without the volume, every `docker rm` would wipe the database.
-
 ## Bind mounts for development
 
 A bind mount maps a host directory into the container **live**: edit a file on your machine and the container sees the change immediately. That's the standard way to develop inside containers without rebuilding.
@@ -98,7 +86,7 @@ docker logs taskboard-db | grep -i skipping
 
 The second container found existing data in the volume and **skipped initialization**: the tasks survived. Where does each database keep its data? It's in the image docs: `/var/lib/postgresql/data` for PostgreSQL, `/var/lib/mysql` for MySQL, `/data` for Redis.
 
-## Bind mounts for development
+## Applying a bind mount to Taskboard
 
 While developing Taskboard, rebuilding the image for every code change is slow. Mount your source folder over `/app` instead, and let uvicorn reload on changes:
 

@@ -46,7 +46,7 @@ Read it top to bottom as a sentence: "from the books, keep those before 1900, so
 
 - **Intermediate** operations (`filter`, `map`, `sorted`, `distinct`, `limit`) return a new stream and are **lazy**: nothing happens until a terminal operation runs.
 - **Terminal** operations (`toList`, `collect`, `count`, `forEach`, `anyMatch`, `findFirst`, `reduce`) produce the result.
-- Streams don't change the source collection, and a stream can only be used **once**.
+- Stream operations do not themselves change the source collection, though your lambdas can mutate objects or external state; avoid those side effects. A stream can only be used **once**.
 
 ## Collectors: grouping and summarizing
 

@@ -71,7 +71,7 @@ public class ProductController {
 }
 ```
 
-A violation there is a **400** too (`HandlerMethodValidationException` in Spring 6.1+).
+With class-level `@Validated`, method validation uses a proxy and typically raises `ConstraintViolationException`; map it to 400 in your error handler. Spring MVC 6.1+ also supports built-in method validation without class-level `@Validated`, which raises `HandlerMethodValidationException` for input violations.
 
 ### Custom constraints
 

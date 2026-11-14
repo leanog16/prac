@@ -5,7 +5,7 @@ summary: What Spring and Spring Boot are, starters and auto-configuration, the p
 minutes: 30
 ---
 > [!project] Track project: Bookshelf, a library API
-> In this track you'll build **Bookshelf**, the backend for a small public library: a catalog of books, members who borrow them, loans with due dates, and librarians who manage it all. (If you did the Java OOP track, you already modeled this domain in plain Java; here it becomes a production Spring Boot service.) Each lesson's **Project** exercises are the next piece of that codebase.
+> In this track you'll build **Bookshelf**, the backend for a small public library: a catalog of books, members who borrow them, loans with due dates, and librarians who manage it all. (If you did the Java OOP track, you already modeled this domain in plain Java; here it becomes a production Spring Boot service.) Each lesson's **Project** exercises practice the next piece independently; the site does not carry code between exercises.
 
 ## Spring and Spring Boot
 
@@ -146,7 +146,7 @@ Never expose `env`, `heapdump` or `beans` publicly: they leak configuration and 
 
 ## Worked example: generating Bookshelf
 
-On [start.spring.io](https://start.spring.io) choose: **Maven**, **Java 21**, Spring Boot **3.3.x**, group `org.library`, artifact `bookshelf`, and the dependencies:
+On [start.spring.io](https://start.spring.io) choose: **Maven**, **Java 21**, a Spring Boot version compatible with **Spring Framework 6.2 or later** (needed for `@MockitoBean` in the testing lesson), group `org.library`, artifact `bookshelf`, and the dependencies:
 
 | Dependency | Why Bookshelf needs it |
 |---|---|

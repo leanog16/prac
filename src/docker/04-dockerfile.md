@@ -174,12 +174,6 @@ curl -s localhost:8000/health
 > [!plain] In plain English
 > A Dockerfile is a recipe. `docker build` follows it once and saves the result as an image. `RUN` happens while baking; `CMD` is what happens every time a container starts.
 
-## RUN vs CMD vs ENTRYPOINT
-
-- `RUN` executes during the **build**: installing packages, compiling.
-- `CMD` is the default **runtime** command, easy to override: `docker run taskboard:dev pytest` runs the tests instead of the server.
-- `ENTRYPOINT` is the fixed executable; `CMD` then supplies default **arguments** to it. Use it for images that behave like a single command-line tool.
-
 ## Common mistakes
 
 > [!mistake] Shell-form CMD

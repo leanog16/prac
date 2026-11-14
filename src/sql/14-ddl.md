@@ -40,7 +40,7 @@ SELECT * FROM pets;
 SQLite is permissive: it records a type *affinity* but will store, say, text in an INTEGER column unless the table is declared `STRICT`. PostgreSQL and others reject mismatched types. For exams, write standard types.
 
 > [!tip] Money
-> Never use floating point for money (0.1 + 0.2 ≠ 0.3 in binary). Use `DECIMAL(10, 2)` or store integer cents.
+> Never use floating point for money (0.1 + 0.2 ≠ 0.3 in binary). Use an exact decimal type where the database enforces it, or store integer cents. SQLite gives `DECIMAL(10, 2)` NUMERIC affinity, not fixed decimal precision, so integer cents are safer there.
 
 ## Constraints
 
@@ -187,17 +187,13 @@ The index on `product_id` makes "show all reviews for this product" fast. Every 
 > [!plain] In plain English
 > Constraints are rules the **database** enforces. Application code has bugs and there's often more than one app; a `CHECK` constraint can't be forgotten.
 
-## When to add an index
-
-Add an index for columns you frequently **filter**, **join** or **sort** on, like foreign keys and lookup columns such as `email`. Every index speeds up reads but slows down writes slightly and uses space, so don't index everything. Primary keys and `UNIQUE` columns are indexed automatically.
-
 ## Common mistakes
 
 > [!mistake] Foreign keys that aren't enforced
 > SQLite only enforces `REFERENCES` after `PRAGMA foreign_keys = ON;`, per connection. PostgreSQL and MySQL (InnoDB) always enforce them.
 
 > [!mistake] Storing money as floating point
-> `REAL` can't represent 0.1 exactly, so sums drift by fractions of a cent. Production systems store money as `NUMERIC(10,2)` or as integer **cents**.
+> `REAL` can't represent 0.1 exactly, so sums drift by fractions of a cent. Use an exact decimal type in databases that support it, or integer **cents** in SQLite.
 
 :::quiz
 q: A column is declared `UNIQUE` but not `NOT NULL`. Can two rows have NULL there?

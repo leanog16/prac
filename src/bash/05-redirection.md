@@ -103,7 +103,7 @@ echo "saved:"; head -2 errors.txt
 
 ## Here documents and here strings
 
-A **heredoc** feeds multiple lines of literal text to a command's stdin:
+A **heredoc** feeds multiple lines of text to a command's stdin:
 
 ```bash run
 cat <<EOF > greeting.txt

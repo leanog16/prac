@@ -156,7 +156,7 @@ UPDATE products SET stock = stock - 2 WHERE product_id = 2;
 COMMIT;
 ```
 
-If anything fails before `COMMIT`, run `ROLLBACK` and the database looks as if nothing happened.
+If a statement fails before `COMMIT`, handle the error and run `ROLLBACK` instead of continuing to commit. A failed statement does not necessarily roll back the whole transaction automatically.
 
 > [!plain] In plain English
 > A transaction is a promise: "these statements count as **one** change". Other users never see the half-finished state.

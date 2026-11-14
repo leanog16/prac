@@ -124,8 +124,8 @@ table.update_item(
 
 - **Conditional writes** give you uniqueness and optimistic locking; a failed condition raises `ConditionalCheckFailedException`.
 - `TransactWriteItems` makes up to 100 writes atomic.
-- **TTL**: set an attribute (e.g. `expires_at`, epoch seconds) and DynamoDB deletes expired items for free. Great for sessions and idempotency keys.
-- Reads are **eventually consistent** by default; `ConsistentRead=True` (base table only) costs double.
+- **TTL**: set an attribute (e.g. `expires_at`, epoch seconds) and DynamoDB eventually deletes expired items for free, typically within days; check expiry in application logic when immediate expiration matters. Great for sessions and idempotency keys.
+- Reads are **eventually consistent** by default; `ConsistentRead=True` (base tables and local secondary indexes, not global secondary indexes) costs double.
 
 ### Capacity
 

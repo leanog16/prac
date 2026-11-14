@@ -30,7 +30,7 @@ app ───────────────► primary (leader)
 | latency | higher (waits for replicas) | lower |
 | common setup | one sync standby for failover, others async | read replicas |
 
-**Replication lag**: async replicas are usually milliseconds behind, sometimes seconds. That causes classic bugs: a user creates a link (written to the primary), is redirected to "my links" (read from a replica that hasn't caught up), and the new link is missing. Fixes: **read-your-writes** (read your own recent data from the primary), sticky sessions to one replica, or waiting for the replica to reach a given log position.
+**Replication lag**: async replicas are usually milliseconds behind, sometimes seconds. That causes classic bugs: a user creates a link (written to the primary), is redirected to "my links" (read from a replica that hasn't caught up), and the new link is missing. Fixes: **read-your-writes** (read your own recent data from the primary), or waiting for the replica to reach a given log position. Sticking to one replica alone does not guarantee read-your-writes after a primary write.
 
 ## Partitioning and sharding
 
@@ -51,7 +51,7 @@ The shard key decides everything:
 - It must spread load evenly: no shard should get the "celebrity" traffic.
 - Data that's queried together should share a shard.
 
-For Snip, the hot query is "code → URL", so **`code` is the natural shard key** and random codes spread perfectly. The "my links" page (by `owner_id`) then has to scatter-gather, or use a secondary index stored separately, partitioned by `owner_id`. That's an acceptable trade-off for a low-traffic dashboard.
+For Snip, the hot query is "code → URL", so **`code` is the natural shard key** and random codes spread stored keys approximately evenly, although a single viral link can still create a hot shard. The "my links" page (by `owner_id`) then has to scatter-gather, or use a secondary index stored separately, partitioned by `owner_id`. That's an acceptable trade-off for a low-traffic dashboard.
 
 > [!plain] In plain English
 > Sharding splits one giant table into many smaller ones on different machines. The shard key is the rule that decides which machine owns which rows, so choose a key that's in every hot query and spreads the load evenly.

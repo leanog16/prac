@@ -67,7 +67,7 @@ sso_region = eu-west-1
 
 ### Where credentials come from
 
-SDKs and the CLI look for credentials in a fixed order and use the first they find:
+Credential resolution depends on the SDK and configuration. A profile selects a configured credential source; environment credentials can also take precedence in common configurations. Common sources include:
 
 1. command-line options (`--profile`)
 2. environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_PROFILE`)
@@ -124,7 +124,7 @@ AWS's checklist for good designs has six pillars: **operational excellence**, **
   Secrets Manager (DB password, SECRET_KEY) · CloudWatch logs + alarms · ECR for images
 ```
 
-You'll also use **two AWS accounts**: `taskboard-staging` and `taskboard-prod`. Separate accounts are the strongest isolation AWS offers: a mistake (or an attacker) in staging can't touch production data, and each account's bill shows exactly what that environment costs.
+You'll also use **two AWS accounts**: `taskboard-staging` and `taskboard-prod`. Separate accounts are the strongest isolation AWS offers: cross-account access can be tightly restricted (but must still be configured and audited), and each account's bill shows exactly what that environment costs.
 
 ## Worked example: the first five minutes in a new account
 

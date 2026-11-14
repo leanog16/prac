@@ -168,7 +168,7 @@ For OIDC, AWS needs to know *which* workflows may assume the deploy role. Taskbo
 - repository `acme/taskboard`,
 - running in the GitHub **environment** `production` (or `staging` for the staging role).
 
-So even a malicious workflow on a feature branch can't get production credentials: its token's `sub` claim says `repo:acme/taskboard:ref:refs/heads/feature-x`, which doesn't match.
+A job that targets `production` gets an environment-based subject, even if it originates on a feature branch. Restrict deployment branches and require reviewers in the GitHub environment as well as checking the subject in AWS; otherwise an untrusted branch could target that environment.
 
 > [!plain] In plain English
 > Instead of giving GitHub a permanent AWS password, AWS agrees to trust short-lived ID cards that GitHub issues to specific workflows, and only hands out temporary credentials to the ones it recognizes.

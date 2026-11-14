@@ -198,6 +198,7 @@ main { min-width: 0; padding: 40px max(20px, env(safe-area-inset-right, 0px)) 96
 .codeblock pre { margin: 0; padding: 14px 16px; overflow-x: auto; font-size: 14px; line-height: 1.6; }
 .codeblock.runnable pre { padding-right: 150px; }
 .code-label { font-size: 12.5px; color: var(--muted); padding: 8px 16px 0; font-family: var(--f-mono); }
+.codeblock.runnable .code-label { padding-right: 160px; }
 .code-actions { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; }
 .codeblock textarea.editor { border: 0; border-bottom: 1px solid var(--line); background: var(--code-bg); }
 .code-out { border-top: 1px solid var(--line); padding: 12px; background: var(--surface); }
@@ -262,6 +263,7 @@ select:focus-visible, input[type="search"]:focus-visible { outline-offset: -1px;
 .stepper button.on { background: var(--trk); border-color: var(--trk); color: var(--on-trk); }
 .stepper button[aria-current="true"] { outline: 2px solid var(--ink); outline-offset: 2px; color: var(--ink); }
 .stepper button.on[aria-current="true"] { color: var(--on-trk); }
+.step-project { position: absolute; top: 1px; right: 2px; font-size: 9px; line-height: 1; }
 .stepper button.lit::after { content: ""; position: absolute; inset: -1px; background: var(--trk); animation: lightup .36s steps(4, end) both; mix-blend-mode: normal; z-index: -1; }
 .stepper-key { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: -8px 0 20px; }
 .stepper-key span { display: inline-flex; align-items: center; gap: 6px; }
@@ -280,6 +282,7 @@ select:focus-visible, input[type="search"]:focus-visible { outline-offset: -1px;
 .solved-tag { font-size: 13px; font-weight: 600; color: var(--ok); display: none; align-items: center; gap: 6px; }
 .ex.solved .solved-tag { display: inline-flex; }
 .ex-body { padding: 18px 20px 20px; display: grid; gap: 16px; }
+.project-instruction { margin: 0; padding: 10px 12px; border-left: 2px solid var(--ink); background: var(--surface-2); font-size: 14px; }
 .ex-body > div:empty { display: none; }
 .ex-prompt { font-size: 16px; }
 .ex-prompt p { margin: 0 0 8px; } .ex-prompt p:last-child { margin-bottom: 0; }
@@ -448,7 +451,8 @@ select:focus-visible, input[type="search"]:focus-visible { outline-offset: -1px;
   .ex-head, .ex-body { padding-left: 14px; padding-right: 14px; }
   .ex-row { grid-template-columns: 14px minmax(0, 1fr) auto; }
   .ex-row .mod { display: none; }
-  .codeblock.runnable pre { padding-right: 16px; padding-top: 44px; }
+  .codeblock.runnable .code-label { padding: 48px 16px 0; }
+  .codeblock.runnable pre { padding-right: 16px; padding-top: 14px; }
   .kbd-hint { display: none; }
   .pager { grid-template-columns: minmax(0, 1fr); }
   .pager a.next { text-align: left; }

@@ -40,11 +40,11 @@ p2: e3 e6 e9 …         ◄── consumer C (group "analytics")
 ```
 
 - A message's **key** chooses its partition (`hash(key) % partitions`). Same key → same partition → **ordered** for that key. Snip keys click events by `code`.
-- Each **consumer group** gets every message once; within a group, each partition is read by one consumer. More partitions = more parallelism.
+- Each **consumer group** can read every message; processing can repeat after failures, so consumers need idempotency. Within a group, each partition is read by one consumer. More partitions = more parallelism.
 - Messages are kept for days, so a new consumer (or a fixed buggy one) can **replay** history.
 
 > [!plain] In plain English
-> A queue is a to-do list where each task is done once. Pub/sub is a broadcast. A log is a recorded broadcast you can rewind.
+> A queue is a to-do list where workers share tasks, possibly receiving a task more than once. Pub/sub is a broadcast. A log is a recorded broadcast you can rewind.
 
 ## Delivery guarantees
 

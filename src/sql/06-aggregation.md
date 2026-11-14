@@ -82,7 +82,7 @@ HAVING AVG(salary) > 100000;
 ```
 
 > [!exam] Order of evaluation, again
-> FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT. "Filter on an aggregate" means HAVING. "Filter before counting" means WHERE. Putting a non-aggregate condition in HAVING works but is slower and unidiomatic.
+> FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT. "Filter on an aggregate" means HAVING. "Filter before counting" means WHERE. A condition on grouped columns can go in HAVING, but WHERE states row filtering more clearly and lets the optimizer filter earlier.
 
 ## COUNT(DISTINCT …)
 

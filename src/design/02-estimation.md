@@ -26,7 +26,7 @@ Estimation tells you **which problems you actually have**. 10 writes per second 
 
 **Writes** (new links): 100 M per month.
 
-100 × 10⁶ ÷ 2.5 × 10⁶ s ≈ **40 writes/second** on average.
+100 × 10⁶ ÷ (2.5 × 10⁶ s) ≈ **40 writes/second** on average.
 
 **Reads** (redirects): 100× writes ≈ **4,000 reads/second** on average.
 

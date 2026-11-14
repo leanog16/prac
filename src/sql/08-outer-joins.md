@@ -54,7 +54,14 @@ LEFT JOIN orders o ON o.customer_id = c.customer_id
 WHERE o.order_id IS NULL;
 ```
 
-This is one of the most common real-world query patterns. (`NOT EXISTS` expresses the same thing; see the subqueries module.)
+The equivalent `NOT EXISTS` checks for the absence of a match:
+
+```sql run
+SELECT c.name FROM customers c
+WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id);
+```
+
+Both patterns work even if the subquery can contain NULLs; `NOT IN` has a NULL trap (see the subqueries module).
 
 ## ON vs WHERE: it matters now
 
@@ -78,7 +85,7 @@ GROUP BY c.customer_id, c.name;
 ```
 
 > [!exam] The silent outer-join killer
-> A `WHERE` condition on the *right* table of a LEFT JOIN (other than `IS NULL`) turns it back into an inner join, because NULL-extended rows fail the condition. Put right-table filters in `ON`.
+> A null-rejecting `WHERE` condition on the *right* table of a LEFT JOIN, such as `o.status = 'delivered'`, removes NULL-extended rows. Put that condition in `ON` when unmatched left rows must remain. Other conditions, such as `o.status IS NULL` or `COALESCE(o.status, 'missing') = 'missing'`, can keep them.
 
 ## Self-joins
 
@@ -149,23 +156,6 @@ ORDER BY orders, c.name;
 
 > [!plain] In plain English
 > `LEFT JOIN` means "keep **every** row on the left; fill in the right side when there's a match, and with NULLs when there isn't".
-
-## The anti-join pattern
-
-"Rows in A with no match in B" is so common it has a name. Two standard spellings:
-
-```sql run
-SELECT p.name FROM products p
-LEFT JOIN order_items oi ON oi.product_id = p.product_id
-WHERE oi.product_id IS NULL;
-```
-
-```sql run
-SELECT p.name FROM products p
-WHERE NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.product_id = p.product_id);
-```
-
-Both are correct and safe with NULLs. `NOT IN (subquery)` isn't, if the subquery can return a NULL.
 
 ## Common mistakes
 

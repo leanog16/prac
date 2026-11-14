@@ -5,7 +5,7 @@ summary: Detached containers, names, publishing ports, environment variables, lo
 minutes: 35
 ---
 > [!project] Taskboard, step 2: a database to talk to
-> Before packaging the API itself, Taskboard needs PostgreSQL. Running the database in a container is the most common first use of Docker: no installer, no system service, and `docker rm -f` removes every trace.
+> Before packaging the API itself, Taskboard needs PostgreSQL. Running the database in a container is the most common first use of Docker: no installer, no system service, and the container can be removed with `docker rm -f`. Volumes and images can remain after removal.
 
 ## docker run, the most important command
 

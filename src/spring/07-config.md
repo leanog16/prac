@@ -233,7 +233,7 @@ spring:
       ddl-auto: validate
 ```
 
-`StandardLoanPolicy` from step 2 now reads `LoanProperties` instead of returning `14`. The summer reading program becomes `BOOKSHELF_LOANS_DAYS=28` in the environment, with no code change, no release. And if someone sets `days: 0`, the app **refuses to start** and names the bad property, instead of creating loans due today.
+`StandardLoanPolicy` from step 2 now reads `LoanProperties` instead of returning `14`. The summer reading program becomes `BOOKSHELF_LOANS_DAYS=28` in the environment, with no code change; restart the app (or use an explicitly configured refresh mechanism) to pick up the new environment value. And if someone sets `days: 0`, the app **refuses to start** and names the bad property, instead of creating loans due today.
 
 > [!plain] In plain English
 > Code says **what** to do; configuration says **with which values**. Values that differ between environments or change over time belong in configuration.

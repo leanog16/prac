@@ -87,7 +87,7 @@ WHERE NOT EXISTS (SELECT 1 FROM employees e WHERE e.manager_id = m.emp_id);
 
 ## ANY / ALL
 
-Standard SQL has `x > ALL (subquery)` (greater than every value) and `x = ANY (subquery)` (same as IN). **SQLite doesn't support ANY/ALL**, but you can always rewrite them: `> ALL (…)` becomes `> (SELECT MAX(…))`, and `> ANY (…)` becomes `> (SELECT MIN(…))`. (Careful: the MAX rewrite differs when the subquery is empty or has NULLs.)
+Standard SQL has `x > ALL (subquery)` (greater than every value) and `x = ANY (subquery)` (same as IN). **SQLite doesn't support ANY/ALL**, but you can often rewrite them: `> ALL (…)` becomes `> (SELECT MAX(…))`, and `> ANY (…)` becomes `> (SELECT MIN(…))`. (Careful: the MAX rewrite differs when the subquery is empty or has NULLs.)
 
 ## Derived tables (subqueries in FROM)
 
@@ -167,18 +167,6 @@ ORDER BY spent DESC;
 
 > [!plain] In plain English
 > A subquery is a query in parentheses used where a value or a table is expected. A **scalar** subquery returns one value; an `IN` subquery returns a list; a subquery in `FROM` returns a whole table you can query again.
-
-## Correlated subqueries, step by step
-
-A **correlated** subquery refers to the outer row, so it conceptually runs once per row:
-
-```sql run
-SELECT p.name, p.price
-FROM products p
-WHERE p.price > (SELECT AVG(p2.price) FROM products p2 WHERE p2.category = p.category);
-```
-
-Read it as: "for this product, compute the average price **of its own category**, and keep the product if it's above that".
 
 ## Common mistakes
 

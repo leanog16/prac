@@ -50,7 +50,7 @@ CI works best when branches are short-lived:
 - **Feature flags** hide unfinished work that's already merged, so merging and releasing are separate decisions.
 - **GitFlow** (long-lived `develop` and `release` branches) suits software with versioned releases (libraries, mobile apps, on-prem products), but slows down web services.
 
-**Branch protection** on `main` enforces the rules: pull requests required, CI checks must pass, at least one review, no force pushes. That makes "main is always deployable" a guarantee rather than a hope.
+**Branch protection** on `main` enforces the rules: pull requests required, CI checks must pass, at least one review, no force pushes. Those checks improve confidence that `main` is deployable, although tests and reviews cannot guarantee it.
 
 ## The test pyramid in a pipeline
 

@@ -45,7 +45,7 @@ def call_with_retries(fn, attempts=4, base=0.1, cap=2.0):
 - **Exponential backoff** spreads retries out over time.
 - **Jitter** (randomness) stops thousands of clients from retrying in synchronized waves.
 - Only retry **idempotent** operations (or use idempotency keys), and only **transient** errors: retrying a 400 is pointless.
-- Retries multiply across layers: 3 retries at each of 3 layers = up to 27 attempts. Retry at one layer.
+- Retries multiply across layers: 3 attempts at each of 3 layers = up to 27 downstream attempts. Retry at one layer.
 
 ## Circuit breakers
 

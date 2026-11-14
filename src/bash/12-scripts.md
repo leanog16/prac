@@ -195,7 +195,7 @@ echo "$log: $errors errors"
 Each part has a job:
 
 - **Shebang** `#!/bin/bash` picks the interpreter.
-- **`set -euo pipefail`** turns silent failures into immediate, visible ones.
+- **`set -euo pipefail`** catches unset variables and many command or pipeline failures; `-e` has exceptions in conditions and `&&`/`||` lists, so handle expected errors explicitly.
 - **Usage errors and missing files go to stderr** (`>&2`), so they don't pollute output that's piped somewhere.
 - **Exit codes** carry meaning: 0 success, 1 failure, 2 misuse. The last command's status becomes the script's status, so `[ "$errors" -eq 0 ]` makes the script "fail" when errors were found, which is perfect for monitoring: `./logwatch.sh app.log || send_alert`.
 
@@ -204,7 +204,7 @@ Each part has a job:
 
 ## The `|| true` detail
 
-With `set -e`, a command that fails ends the script. `grep -c` **exits 1 when it counts zero**, which isn't an error for us, so `|| true` absorbs it. Knowing which commands use non-zero exits for "nothing found" (`grep`, `diff`, `test`) saves a lot of confusion.
+With `set -e`, many unhandled command failures end the script, but failures in conditions, most pipeline positions, and parts of `&&`/`||` lists have exceptions. `grep -c` **exits 1 when it counts zero**, which isn't an error for us, so `|| true` absorbs it. Knowing which commands use non-zero exits for "nothing found" (`grep`, `diff`, `test`) saves a lot of confusion.
 
 ## Common mistakes
 

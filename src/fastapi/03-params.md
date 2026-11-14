@@ -35,7 +35,7 @@ The 422 body looks like this (Pydantic v2):
 
 ## Query parameters
 
-Function arguments that are **not** in the path are **query parameters**:
+Simple scalar function arguments that are **not** in the path are normally **query parameters**. Pydantic models and explicitly declared headers, cookies, bodies and dependencies have their own sources:
 
 ```python
 @app.get("/items")
@@ -81,6 +81,8 @@ def read_item(
 | `pattern="^[a-z]+$"` | regex the string must match |
 | `alias="item-query"` | the name used in the URL |
 | `description="..."` | shows up in /docs |
+
+For example, `/items?limit=1000` fails validation with the `le=100` constraint above. Bounding page sizes prevents a single request from fetching an excessive number of records.
 
 ## Enums for fixed choices
 
@@ -164,21 +166,6 @@ Inheriting from `str` means `Status.done == "done"` is `True`, so comparisons wi
 
 > [!plain] In plain English
 > Path parameters identify **which** thing (`/tasks/7`). Query parameters adjust **how** you get things (`?status=done&limit=5`). A parameter with a default is optional.
-
-## Validation with Query and Path
-
-```python
-from typing import Annotated
-from fastapi import Path, Query
-
-@app.get("/tasks/{task_id}")
-def get_task(task_id: Annotated[int, Path(ge=1)]): ...
-
-@app.get("/tasks")
-def list_tasks(limit: Annotated[int, Query(ge=1, le=100)] = 20, q: str | None = None): ...
-```
-
-`/tasks?limit=1000` now gets a 422 that explains the maximum. Cap page sizes **always**: an unbounded `limit` is an easy way to take down your own database.
 
 ## Common mistakes
 

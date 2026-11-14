@@ -114,7 +114,7 @@ It's equivalent to an inner join. Forget the `WHERE` and you get the full Cartes
 
 Goal: revenue per category, **excluding cancelled orders**.
 
-**Stage 1.** Start from the fact table and attach product details. Run it and check the row count matches `order_items` (85): each line has exactly one product.
+**Stage 1.** Start from the fact table and attach product details. The preview is limited to eight rows. Remove `LIMIT 8` and run it to check that the full row count matches `order_items` (85): each line has exactly one product.
 
 ```sql run
 SELECT oi.order_id, p.name, p.category, oi.quantity * oi.unit_price AS line_total

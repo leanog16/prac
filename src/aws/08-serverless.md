@@ -83,7 +83,7 @@ So:
 
 - Set the visibility timeout **longer** than your processing time (for Lambda: at least 6× the function timeout), or messages are processed twice while still in progress.
 - Configure a **dead-letter queue (DLQ)** with `maxReceiveCount` (e.g. 5): a "poison" message that always fails moves aside instead of retrying forever. Alarm on DLQ depth.
-- **Standard** queues deliver **at least once**, in roughly the order sent. **FIFO** queues give exactly-once processing and strict order per message group, with lower throughput.
+- **Standard** queues deliver **at least once**, in roughly the order sent. **FIFO** queues deduplicate sends within a limited window and preserve order within each message group. Consumers must still handle retries and duplicate processing.
 - Because delivery is at-least-once, consumers must be **idempotent**: processing the same message twice must not charge a card twice. Record processed message or business IDs (a DynamoDB conditional put works well).
 
 ### Lambda + SQS with partial batch failures
@@ -144,7 +144,7 @@ PATCH /tasks/42 ──► save to RDS ──► SendMessage(task-events) ──�
                                   └─ failures retry; poison messages → DLQ + alarm
 ```
 
-The API's job ends when the event is safely queued. The notifier can be slow, retry, or be down for an hour, and nothing is lost: messages wait in the queue.
+The API's job ends when the event is safely queued. The notifier can be slow, retry, or be down for an hour, and messages wait in the queue up to its retention period. Monitor age and dead-letter queues to catch failures before retention expires.
 
 ## The event format
 
@@ -158,7 +158,7 @@ Agree on a small, versioned message, not a dump of the database row:
 `event_id` lets the consumer be **idempotent**: if SQS delivers the message twice, the second delivery sees the id was already processed and skips sending a duplicate email.
 
 > [!plain] In plain English
-> A queue is a to-do list between two programs. The first adds items quickly and moves on; the second works through them at its own pace, and nothing is lost if it falls behind.
+> A queue is a to-do list between two programs. The first adds items quickly and moves on; the second works through them at its own pace, and the second can catch up while messages remain within the queue retention period.
 
 :::quiz
 q: Where should you create a boto3 client in a Lambda function?

@@ -166,16 +166,7 @@ What improved:
 > [!plain] In plain English
 > `name=value` stores text (no spaces around `=`!). `$name` reads it back. `$(command)` captures a command's output as text you can store.
 
-## Parameter expansion: defaults and trimming
-
-```bash run
-file="logs/access.log"
-echo "${file##*/}"          # access.log      (strip everything up to the last /)
-echo "${file%.log}"         # logs/access     (strip a suffix)
-echo "${LEVEL:-ERROR}"      # ERROR           (default when unset or empty)
-```
-
-`${VAR:-default}` is how scripts accept optional settings from the environment: `LEVEL=WARN ./logwatch.sh`.
+`${VAR:-default}` is useful for optional settings from the environment: `LEVEL=WARN ./logwatch.sh`.
 
 ## Common mistakes
 

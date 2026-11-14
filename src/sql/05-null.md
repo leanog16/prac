@@ -98,7 +98,7 @@ SELECT major, COUNT(*) FROM students GROUP BY major;
 | `IS NULL`, `IS NOT NULL` | test for NULL |
 | `COALESCE(a, b, …)` | first non-NULL value (defaults) |
 | `NULLIF(a, b)` | NULL when a = b |
-| `a IS b` / `a IS NOT b` | NULL-safe equality in SQLite (`IS DISTINCT FROM` in standard SQL) |
+| `a IS b` / `a IS NOT b` | NULL-safe equality / inequality in SQLite (`IS NOT DISTINCT FROM` / `IS DISTINCT FROM` in standard SQL) |
 | `NULLS FIRST/LAST` | control sort position |
 
 ```sql run

@@ -63,7 +63,7 @@ SELECT ROUND(2.5), ROUND(-2.5), CAST(7.9 AS INTEGER), ABS(-12), 10 % 3, MAX(3, 8
 
 ### Dates
 
-SQLite has no date type: dates are stored as ISO text (`'2025-03-17'`), and functions interpret them.
+SQLite has no dedicated date type. This practice database stores dates as ISO text (`'2025-03-17'`); SQLite date functions can also interpret other supported representations.
 
 | Function | Example | Result |
 |---|---|---|
@@ -175,21 +175,6 @@ SELECT name, price,
 FROM products
 ORDER BY price;
 ```
-
-## Dates in SQLite
-
-SQLite stores dates as text (`'2025-07-14'`), and the `strftime` function pulls parts out:
-
-```sql run
-SELECT order_id, order_date,
-       strftime('%Y-%m', order_date) AS month,
-       strftime('%w', order_date)    AS weekday,      -- 0 = Sunday
-       julianday('2025-12-31') - julianday(order_date) AS days_before_year_end
-FROM orders
-LIMIT 5;
-```
-
-Other databases spell it differently (`EXTRACT(MONTH FROM d)` and `DATE_TRUNC('month', d)` in PostgreSQL, `DATE_FORMAT` in MySQL), but the idea is the same.
 
 ## Common mistakes
 

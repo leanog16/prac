@@ -41,7 +41,7 @@ Typical uses: database sessions, the current user, permissions, pagination, sett
 
 ## Dependencies with setup and teardown: yield
 
-Code before `yield` runs before the handler; code after it runs after the response is sent, even if the handler raised. This is the standard pattern for database sessions:
+Code before `yield` runs before the handler; code after it performs cleanup, including when the handler raises. Cleanup timing relative to the response depends on FastAPI version and dependency scope. This is the standard pattern for database sessions:
 
 ```python
 def get_db():
@@ -164,24 +164,6 @@ Note the two different questions: **authentication** ("who are you?", answered b
 
 > [!plain] In plain English
 > A dependency is a function FastAPI runs before your endpoint to prepare something it needs: the current user, a database session, pagination settings. You declare it once and reuse it everywhere.
-
-## Reusing dependencies for consistency
-
-Every list endpoint should page the same way. Write it once:
-
-```python
-class Page(BaseModel):
-    offset: int
-    limit: int
-
-def pagination(offset: Annotated[int, Query(ge=0)] = 0,
-               limit: Annotated[int, Query(ge=1, le=100)] = 20) -> Page:
-    return Page(offset=offset, limit=limit)
-
-Paging = Annotated[Page, Depends(pagination)]
-```
-
-Now `/tasks`, `/users` and `/tasks/5/comments` all accept `?offset=&limit=` with identical rules, and you can't forget the cap.
 
 ## Common mistakes
 

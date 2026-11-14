@@ -97,7 +97,7 @@ async def echo(websocket: WebSocket):
 
 - Call `await websocket.accept()` first, or the handshake fails.
 - `receive_text` / `receive_json` / `receive_bytes` and the matching `send_*` methods.
-- Path and query parameters and `Depends` work as in HTTP routes. Browsers can't set custom headers on WebSockets, so auth tokens usually travel as a query parameter or in the first message.
+- Path and query parameters and `Depends` work as in HTTP routes. Browsers can't set custom headers on WebSockets, so authentication can use secure cookies or a short-lived credential in the first message. Query-string tokens may be logged, so avoid long-lived credentials there.
 - To reject a connection, `await websocket.close(code=1008)` (1008 = policy violation).
 
 ### Broadcasting to many clients
@@ -134,7 +134,7 @@ async def chat(websocket: WebSocket, room: str):
 ```
 
 > [!warn] In-memory state doesn't scale out
-> `manager.active` lives in **one** process. With 4 uvicorn workers or 3 containers, a message only reaches clients connected to the same process. Real deployments fan messages out through a broker (Redis pub/sub, NATS) and use sticky sessions at the load balancer.
+> `manager.active` lives in **one** process. With 4 uvicorn workers or 3 containers, a message only reaches clients connected to the same process. Real deployments fan messages out through a broker (Redis pub/sub, NATS) so every worker can deliver events to its own connected clients.
 
 Test WebSockets with TestClient:
 

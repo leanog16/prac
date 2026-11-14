@@ -11,7 +11,7 @@ minutes: 25
 
 An application never runs alone. It needs a specific language runtime, libraries at specific versions, system packages, config files and environment variables. Differences between your laptop, a teammate's laptop, CI and production are where bugs hide.
 
-**Docker packages an application together with everything it needs to run** into a single artifact, an **image**, and runs it in an isolated environment, a **container**, that behaves the same everywhere Docker runs.
+**Docker packages an application together with everything it needs to run** into a single artifact, an **image**, and runs it in an isolated environment, a **container**, that makes its runtime more consistent across compatible Docker hosts. Kernel, architecture and host configuration can still matter.
 
 ## Containers vs virtual machines
 
@@ -116,10 +116,6 @@ That second command downloaded (pulled) a Python image, started a container from
 
 > [!plain] In plain English
 > An **image** is a frozen package: an operating-system filesystem plus your app and its dependencies. A **container** is a running copy of an image, isolated from other processes. One image can run as many containers.
-
-## Containers are not tiny VMs
-
-A VM boots a whole operating system with its own kernel. A container is just a **process** on the host, with its own view of the filesystem, network and process list. That's why containers start in milliseconds and you can run dozens on a laptop, and also why a Linux container needs a Linux kernel (Docker Desktop runs a small Linux VM for you on macOS and Windows).
 
 ## Common mistakes
 

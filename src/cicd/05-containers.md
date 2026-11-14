@@ -138,7 +138,7 @@ Fail the pipeline when the image has serious known vulnerabilities, **before** i
     tags: ${{ steps.meta.outputs.tags }}
 ```
 
-The second build is almost instant thanks to the cache. Also scan the source and dependencies (Dependabot, CodeQL, `pip-audit`, `npm audit`) and upload results as SARIF to GitHub's security tab.
+The second build may reuse cached layers, but rebuilding does not prove the published bytes match the scanned image. For a strict gate, scan and promote the same image digest. Also scan the source and dependencies (Dependabot, CodeQL, `pip-audit`, `npm audit`) and upload results as SARIF to GitHub's security tab.
 
 ## Attestations: SBOM and provenance
 
@@ -173,7 +173,7 @@ build (load locally) ─► trivy scan ─► CRITICAL/HIGH found? ─► fail, 
                                         └─ clean ─► build again (cache hit, seconds) ─► push
 ```
 
-The scan gate means a vulnerable image never reaches the registry, so it can never be deployed by accident. When it fails, the fix is usually bumping the base image (`python:3.12-slim` gets patched regularly) or a dependency.
+The scan gate blocks publication when the scanner finds a vulnerability covered by its policy. Scans cannot detect every vulnerability, and a rebuild after scanning can produce different bytes; promote the scanned digest for a reliable gate. When it fails, the fix is usually bumping the base image (`python:3.12-slim` gets patched regularly) or a dependency.
 
 > [!plain] In plain English
 > CI builds the image the same way every time, labels it with the commit it came from, checks it for known security holes, and only then uploads it where servers can download it.

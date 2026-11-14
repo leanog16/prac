@@ -9,7 +9,7 @@ minutes: 40
 
 ## A container is only as safe as its settings
 
-By default a container can use **all** the host's memory and CPU, runs as root, keeps a dozen Linux capabilities, and can write anywhere in its filesystem. That's convenient on a laptop and dangerous in production. One memory leak in one container can get the whole host's processes OOM-killed, and one remote-code-execution bug can give an attacker root inside the container.
+By default a container can use **all** the host's memory and CPU, runs as the image's configured user (root if none is set), retains a default set of Linux capabilities, and can write anywhere in its filesystem. That's convenient on a laptop and dangerous in production. One memory leak in one container can get the whole host's processes OOM-killed, and one remote-code-execution bug can give an attacker root inside the container.
 
 The fixes are a handful of `docker run` flags (and the matching Compose keys). This lesson covers them, then image supply-chain hygiene, then building for more than one CPU architecture.
 
@@ -68,7 +68,7 @@ docker run -d --name api \
   myapi:1.4.2
 ```
 
-- **`--user`** (or `USER` in the Dockerfile): don't run as root. Root in a container is the same UID 0 as root on the host; only namespaces stand between them.
+- **`--user`** (or `USER` in the Dockerfile): don't run as root. Root in a container is the same UID 0 as root on the host; subject to the container runtime's namespaces and other isolation controls; user-namespace remapping or rootless mode can map it to an unprivileged host UID.
 - **`--read-only`** makes the root filesystem read-only, so malware can't drop files or modify your code. Give the app writable space where it needs it: `--tmpfs /tmp` (in-memory) or a volume.
 - **`--cap-drop ALL`** removes Linux **capabilities**, the slices of root's power (`CHOWN`, `NET_RAW`, `SYS_ADMIN`, …). Add back only what you need: `NET_BIND_SERVICE` to bind ports below 1024 as non-root.
 - **`--security-opt no-new-privileges`** stops setuid binaries (like `su`) from gaining privileges.

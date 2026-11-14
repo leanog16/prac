@@ -97,7 +97,7 @@ Failing **fast and loudly** at the boundary is far better than letting a bad val
 
 ## Immutable objects
 
-An **immutable** object never changes after construction: all fields `private final`, no methods that modify them. Immutable objects are simple to reason about, safe to share between threads, and safe to use as map keys. `String`, `Integer` and `LocalDate` are immutable; "modifying" them returns a new object:
+An **immutable** object never changes after construction. Private final fields and no mutator methods help, but mutable objects referenced by those fields also need defensive copies or immutable alternatives. Immutable objects are simple to reason about, safe to share between threads, and safe to use as map keys. `String`, `Integer` and `LocalDate` are immutable; "modifying" them returns a new object:
 
 ```java
 LocalDate due = LocalDate.of(2026, 3, 1);
@@ -140,7 +140,7 @@ Isbn i = new Isbn("9780441013593");
 i.value();                  // accessor (no "get" prefix)
 ```
 
-A record gets `private final` fields, a constructor, accessors, `equals`, `hashCode` and `toString` automatically. Use records for **values** (ISBNs, money amounts, coordinates, DTOs); use classes for **entities** with identity and changing state (a `Book` that's borrowed and returned).
+A record gets `private final` fields, a constructor, accessors, `equals`, `hashCode` and `toString` automatically. Records are only shallowly immutable: copy mutable components defensively. Use records for **values** (ISBNs, money amounts, coordinates, DTOs); use classes for **entities** with identity and changing state (a `Book` that's borrowed and returned).
 
 ## Packages
 

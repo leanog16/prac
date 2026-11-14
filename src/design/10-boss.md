@@ -4,6 +4,9 @@ title: Boss round: case studies
 summary: Full interview-style designs (a URL shortener end to end, a news feed, a chat system, a rate limiter service and a notification system), with the estimates, key decisions and trade-offs each one hinges on.
 minutes: 60
 ---
+> [!project] Snip, final step: the complete design
+> Bring Snip's requirements, estimates and architecture together in the Project exercises. Explain each decision in its own answer, using the earlier lessons as references.
+
 ## Snip, the whole design
 
 Everything from the track, assembled:

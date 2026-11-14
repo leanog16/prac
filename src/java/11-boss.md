@@ -4,6 +4,9 @@ title: Boss round: model it yourself
 summary: Interview-style object-oriented design problems: model a domain from a description, refactor procedural code into objects, spot design flaws, and predict tricky outputs involving references, overriding, equality and statics.
 minutes: 60
 ---
+> [!project] Bookshelf, final step: reservations
+> Apply the design process to Bookshelf's reservation and queue rules in the Project exercises. Each answer is checked independently; use the earlier lessons as references.
+
 ## How to approach an OO design question
 
 Interviewers rarely want "the" answer; they want to see a process:

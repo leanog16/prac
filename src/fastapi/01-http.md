@@ -5,7 +5,7 @@ summary: The protocol under every web API — requests and responses, methods an
 minutes: 25
 ---
 > [!project] Track project: Taskboard, a task-tracking API
-> Across this track you'll build **Taskboard**: an API where a small team creates tasks, moves them from `todo` to `doing` to `done`, assigns them, attaches files and gets live updates. Every lesson adds a real feature, and the **Project** exercises at the end of each lesson are the next commit in that codebase. The Docker, CI/CD and AWS tracks later containerize, test and deploy this same API.
+> Across this track you'll design and build features for **Taskboard**: an API where a small team creates tasks, moves them from `todo` to `doing` to `done`, assigns them, attaches files and gets live updates. The **Project** exercises apply each lesson to that API. They are independent exercises, not commits to a shared codebase; you can also build the app in your own environment. The Docker, CI/CD and AWS tracks use the same project as their example.
 
 ## A request, a response
 
@@ -46,7 +46,7 @@ Content-Length: 41
 | `DELETE` | remove | usually no | no | yes |
 
 - **Safe**: doesn't change server state.
-- **Idempotent**: doing it twice has the same effect as once. `DELETE /items/42` twice leaves item 42 deleted; `POST /items` twice creates two items. This is why clients can safely retry PUT and DELETE but must be careful with POST.
+- **Idempotent**: repeating the same request has the same intended effect on server state as one request, although responses may differ. A repeated DELETE can return 204 then 404. POST is not guaranteed to be idempotent; retrying a creation can create a duplicate. An idempotency key can let an API deduplicate retries.
 
 ## Status codes
 
@@ -136,12 +136,6 @@ Content-Type: application/json
 
 > [!plain] In plain English
 > HTTP is a conversation: the client sends a **request** (method, URL, headers, maybe a body), the server sends back a **response** (status code, headers, maybe a body). JSON is just the text format for the bodies.
-
-## Safe and idempotent
-
-- **Safe** methods don't change anything (GET, HEAD). Browsers, caches and crawlers may call them freely.
-- **Idempotent** methods give the same result if repeated (GET, PUT, DELETE). If a network glitch makes a client retry `DELETE /tasks/42`, nothing bad happens.
-- **POST isn't idempotent**: retrying it can create a duplicate task. That's why payment APIs accept an `Idempotency-Key` header.
 
 ## Common mistakes
 

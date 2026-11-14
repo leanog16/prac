@@ -141,7 +141,7 @@ find . -type f -name '*.log' -exec wc -l {} +
 ```
 
 - Quote the pattern (`'*.log'`), so `find` gets the wildcard instead of the shell expanding it first.
-- `-exec cmd {} +` runs `cmd` once with **all** the found files as arguments (fast). `-exec cmd {} \;` runs it once per file.
+- `-exec cmd {} +` passes found files to `cmd` in batches (fast). `-exec cmd {} \;` runs it once per file.
 - Combine with `xargs` when the next command reads arguments: `find . -name '*.log' -print0 | xargs -0 grep -l ERROR`. The `-print0`/`-0` pair keeps file names with spaces intact.
 
 ## Making the script executable
