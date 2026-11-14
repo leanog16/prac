@@ -37,8 +37,8 @@
 
   // --------------------------------------------------------------- storage
   const store = {
-    get(k, d) { try { const v = localStorage.getItem('pj:' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
-    set(k, v) { try { localStorage.setItem('pj:' + k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } }
+    get(k, d) { try { const v = localStorage.getItem(window.pracStoragePrefix + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(window.pracStoragePrefix + k, JSON.stringify(v)); if (window.pracSave && (k === 'progress' || k === 'drafts')) window.pracSave(k, v); } catch (e) { /* storage unavailable */ } }
   };
   const progress = store.get('progress', { solved: {}, quiz: {} });
   progress.solved = progress.solved || {}; progress.quiz = progress.quiz || {};

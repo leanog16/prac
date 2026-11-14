@@ -4,7 +4,22 @@
   const dialog = $('auth-dialog'), form = $('auth-form'), account = $('account-btn');
   const username = $('auth-username'), password = $('auth-password'), confirm = $('auth-confirm');
   const error = $('auth-error');
-  let mode = 'signin', user = null;
+  let mode = 'signin', user = null, pending = Promise.resolve();
+  window.pracStoragePrefix = 'pj:';
+  function accountPrefix(name) { return 'pj:user:' + name.toLowerCase() + ':'; }
+  function saveRemote(key, value) {
+    if (!user) return Promise.resolve();
+    const body = JSON.stringify({ value });
+    const write = () => api('data/' + key, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body, keepalive: body.length < 60000 });
+    pending = pending.then(write, write).catch(() => {
+      alert('Could not save your progress to your account. Check your connection and try again.');
+    });
+    return pending;
+  }
+  window.pracSave = saveRemote;
+  function loadApp() {
+    const script = document.createElement('script'); script.src = 'app.js'; document.body.appendChild(script);
+  }
   function setMode(next) {
     mode = next;
     const signup = mode === 'signup';
@@ -27,7 +42,7 @@
   const post = body => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   account.addEventListener('click', async () => {
     if (user) {
-      try { await api('signout', post({})); setUser(null); }
+      try { await new Promise(resolve => setTimeout(resolve, 500)); await pending; await api('signout', post({})); location.reload(); }
       catch (_) { alert('Could not sign out. Please try again.'); }
     } else { setMode('signin'); form.reset(); dialog.showModal(); username.focus(); }
   });
@@ -42,9 +57,37 @@
     $('auth-submit').disabled = true;
     try {
       const data = await api(mode, post({ username: username.value, password: password.value, confirmPassword: confirm.value }));
-      setUser(data.username); form.reset(); dialog.close();
+      setUser(data.username);
+      if (mode === 'signup') {
+        for (const key of ['progress', 'drafts']) {
+          const saved = localStorage.getItem('pj:' + key);
+          if (saved) await saveRemote(key, JSON.parse(saved));
+        }
+      }
+      location.reload();
     } catch (e) { error.textContent = e.message || 'Could not connect. Please try again.'; error.hidden = false; }
     finally { $('auth-submit').disabled = false; }
   });
-  api('session').then(data => setUser(data.username)).catch(() => {});
+  (async () => {
+    try {
+      const session = await api('session');
+      setUser(session.username);
+      if (session.username) {
+        window.pracStoragePrefix = accountPrefix(session.username);
+        const data = await api('data');
+        // Migrate existing browser work when an account has not saved anything yet.
+        if (data.progress === undefined && data.drafts === undefined) {
+          for (const key of ['progress', 'drafts']) {
+            const saved = localStorage.getItem('pj:' + key);
+            if (saved) { data[key] = JSON.parse(saved); await saveRemote(key, data[key]); }
+          }
+        }
+        for (const key of ['progress', 'drafts']) {
+          if (data[key] !== undefined) localStorage.setItem(window.pracStoragePrefix + key, JSON.stringify(data[key]));
+          else localStorage.removeItem(window.pracStoragePrefix + key);
+        }
+      }
+    } catch (_) { alert('Could not load account progress. Please check your connection and reload.'); }
+    loadApp();
+  })();
 })();

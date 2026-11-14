@@ -10,7 +10,7 @@ A study site with lessons, quizzes and auto-graded exercises for nine tracks: **
 | Java OOP → Spring Boot | Bookshelf: model a library in plain Java, then build its Spring Boot API |
 | System Design | Snip, a URL shortener, from requirements to global scale |
 
-Lessons and exercises run in the browser; accounts are stored on the server. Progress and drafts remain in the current browser and are not synced between accounts or devices.
+Lessons and exercises run in the browser; accounts are stored on the server. Signed-in progress and drafts are saved to the account and available across devices. When an account first saves progress, existing progress and drafts from that browser are copied to it. Signed-out activity stays in that browser.
 
 Exercise engines:
 

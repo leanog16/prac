@@ -1,6 +1,7 @@
 """FastAPI server for the prac site and its accounts."""
 import hashlib
 import hmac
+import json
 import os
 import re
 import secrets
@@ -30,6 +31,9 @@ async def lifespan(app):
         cursor.execute('''CREATE TABLE IF NOT EXISTS sessions (token_hash BINARY(32) PRIMARY KEY,
             user_id BIGINT NOT NULL, expires BIGINT NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS account_data (user_id BIGINT NOT NULL,
+            data_key VARCHAR(32) CHARACTER SET ascii NOT NULL, data_value LONGTEXT NOT NULL,
+            PRIMARY KEY (user_id, data_key), FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)''')
     yield
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -62,6 +66,40 @@ def session(request: Request):
         cursor.execute('SELECT users.username FROM sessions JOIN users ON users.id = sessions.user_id WHERE token_hash = %s AND expires > %s', (token_hash(token), int(time.time())))
         user = cursor.fetchone()
     return {'username': user[0] if user else None}
+
+
+class AccountData(BaseModel):
+    value: dict
+
+def current_user_id(request):
+    with connect() as db, db.cursor() as cursor:
+        cursor.execute('SELECT user_id FROM sessions WHERE token_hash = %s AND expires > %s',
+                       (token_hash(request.cookies.get('prac_session', '')), int(time.time())))
+        user = cursor.fetchone()
+    if not user:
+        raise HTTPException(401, 'Please sign in.')
+    return user[0]
+
+@app.get('/api/data')
+def get_account_data(request: Request):
+    user_id = current_user_id(request)
+    with connect() as db, db.cursor() as cursor:
+        cursor.execute('SELECT data_key, data_value FROM account_data WHERE user_id = %s', (user_id,))
+        return {key: json.loads(value) for key, value in cursor.fetchall()}
+
+@app.put('/api/data/{key}')
+def save_account_data(key: str, data: AccountData, request: Request):
+    check_origin(request)
+    if key not in ('progress', 'drafts'):
+        raise HTTPException(404, 'Not found.')
+    value = json.dumps(data.value, ensure_ascii=False)
+    if len(value.encode('utf-8')) > 2_000_000:
+        raise HTTPException(413, 'Saved data is too large.')
+    user_id = current_user_id(request)
+    with connect() as db, db.cursor() as cursor:
+        cursor.execute('INSERT INTO account_data (user_id, data_key, data_value) VALUES (%s, %s, %s) ON DUPLICATE KEY UPDATE data_value = %s',
+                       (user_id, key, value, value))
+    return {'ok': True}
 
 @app.post('/api/{action}')
 def authenticate(action: str, request: Request, response: Response, data: Credentials):
