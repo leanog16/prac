@@ -643,6 +643,7 @@ title: "Project 5: the image job"
 mode: code
 lang: yaml
 file: .github/workflows/ci.yml
+path: .github/workflows/ci.yml
 ---
 Write the `image` job (needs `test`, only on pushes: `if: github.event_name == 'push'`, permissions `contents: read` + `packages: write`): checkout; `docker/setup-buildx-action@v3`; `docker/login-action@v3` to `ghcr.io` with `${{ github.actor }}` / `${{ secrets.GITHUB_TOKEN }}`; `docker/metadata-action@v5` (id `meta`, images `ghcr.io/acme/taskboard`, tags `type=sha`); `docker/build-push-action@v6` with `push: true`, the meta tags and labels, and the `gha` cache (`mode=max`).
 ---starter

@@ -209,5 +209,128 @@ for k in range(40):
     oid+=1
 ins('orders',['order_id','customer_id','order_date','status'],orders)
 ins('order_items',['order_id','product_id','quantity','unit_price'],items)
+
+# ---------------------------------------------------------------- Taskboard
+# The project that runs through every track. Its own random generator keeps the
+# tables above byte-for-byte stable. "Today" in this data is 2026-11-20.
+tr = random.Random(7)
+w("""-- Taskboard
+CREATE TABLE members (
+  member_id  INTEGER PRIMARY KEY,
+  name       TEXT NOT NULL,
+  email      TEXT NOT NULL UNIQUE,
+  role       TEXT NOT NULL,
+  team       TEXT,
+  joined_on  TEXT NOT NULL
+);
+CREATE TABLE boards (
+  board_id   INTEGER PRIMARY KEY,
+  name       TEXT NOT NULL UNIQUE,
+  owner_id   INTEGER NOT NULL REFERENCES members(member_id),
+  created_on TEXT NOT NULL,
+  archived   INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE tasks (
+  task_id        INTEGER PRIMARY KEY,
+  board_id       INTEGER NOT NULL REFERENCES boards(board_id),
+  title          TEXT NOT NULL,
+  status         TEXT NOT NULL CHECK (status IN ('todo', 'doing', 'done')),
+  priority       INTEGER NOT NULL CHECK (priority BETWEEN 1 AND 3),
+  assignee_id    INTEGER REFERENCES members(member_id),
+  created_by     INTEGER NOT NULL REFERENCES members(member_id),
+  created_on     TEXT NOT NULL,
+  due_on         TEXT,
+  done_on        TEXT,
+  estimate_hours REAL,
+  blocked_by     INTEGER REFERENCES tasks(task_id)
+);
+CREATE TABLE comments (
+  comment_id INTEGER PRIMARY KEY,
+  task_id    INTEGER NOT NULL REFERENCES tasks(task_id),
+  author_id  INTEGER NOT NULL REFERENCES members(member_id),
+  body       TEXT NOT NULL,
+  posted_at  TEXT NOT NULL
+);
+CREATE TABLE labels (
+  label_id INTEGER PRIMARY KEY,
+  name     TEXT NOT NULL UNIQUE
+);
+CREATE TABLE task_labels (
+  task_id  INTEGER NOT NULL REFERENCES tasks(task_id),
+  label_id INTEGER NOT NULL REFERENCES labels(label_id),
+  PRIMARY KEY (task_id, label_id)
+);""")
+members=[(1,'Ana Lima','ana@taskboard.dev','admin','Platform','2025-01-06'),(2,'Ben Okafor','ben@taskboard.dev','member','Platform','2025-02-10'),
+ (3,'Chloe Martin','chloe@taskboard.dev','member','Mobile','2025-03-03'),(4,'Dev Patel','dev@taskboard.dev','member','Platform','2025-04-14'),
+ (5,'Elena Rossi','elena@taskboard.dev','member','Design','2025-05-19'),(6,'Farid Haddad','farid@taskboard.dev','member','Mobile','2025-07-07'),
+ (7,'Grace Kim','grace@taskboard.dev','admin','Design','2025-08-25'),(8,'Hugo Silva','hugo@taskboard.dev','member','Platform','2025-11-03'),
+ (9,'Iris Novak','iris@agency.example','guest',None,'2026-02-16'),(10,'Jonas Weber','jonas@agency.example','guest',None,'2026-06-01'),
+ (11,'Kenji Sato','kenji@taskboard.dev','member','Mobile','2026-10-26'),(12,'Lena Fischer','lena@taskboard.dev','member','Design','2026-09-08')]
+ins('members',['member_id','name','email','role','team','joined_on'],members)
+boards=[(1,'Website relaunch',7,'2026-08-03',0),(2,'Mobile app 2.0',3,'2026-08-17',0),(3,'API platform',1,'2026-07-27',0),
+ (4,'Onboarding docs',5,'2026-09-14',0),(5,'Office move',2,'2026-05-04',1),(6,'Q1 planning',1,'2026-11-16',0)]
+ins('boards',['board_id','name','owner_id','created_on','archived'],boards)
+titles={
+ 1:['Draft the new homepage copy','Pick a font pairing','Design the pricing page','Build the hero section','Set up redirects from old URLs','Fix broken links in the footer','Add the cookie banner','Optimize hero images','Write the launch blog post','Test the contact form','Translate the homepage','Run an accessibility audit'],
+ 2:['Sign-in with passkeys','Offline mode for boards','Push notifications for assignments','Fix crash on Android 12','Dark mode','Swipe to move a task','Reduce app start time','Update the App Store screenshots','Beta test with 50 users','Fix sync conflict on reconnect','Haptic feedback on drag'],
+ 3:['Add cursor pagination to /tasks','Rate limit API tokens','Write the OpenAPI descriptions','Add the If-Match version check','Move sessions to Redis','Fix N+1 query on board load','Add a /health endpoint','Rotate the signing keys','Index tasks by assignee','Publish task events to the outbox','Upgrade the database driver','Write load tests','Fix timezone bug in due dates','Add webhook retries'],
+ 4:['Write the getting-started guide','Record a 2-minute product tour','Explain boards and columns','Document keyboard shortcuts','Add screenshots to the FAQ','Review the guide with support','Write the admin handbook'],
+ 5:['Book the movers','Order new desks','Set up the network','Label the cables','Farewell lunch at the old office'],
+}
+labels=[(1,'bug'),(2,'feature'),(3,'docs'),(4,'urgent'),(5,'design'),(6,'chore')]
+tasks=[]; tl=[]
+d = datetime.date
+today = d(2026,11,20)
+tid = 1
+members_by_team = {1:[7,5,12,9,10,1], 2:[3,6,11,9], 3:[1,2,4,8], 4:[5,7,12,10], 5:[2,1,4]}
+for bid in (3,1,2,4,5):
+    created0 = d.fromisoformat(boards[bid-1][3])
+    for i,title in enumerate(titles[bid]):
+        created = created0 + datetime.timedelta(days=i*4 + tr.randint(0,3))
+        if bid == 5:
+            status = 'done'
+        else:
+            status = tr.choice(['done']*5 + ['doing']*2 + ['todo']*4)
+            if created > d(2026,11,1): status = tr.choice(['todo','todo','doing'])
+        prio = tr.choice([1,2,2,2,3])
+        assignee = None if (status == 'todo' and tr.random() < 0.3) else tr.choice(members_by_team[bid])
+        creator = tr.choice([m for m in members_by_team[bid] if m not in (9,10)])
+        due = None if tr.random() < 0.25 else (created + datetime.timedelta(days=tr.choice([14,30,45,60,90,120]))).isoformat()
+        done = None
+        if status == 'done':
+            done_d = created + datetime.timedelta(days=tr.randint(1,20))
+            if done_d > today: done_d = today - datetime.timedelta(days=1)
+            done = done_d.isoformat()
+        est = None if tr.random() < 0.2 else tr.choice([1,2,2,3,4,4,6,8,12,16])
+        tasks.append([tid,bid,title,status,prio,assignee,creator,created.isoformat(),due,done,est,None])
+        for lab in tr.sample([1,2,3,4,5,6], tr.choice([0,1,1,2,2,3])):
+            tl.append((tid,lab))
+        tid += 1
+# A dependency chain on the API board, for self-joins and recursive queries:
+# "Write load tests" waits on "Fix N+1 query", which waits on "Index tasks by assignee",
+# which waits on "Upgrade the database driver".
+byt = {t[2]: t for t in tasks}
+byt['Write load tests'][11] = byt['Fix N+1 query on board load'][0]
+byt['Fix N+1 query on board load'][11] = byt['Index tasks by assignee'][0]
+byt['Index tasks by assignee'][11] = byt['Upgrade the database driver'][0]
+byt['Beta test with 50 users'][11] = byt['Fix sync conflict on reconnect'][0]
+byt['Write the launch blog post'][11] = byt['Draft the new homepage copy'][0]
+ins('tasks',['task_id','board_id','title','status','priority','assignee_id','created_by','created_on','due_on','done_on','estimate_hours','blocked_by'],[tuple(t) for t in tasks])
+bodies=['Looks good to me.','Can we split this into two tasks?','Blocked until the design is final.','I can pick this up tomorrow.','Moved the deadline, see the thread.','Shipped to staging.','Needs a second review.','Found another edge case.','Done, closing.','Who owns this now?','Added screenshots.','This is more work than estimated.']
+comments=[]; cid=1
+for t in tasks:
+    if t[1] == 5: continue
+    for _ in range(tr.choice([0,0,1,1,2,3])):
+        when = d.fromisoformat(t[7]) + datetime.timedelta(days=tr.randint(0,12))
+        if when > today: when = today
+        author = tr.choice(members_by_team[t[1]])
+        comments.append((cid,t[0],author,tr.choice(bodies),f"{when.isoformat()} {tr.randint(8,18):02d}:{tr.choice(['05','15','30','45','50'])}"))
+        cid += 1
+comments.sort(key=lambda c: c[4])
+comments=[(i+1,)+c[1:] for i,c in enumerate(comments)]
+ins('comments',['comment_id','task_id','author_id','body','posted_at'],comments)
+ins('labels',['label_id','name'],labels)
+ins('task_labels',['task_id','label_id'],sorted(tl))
+print(len(tasks),'tasks',len(comments),'comments',len(tl),'task labels')
 open('src/db.sql','w').write('\n'.join(out)+'\n')
 print(len(rows),'enrollments',len(orders),'orders',len(items),'items')

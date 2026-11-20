@@ -88,7 +88,7 @@ echo "slice: ${fruits[@]:1:2}"
 | Syntax | Meaning |
 |---|---|
 | `arr=(a b c)` | create |
-| `${arr[i]}` | element i (0-based) |
+| `${arr[i]}` | element i (0-based); `${arr[-1]}` is the last element |
 | `"${arr[@]}"` | all elements, each a separate word |
 | `${#arr[@]}` | number of elements |
 | `${!arr[@]}` | the indexes |
@@ -474,6 +474,7 @@ id: proj-bash-14-functions
 level: 3
 title: "Project 14: logwatch with functions"
 mode: script
+path: ops/scripts/14-functions.sh
 ---
 Write a script with a function `count_level LEVEL FILE` (uses `local`, prints how many lines of FILE contain LEVEL). The script calls it for `ERROR`, `WARN` and `INFO` on the file given as `$1`, printing `ERROR=N`, `WARN=N`, `INFO=N` on three lines.
 ---test
@@ -494,6 +495,7 @@ id: proj-bash-14-getopts
 level: 4
 title: "Project 14b: logwatch top -n"
 mode: script
+path: ops/scripts/14-getopts.sh
 ---
 Write a script that accepts an option `-n N` (default 3) followed by a log file, and prints the top N client IPs of that access log with their counts (as `uniq -c | sort -rn | head` prints them). Use `getopts` and `shift`.
 ---test

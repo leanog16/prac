@@ -315,6 +315,7 @@ title: "Project 4: the security group chain"
 mode: code
 lang: bash
 file: security-groups.sh
+path: infra/aws/security-groups.sh
 ---
 Write three ingress rules: `sg-0alb` allows TCP **443** from `0.0.0.0/0`; `sg-0api` allows TCP **8000** from source group `sg-0alb`; `sg-0db` allows TCP **5432** from source group `sg-0api`.
 ---starter

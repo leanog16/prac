@@ -4,15 +4,15 @@ title: Java essentials
 summary: How a Java program is structured, compiled and run; primitive and reference types; variables, operators and strings; if, switch and loops; methods with parameters and return values; arrays; and reading compiler errors. Everything OOP builds on.
 minutes: 35
 ---
-> [!project] Track project: Bookshelf, a library system in plain Java
-> Through this track you'll model a small public library in Java: books and other items, members, loans, fees, a catalog you can search, and reports. You start with a single `Main` class and end with a clean, tested object-oriented design using interfaces, collections, exceptions, streams and design patterns. (The Spring Boot track later turns this same domain into a web API.) Each lesson ends with **Project** exercises that add the next piece.
+> [!project] Track project: Taskboard's domain in plain Java
+> **Taskboard** is the task tracker that runs through every track on this site. In this track you model its core in plain Java: tasks and other work items, members, assignments, client credits for late work, a board you can search, and reports. You start with a single `Main` class and end with a clean, tested object-oriented design using interfaces, collections, exceptions, streams and design patterns. (The Spring Boot track then turns this same domain into Taskboard's Java web API.) Each lesson ends with **Project** exercises, saved to `java/` in your Taskboard repo.
 
 ## Your first program
 
 ```java title=Main.java
 public class Main {
     public static void main(String[] args) {
-        System.out.println("Welcome to Bookshelf");
+        System.out.println("Welcome to Taskboard");
     }
 }
 ```
@@ -42,15 +42,15 @@ Every piece of that program matters:
 Java is **statically typed**: every variable has a type, fixed when you declare it, and the compiler checks every use.
 
 ```java
-int copies = 3;                    // whole numbers (32-bit)
-long isbn = 9780441013593L;        // big whole numbers (64-bit): note the L
-double price = 9.99;               // decimals (approximate!)
+int openTasks = 3;                 // whole numbers (32-bit)
+long createdAtMillis = 1795200113134L;  // big whole numbers (64-bit): note the L
+double estimateHours = 1.5;        // decimals (approximate!)
 boolean available = true;          // true / false
-char grade = 'A';                  // one character, single quotes
-String title = "Dune";             // text, double quotes (a class, not a primitive)
+char priority = 'H';               // one character, single quotes
+String title = "Write API";        // text, double quotes (a class, not a primitive)
 
-var author = "Frank Herbert";      // Java 10+: the compiler infers String
-final int maxLoans = 5;            // final: can't be reassigned
+var assignee = "Ana";              // Java 10+: the compiler infers String
+final int maxTasks = 5;            // final: can't be reassigned
 ```
 
 | Kind | Types | Holds | Default for fields |
@@ -66,12 +66,12 @@ The difference matters constantly: copying a primitive copies the value; copying
 int total = 7 / 2;          // 3: integer division drops the fraction
 double avg = 7 / 2.0;       // 3.5: one double makes it decimal division
 int rest = 7 % 2;           // 1: remainder
-copies++;                   // copies = copies + 1
-boolean ok = copies > 0 && available;    // && and, || or, ! not
+openTasks++;                // openTasks = openTasks + 1
+boolean ok = openTasks > 0 && available;    // && and, || or, ! not
 
-String s = "Dune" + " by " + author;     // + concatenates strings
-s.length();  s.toUpperCase();  s.contains("by");  s.substring(0, 4);
-String.format("%s (%d)", title, 1965);   // "Dune (1965)"
+String s = "Write API" + " by " + assignee;     // + concatenates strings
+s.length();  s.toUpperCase();  s.contains("by");  s.substring(0, 5);
+String.format("%s (%d pts)", title, 3);   // "Write API (3 pts)"
 ```
 
 > [!mistake] Comparing strings with ==
@@ -80,22 +80,22 @@ String.format("%s (%d)", title, 1965);   // "Dune (1965)"
 ## Control flow
 
 ```java
-if (copies == 0) {
-    System.out.println("Out of stock");
-} else if (copies < 3) {
-    System.out.println("Only " + copies + " left");
+if (openTasks == 0) {
+    System.out.println("Nothing to do");
+} else if (openTasks < 3) {
+    System.out.println("Only " + openTasks + " left");
 } else {
-    System.out.println("Available");
+    System.out.println("Busy");
 }
 
-String label = switch (genre) {           // switch expression (Java 14+)
-    case "SF", "FANTASY" -> "Speculative";
-    case "BIO" -> "Non-fiction";
+String column = switch (status) {         // switch expression (Java 14+)
+    case "TODO", "BLOCKED" -> "Waiting";
+    case "DOING" -> "In progress";
     default -> "Other";
 };
 
 for (int i = 1; i <= 3; i++) {            // counted loop
-    System.out.println("Copy " + i);
+    System.out.println("Task " + i);
 }
 
 int days = 0;
@@ -104,19 +104,24 @@ while (days < 14) {                       // loop while a condition holds
 }
 ```
 
+A **switch expression** picks a value by matching: each `case` lists one or more values, `->` gives the result, and `default` covers everything else. `while` repeats its block as long as the condition is true; `for (start; condition; step)` is a compact counted loop.
+
+
+
 ## Methods
 
 A **method** is a named, reusable piece of logic with typed parameters and a return type:
 
 ```java
-static double lateFee(int daysLate, double perDay) {
+// Taskboard refunds client agencies a credit for every day a task is late
+static double lateCredit(int daysLate, double perDay) {
     if (daysLate <= 0) {
         return 0;
     }
     return daysLate * perDay;
 }
 
-double fee = lateFee(3, 0.25);   // 0.75
+double credit = lateCredit(3, 25.0);   // 75.0
 ```
 
 `static` methods belong to the class; you call them without creating an object. In the next lesson you'll write **instance** methods, which belong to objects, and that's where OOP begins.
@@ -124,9 +129,9 @@ double fee = lateFee(3, 0.25);   // 0.75
 ## Arrays
 
 ```java
-String[] titles = {"Dune", "Emma", "Ulysses"};
+String[] titles = {"Write API", "Fix login", "Ship v1"};
 titles.length;          // 3
-titles[0];              // "Dune"  (indexes start at 0)
+titles[0];              // "Write API"  (indexes start at 0)
 titles[3];              // throws ArrayIndexOutOfBoundsException
 
 for (String t : titles) {       // enhanced for: each element in turn
@@ -140,7 +145,7 @@ Arrays have a fixed size. For growing lists you'll use `ArrayList` (lesson 7).
 
 ```
 Main.java:5: error: incompatible types: String cannot be converted to int
-        int copies = "three";
+        int openTasks = "three";
                      ^
 ```
 
@@ -185,17 +190,17 @@ why: Reference-type fields default to null; primitives default to 0 or false.
 :::exercise
 id: jb-fee
 level: 1
-title: A late-fee method
+title: A late-credit method
 mode: code
 lang: java
-file: Fees.java
+file: Credits.java
 ---
-Write `static double lateFee(int daysLate, double perDay)` that returns `0` when `daysLate` is 0 or less, and `daysLate * perDay` otherwise.
+Write `static double lateCredit(int daysLate, double perDay)` that returns `0` when `daysLate` is 0 or less, and `daysLate * perDay` otherwise.
 ---starter
-public class Fees {
+public class Credits {
 }
 ---rule
-static\s+double\s+lateFee\(\s*int\s+daysLate\s*,\s*double\s+perDay\s*\)
+static\s+double\s+lateCredit\(\s*int\s+daysLate\s*,\s*double\s+perDay\s*\)
 The signature
 ---rule
 if\s*\(\s*daysLate\s*<=\s*0\s*\)\s*\{?\s*return\s+0(\.0)?\s*;
@@ -204,8 +209,8 @@ Return 0 when not late
 return\s+daysLate\s*\*\s*perDay\s*;
 Multiply otherwise
 ---solution
-public class Fees {
-    static double lateFee(int daysLate, double perDay) {
+public class Credits {
+    static double lateCredit(int daysLate, double perDay) {
         if (daysLate <= 0) {
             return 0;
         }
@@ -220,34 +225,34 @@ level: 2
 title: A switch expression
 mode: code
 lang: java
-file: Genres.java
+file: Columns.java
 ---
-Write `static String shelf(String genre)` using a **switch expression** that returns `"Speculative"` for `"SF"` or `"FANTASY"`, `"Non-fiction"` for `"BIO"` or `"HISTORY"`, and `"General"` otherwise.
+Write `static String column(String status)` using a **switch expression** that returns `"Waiting"` for `"TODO"` or `"BLOCKED"`, `"In progress"` for `"DOING"` or `"REVIEW"`, and `"Other"` otherwise.
 ---starter
-public class Genres {
+public class Columns {
 }
 ---rule
-static\s+String\s+shelf\(\s*String\s+genre\s*\)
+static\s+String\s+column\(\s*String\s+status\s*\)
 The signature
 ---rule
-return\s+switch\s*\(\s*genre\s*\)|=\s*switch\s*\(\s*genre\s*\)
-A switch expression on `genre`
+return\s+switch\s*\(\s*status\s*\)|=\s*switch\s*\(\s*status\s*\)
+A switch expression on `status`
 ---rule
-case\s+"SF"\s*,\s*"FANTASY"\s*->\s*"Speculative"
-Speculative fiction
+case\s+"TODO"\s*,\s*"BLOCKED"\s*->\s*"Waiting"
+Waiting work
 ---rule
-case\s+"BIO"\s*,\s*"HISTORY"\s*->\s*"Non-fiction"
-Non-fiction
+case\s+"DOING"\s*,\s*"REVIEW"\s*->\s*"In progress"
+Work in progress
 ---rule
-default\s*->\s*"General"
+default\s*->\s*"Other"
 Default
 ---solution
-public class Genres {
-    static String shelf(String genre) {
-        return switch (genre) {
-            case "SF", "FANTASY" -> "Speculative";
-            case "BIO", "HISTORY" -> "Non-fiction";
-            default -> "General";
+public class Columns {
+    static String column(String status) {
+        return switch (status) {
+            case "TODO", "BLOCKED" -> "Waiting";
+            case "DOING", "REVIEW" -> "In progress";
+            default -> "Other";
         };
     }
 }
@@ -260,9 +265,9 @@ title: Predict: integer division
 mode: answer
 ---
 ```java
-int pages = 350;
-int perDay = 40;
-System.out.println(pages / perDay);
+int minutes = 350;
+int perTask = 40;
+System.out.println(minutes / perTask);
 ```
 
 What does it print?
@@ -301,16 +306,16 @@ title: Predict: string building
 mode: answer
 ---
 ```java
-String s = "Book" + 1 + 2;
-String t = 1 + 2 + "Book";
+String s = "Task" + 1 + 2;
+String t = 1 + 2 + "Task";
 System.out.println(s + " " + t);
 ```
 
 What does it print?
 ---answer
-Book12 3Book
+Task12 3Task
 ---solution
-Book12 3Book
+Task12 3Task
 ---explain
 `+` is evaluated left to right. Once a String is involved, `+` concatenates; before that, `1 + 2` is arithmetic.
 :::
@@ -318,12 +323,13 @@ Book12 3Book
 :::exercise
 id: proj-java-01-main
 level: 1
-title: "Project 1: Bookshelf's entry point"
+title: "Project 1: Taskboard's entry point"
 mode: code
 lang: java
 file: Main.java
+path: java/src/main/java/taskboard/Main.java
 ---
-Write `Main` with a `main` method that stores `"Bookshelf"` in a `String` variable `name` and the number of books `3` in an `int` variable `books`, and prints `Bookshelf has 3 books` using those variables.
+Write `Main` with a `main` method that stores `"Taskboard"` in a `String` variable `name` and the number of tasks `3` in an `int` variable `tasks`, and prints `Taskboard has 3 tasks` using those variables.
 ---starter
 public class Main {
 }
@@ -331,20 +337,20 @@ public class Main {
 public\s+static\s+void\s+main\(\s*String\s*\[\]\s*args\s*\)
 The `main` method
 ---rule
-String\s+name\s*=\s*"Bookshelf"\s*;
-`String name = "Bookshelf";`
+String\s+name\s*=\s*"Taskboard"\s*;
+`String name = "Taskboard";`
 ---rule
-int\s+books\s*=\s*3\s*;
-`int books = 3;`
+int\s+tasks\s*=\s*3\s*;
+`int tasks = 3;`
 ---rule
-System\.out\.println\(\s*name\s*\+\s*" has "\s*\+\s*books\s*\+\s*" books"\s*\)
+System\.out\.println\(\s*name\s*\+\s*" has "\s*\+\s*tasks\s*\+\s*" tasks"\s*\)
 Print using the variables
 ---solution
 public class Main {
     public static void main(String[] args) {
-        String name = "Bookshelf";
-        int books = 3;
-        System.out.println(name + " has " + books + " books");
+        String name = "Taskboard";
+        int tasks = 3;
+        System.out.println(name + " has " + tasks + " tasks");
     }
 }
 :::
@@ -356,15 +362,16 @@ title: "Project 1b: list the titles"
 mode: code
 lang: java
 file: Main.java
+path: java/src/main/java/taskboard/Main.java
 ---
-In `main`, create a `String[] titles` with `"Dune"`, `"Emma"` and `"Ulysses"`, and print each one with an **enhanced for** loop, followed by a final line `3 titles` using `titles.length`.
+In `main`, create a `String[] titles` with `"Write API"`, `"Fix login"` and `"Ship v1"`, and print each one with an **enhanced for** loop, followed by a final line `3 titles` using `titles.length`.
 ---starter
 public class Main {
     public static void main(String[] args) {
     }
 }
 ---rule
-String\s*\[\]\s+titles\s*=\s*\{\s*"Dune"\s*,\s*"Emma"\s*,\s*"Ulysses"\s*\}
+String\s*\[\]\s+titles\s*=\s*\{\s*"Write API"\s*,\s*"Fix login"\s*,\s*"Ship v1"\s*\}
 The array
 ---rule
 for\s*\(\s*String\s+(\w+)\s*:\s*titles\s*\)\s*\{?\s*System\.out\.println\(\s*\1\s*\)
@@ -375,7 +382,7 @@ Print the count
 ---solution
 public class Main {
     public static void main(String[] args) {
-        String[] titles = {"Dune", "Emma", "Ulysses"};
+        String[] titles = {"Write API", "Fix login", "Ship v1"};
         for (String t : titles) {
             System.out.println(t);
         }

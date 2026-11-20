@@ -4,7 +4,7 @@ title: Errors & status codes
 summary: Raising HTTPException, choosing the right status code, the status module, custom exceptions with handlers, headers on errors, and what validation errors look like.
 minutes: 25
 ---
-> [!project] Taskboard, step 5: honest errors
+> [!project] Taskboard, step 6: honest errors
 > Taskboard currently answers `{"detail": "not found"}` with a **200**. This step fixes that with proper 404s, a 409 for duplicate titles, and a custom domain exception so the business logic doesn't need to know about HTTP.
 
 ## HTTPException
@@ -488,10 +488,11 @@ Validation happens before your function runs, so the `int` conversion fails firs
 :::exercise
 id: proj-fa-05-404
 level: 2
-title: "Project 5: a real 404"
+title: "Project 6: a real 404"
 mode: code
 lang: python
 file: main.py
+path: app/main.py
 ---
 Fix `get_task`: if no task matches, **raise** `HTTPException` with status **404** and detail `"Task not found"` (use `status.HTTP_404_NOT_FOUND` or `404`).
 ---starter
@@ -531,10 +532,11 @@ def get_task(task_id: int):
 :::exercise
 id: proj-fa-05-domain
 level: 3
-title: "Project 5b: a domain exception"
+title: "Project 6b: a domain exception"
 mode: code
 lang: python
 file: main.py
+path: app/main.py
 ---
 Define `class DuplicateTitle(Exception)` and register an exception handler for it that returns a `JSONResponse` with status **409** and content `{"detail": "A task with this title already exists"}`. In `create_task`, raise `DuplicateTitle()` when any existing task has the same `title` as `data.title`.
 ---starter

@@ -4,8 +4,8 @@ title: Spring Security
 summary: The filter chain and what the starter does by default, a SecurityFilterChain bean with authorizeHttpRequests, stateless APIs and CSRF, PasswordEncoder and UserDetailsService, JWT resource servers, method security with @PreAuthorize, CORS, and reading the current user.
 minutes: 45
 ---
-> [!project] Bookshelf, step 8: members and librarians
-> Anyone may browse the catalog. Members may borrow and return books. Only librarians may add or remove books and see everyone's loans. This step encodes those rules in the security filter chain and on the services.
+> [!project] Taskboard, step 8: members and team leads
+> Anyone may browse the board. Members may pick up and finish tasks. Only team leads may add or remove tasks and see everyone's assignments. This step encodes those rules in the security filter chain and on the services.
 
 ## What happens when you add the starter
 
@@ -156,13 +156,13 @@ CorsConfigurationSource corsConfigurationSource() {
 
 Start with a table, not with code:
 
-| Endpoint | Anonymous | MEMBER | LIBRARIAN |
+| Endpoint | Anonymous | MEMBER | LEAD |
 |---|---|---|---|
-| `GET /api/books/**` | ✓ | ✓ | ✓ |
-| `POST /api/loans`, `POST /api/loans/{id}/return` | | ✓ | ✓ |
-| `GET /api/loans/me` | | ✓ | ✓ |
-| `POST/PUT/DELETE /api/books/**` | | | ✓ |
-| `GET /api/loans` (everyone's) | | | ✓ |
+| `GET /api/tasks/**` | ✓ | ✓ | ✓ |
+| `POST /api/assignments`, `POST /api/assignments/{id}/return` | | ✓ | ✓ |
+| `GET /api/assignments/me` | | ✓ | ✓ |
+| `POST/PUT/DELETE /api/tasks/**` | | | ✓ |
+| `GET /api/assignments` (everyone's) | | | ✓ |
 | `/actuator/health` | ✓ | ✓ | ✓ |
 
 Then translate row by row, **most specific first**:
@@ -170,10 +170,10 @@ Then translate row by row, **most specific first**:
 ```java
 .authorizeHttpRequests(auth -> auth
     .requestMatchers("/actuator/health").permitAll()
-    .requestMatchers(HttpMethod.GET, "/api/books/**").permitAll()
-    .requestMatchers("/api/books/**").hasRole("LIBRARIAN")              // every other method on books
-    .requestMatchers(HttpMethod.GET, "/api/loans").hasRole("LIBRARIAN")
-    .requestMatchers("/api/loans/**").hasAnyRole("MEMBER", "LIBRARIAN")
+    .requestMatchers(HttpMethod.GET, "/api/tasks/**").permitAll()
+    .requestMatchers("/api/tasks/**").hasRole("LEAD")              // every other method on tasks
+    .requestMatchers(HttpMethod.GET, "/api/assignments").hasRole("LEAD")
+    .requestMatchers("/api/assignments/**").hasAnyRole("MEMBER", "LEAD")
     .anyRequest().denyAll())                                           // nothing unlisted is reachable
 ```
 
@@ -182,19 +182,19 @@ Ending with `denyAll()` instead of `authenticated()` means a new endpoint is **c
 Then add method security as a second line of defense in the service:
 
 ```java
-@PreAuthorize("hasRole('LIBRARIAN')")
+@PreAuthorize("hasRole('LEAD')")
 public void remove(long id) { ... }
 ```
 
-## Who is borrowing?
+## Who is picking up?
 
-The member id must come from the **token**, never from the request body. Otherwise any member could borrow books on someone else's card:
+The member id must come from the **token**, never from the request body. Otherwise any member could pick up tasks on someone else's card:
 
 ```java
-@PostMapping("/api/loans")
-public LoanResponse borrow(@RequestBody BorrowRequest req, @AuthenticationPrincipal Jwt jwt) {
+@PostMapping("/api/assignments")
+public AssignmentResponse pickUp(@RequestBody PickUpRequest req, @AuthenticationPrincipal Jwt jwt) {
     long memberId = Long.parseLong(jwt.getSubject());
-    return loans.borrow(memberId, req.bookId());
+    return assignments.pickUp(memberId, req.taskId());
 }
 ```
 
@@ -541,14 +541,15 @@ The user is authenticated (so not 401) but lacks the required role.
 :::exercise
 id: proj-sp-08-chain
 level: 4
-title: "Project 8: Bookshelf's access rules"
+title: "Project 8: Taskboard's access rules"
 mode: code
 lang: java
 file: SecurityConfig.java
+path: spring/src/main/java/dev/taskboard/SecurityConfig.java
 ---
-Fill in `authorizeHttpRequests` following the access matrix: `/actuator/health` → `permitAll()`; `GET /api/books/**` → `permitAll()`; any other `/api/books/**` → `hasRole("LIBRARIAN")`; `GET /api/loans` → `hasRole("LIBRARIAN")`; `/api/loans/**` → `hasAnyRole("MEMBER", "LIBRARIAN")`; everything else → `denyAll()`.
+Fill in `authorizeHttpRequests` following the access matrix: `/actuator/health` → `permitAll()`; `GET /api/tasks/**` → `permitAll()`; any other `/api/tasks/**` → `hasRole("LEAD")`; `GET /api/assignments` → `hasRole("LEAD")`; `/api/assignments/**` → `hasAnyRole("MEMBER", "LEAD")`; everything else → `denyAll()`.
 ---starter
-package org.library.bookshelf;
+package dev.taskboard;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -576,20 +577,20 @@ public class SecurityConfig {
 requestMatchers\(\s*"/actuator/health"\s*\)\.permitAll\(\s*\)
 Health is public
 ---rule
-requestMatchers\(\s*HttpMethod\.GET\s*,\s*"/api/books/\*\*"\s*\)\.permitAll\(\s*\)
-Browsing books is public
+requestMatchers\(\s*HttpMethod\.GET\s*,\s*"/api/tasks/\*\*"\s*\)\.permitAll\(\s*\)
+Browsing tasks is public
 ---rule
-requestMatchers\(\s*"/api/books/\*\*"\s*\)\.hasRole\(\s*"LIBRARIAN"\s*\)
-Changing books needs LIBRARIAN
+requestMatchers\(\s*"/api/tasks/\*\*"\s*\)\.hasRole\(\s*"LEAD"\s*\)
+Changing tasks needs LEAD
 ---rule
-HttpMethod\.GET\s*,\s*"/api/books/\*\*"\s*\)\.permitAll\(\s*\)[\s\S]*requestMatchers\(\s*"/api/books/\*\*"\s*\)\.hasRole
+HttpMethod\.GET\s*,\s*"/api/tasks/\*\*"\s*\)\.permitAll\(\s*\)[\s\S]*requestMatchers\(\s*"/api/tasks/\*\*"\s*\)\.hasRole
 The GET rule comes first
 ---rule
-requestMatchers\(\s*HttpMethod\.GET\s*,\s*"/api/loans"\s*\)\.hasRole\(\s*"LIBRARIAN"\s*\)
-All loans: LIBRARIAN
+requestMatchers\(\s*HttpMethod\.GET\s*,\s*"/api/assignments"\s*\)\.hasRole\(\s*"LEAD"\s*\)
+All assignments: LEAD
 ---rule
-requestMatchers\(\s*"/api/loans/\*\*"\s*\)\.hasAnyRole\(\s*"MEMBER"\s*,\s*"LIBRARIAN"\s*\)
-Loans: MEMBER or LIBRARIAN
+requestMatchers\(\s*"/api/assignments/\*\*"\s*\)\.hasAnyRole\(\s*"MEMBER"\s*,\s*"LEAD"\s*\)
+Assignments: MEMBER or LEAD
 ---rule
 anyRequest\(\s*\)\.denyAll\(\s*\)
 Deny everything else
@@ -597,7 +598,7 @@ Deny everything else
 !anyRequest\(\s*\)\.authenticated
 No `anyRequest().authenticated()`
 ---solution
-package org.library.bookshelf;
+package dev.taskboard;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -617,10 +618,10 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/books/**").permitAll()
-                .requestMatchers("/api/books/**").hasRole("LIBRARIAN")
-                .requestMatchers(HttpMethod.GET, "/api/loans").hasRole("LIBRARIAN")
-                .requestMatchers("/api/loans/**").hasAnyRole("MEMBER", "LIBRARIAN")
+                .requestMatchers(HttpMethod.GET, "/api/tasks/**").permitAll()
+                .requestMatchers("/api/tasks/**").hasRole("LEAD")
+                .requestMatchers(HttpMethod.GET, "/api/assignments").hasRole("LEAD")
+                .requestMatchers("/api/assignments/**").hasAnyRole("MEMBER", "LEAD")
                 .anyRequest().denyAll())
             .oauth2ResourceServer(o -> o.jwt(Customizer.withDefaults()));
         return http.build();
@@ -631,63 +632,64 @@ public class SecurityConfig {
 :::exercise
 id: proj-sp-08-borrow-endpoint
 level: 3
-title: "Project 8b: borrow as yourself"
+title: "Project 8b: pick up as yourself"
 mode: code
 lang: java
-file: LoanController.java
+file: AssignmentController.java
+path: spring/src/main/java/dev/taskboard/AssignmentController.java
 ---
-Write `@PostMapping("/api/loans")` `LoanResponse borrow(@RequestBody BorrowRequest req, @AuthenticationPrincipal Jwt jwt)` that takes the member id from `Long.parseLong(jwt.getSubject())` (not from the request) and returns `loans.borrow(memberId, req.bookId())`.
+Write `@PostMapping("/api/assignments")` `AssignmentResponse pickUp(@RequestBody PickUpRequest req, @AuthenticationPrincipal Jwt jwt)` that takes the member id from `Long.parseLong(jwt.getSubject())` (not from the request) and returns `assignments.pickUp(memberId, req.taskId())`.
 ---starter
-package org.library.bookshelf;
+package dev.taskboard;
 
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-public class LoanController {
+public class AssignmentController {
 
-    private final LoanService loans;
+    private final AssignmentService assignments;
 
-    public LoanController(LoanService loans) {
-        this.loans = loans;
+    public AssignmentController(AssignmentService assignments) {
+        this.assignments = assignments;
     }
 }
 ---rule
-@PostMapping\(\s*"/api/loans"\s*\)
-`@PostMapping("/api/loans")`
+@PostMapping\(\s*"/api/assignments"\s*\)
+`@PostMapping("/api/assignments")`
 ---rule
-LoanResponse\s+borrow\(\s*@RequestBody\s+BorrowRequest\s+req\s*,\s*@AuthenticationPrincipal\s+Jwt\s+jwt\s*\)
+AssignmentResponse\s+pickUp\(\s*@RequestBody\s+PickUpRequest\s+req\s*,\s*@AuthenticationPrincipal\s+Jwt\s+jwt\s*\)
 The signature
 ---rule
 long\s+memberId\s*=\s*Long\.parseLong\(\s*jwt\.getSubject\(\s*\)\s*\)
 Member id from the token
 ---rule
-return\s+loans\.borrow\(\s*memberId\s*,\s*req\.bookId\(\s*\)\s*\)\s*;
+return\s+assignments\.pickUp\(\s*memberId\s*,\s*req\.taskId\(\s*\)\s*\)\s*;
 Delegate to the service
 ---rule
 !req\.memberId\(
 Never trust a member id from the body
 ---solution
-package org.library.bookshelf;
+package dev.taskboard;
 
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-public class LoanController {
+public class AssignmentController {
 
-    private final LoanService loans;
+    private final AssignmentService assignments;
 
-    public LoanController(LoanService loans) {
-        this.loans = loans;
+    public AssignmentController(AssignmentService assignments) {
+        this.assignments = assignments;
     }
 
-    @PostMapping("/api/loans")
-    public LoanResponse borrow(@RequestBody BorrowRequest req, @AuthenticationPrincipal Jwt jwt) {
+    @PostMapping("/api/assignments")
+    public AssignmentResponse pickUp(@RequestBody PickUpRequest req, @AuthenticationPrincipal Jwt jwt) {
         long memberId = Long.parseLong(jwt.getSubject());
-        return loans.borrow(memberId, req.bookId());
+        return assignments.pickUp(memberId, req.taskId());
     }
 }
 :::

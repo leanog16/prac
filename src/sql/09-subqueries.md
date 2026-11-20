@@ -4,8 +4,8 @@ title: Subqueries
 summary: Queries inside queries — scalar subqueries, IN and EXISTS, correlated subqueries, and derived tables in FROM.
 minutes: 35
 ---
-> [!project] Desk & Co, step 9: above-average customers
-> "Who spends more than a typical customer?" needs two answers in one query: the average, and each customer's total. Subqueries let one query use another's result.
+> [!project] Taskboard, step 9: compared with what?
+> "Which tasks are bigger than usual?" needs two answers in one query: the typical size, and each task's size. Subqueries let one query use another's result.
 
 ## A query is a value
 
@@ -382,19 +382,21 @@ The count-based alternative: `SELECT e.student_id FROM enrollments e JOIN course
 :::exercise
 id: proj-sql-09-above-avg-price
 level: 2
-title: "Project 9: pricier than the category average"
+title: "Project 9: bigger than average"
+path: db/reports/09-big-tasks.sql
 ---
-List each product's `name`, `category` and `price` where the price is **above the average price of its own category**.
+List the `title` and `estimate_hours` of tasks whose estimate is **above the average estimate** of all tasks.
 ---solution
-SELECT p.name, p.category, p.price FROM products p WHERE p.price > (SELECT AVG(p2.price) FROM products p2 WHERE p2.category = p.category);
+SELECT title, estimate_hours FROM tasks WHERE estimate_hours > (SELECT AVG(estimate_hours) FROM tasks);
 :::
 
 :::exercise
 id: proj-sql-09-big-spenders
 level: 3
-title: "Project 9b: above-average spenders"
+title: "Project 9b: open and silent"
+path: db/reports/09-no-comments.sql
 ---
-Show `customer_id` and `spent` (rounded to 2 decimals) for customers whose total spend on **non-cancelled** orders is greater than the average total spend per customer.
+Using `NOT EXISTS`, return the `task_id` and `title` of tasks that are not `done` and have **no comments** at all.
 ---solution
-SELECT customer_id, ROUND(spent, 2) AS spent FROM (SELECT o.customer_id, SUM(oi.quantity * oi.unit_price) AS spent FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status <> 'cancelled' GROUP BY o.customer_id) t WHERE spent > (SELECT AVG(spent) FROM (SELECT SUM(oi.quantity * oi.unit_price) AS spent FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status <> 'cancelled' GROUP BY o.customer_id));
+SELECT t.task_id, t.title FROM tasks t WHERE t.status <> 'done' AND NOT EXISTS (SELECT 1 FROM comments c WHERE c.task_id = t.task_id);
 :::

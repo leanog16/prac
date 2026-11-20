@@ -510,6 +510,7 @@ title: "Project 4: least-privilege token"
 mode: code
 lang: yaml
 file: .github/workflows/ci.yml
+path: .github/workflows/ci.yml
 ---
 Taskboard's CI only reads code. Set the workflow-wide permissions to `contents: read`, and give **only** the `image` job `packages: write` (plus `contents: read`).
 ---starter
@@ -568,6 +569,7 @@ title: "Project 4b: Taskboard's AWS login"
 mode: code
 lang: yaml
 file: .github/workflows/deploy.yml
+path: .github/workflows/deploy.yml
 ---
 Write the `deploy` job: environment `staging`, permissions `id-token: write` and `contents: read`, then `aws-actions/configure-aws-credentials@v4` with `role-to-assume: arn:aws:iam::123456789012:role/taskboard-deploy-staging` and `aws-region: eu-west-1`, then run `aws sts get-caller-identity`.
 ---starter

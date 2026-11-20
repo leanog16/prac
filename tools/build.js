@@ -262,7 +262,11 @@ function parseExercise(blk, file, track, modId) {
     explain: sec('explain').length ? md(sec('explain')[0]) : '',
     starter: sec('starter')[0] || '',
   };
-  if (f.project === 'true' || /^proj-/.test(f.id)) out.project = true;
+  if (f.project === 'true' || /^proj-/.test(f.id)) {
+    out.project = true;
+    // Where this step's work lives in the learner's Taskboard repo.
+    out.path = f.path || `${track}/${f.id.replace(/^proj-/, '')}${f.file ? '-' + f.file.replace(/^.*\//, '') : track === 'sql' ? '.sql' : '.txt'}`;
+  }
   if (!out.solution) throw new Error(`${file}: exercise ${f.id} has no solution`);
   const mode = f.mode || (track === 'sql' ? 'sql' : 'cmd');
   if (mode === 'code') {

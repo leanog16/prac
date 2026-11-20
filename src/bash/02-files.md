@@ -99,6 +99,14 @@ ls
 
 The infamous `rm -rf /` deletes everything. This practice shell refuses to remove `/` or your home directory, but real systems are less forgiving. Double-check any `rm -rf` with a variable in it: `rm -rf "$dir/"` with an empty `$dir` means `rm -rf /`.
 
+## Wildcards: many files at once
+
+A `*` in a file name matches any characters, so `cp logs/*.log backup/` copies every file in `logs` whose name ends in `.log`, and `mv data/*.csv csv/` moves every CSV. Bash replaces the pattern with the matching names **before** the command runs. Lesson 4 covers all the wildcards (`*`, `?`, `[abc]`) and how they work.
+
+```bash run
+echo logs/*.log
+```
+
 ## Checking what you made
 
 - `ls -R` or `tree` to view a structure
@@ -363,6 +371,7 @@ id: proj-bash-02-scaffold
 level: 2
 title: "Project 2: scaffold logwatch"
 compare: verify
+path: ops/commands/02-scaffold.sh
 ---
 Create `~/logwatch` with three subfolders `bin`, `reports` and `samples` (use brace expansion), then copy every `.log` file from `~/logs` into `~/logwatch/samples`.
 ---verify
@@ -378,6 +387,7 @@ level: 2
 title: "Project 2b: archive the cron log"
 compare: verify
 setup: mkdir -p logwatch/samples && cp logs/*.log logwatch/samples/
+path: ops/commands/02-archive.sh
 ---
 In `~/logwatch/samples`, the cron log is small and not needed for now. **Rename** `cron.log` to `cron.log.old`, then create an empty file `README` in `~/logwatch`.
 ---verify

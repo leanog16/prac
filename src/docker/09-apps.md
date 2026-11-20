@@ -371,6 +371,7 @@ title: "Project 9: Taskboard's production Dockerfile"
 mode: file
 file: Dockerfile
 cwd: /home/student/taskboard
+path: Dockerfile
 ---run
 docker build -q -t taskboard:prod . >/dev/null
 docker run -d --name api -p 8000:8000 taskboard:prod >/dev/null
@@ -400,6 +401,7 @@ title: "Project 9b: a multi-stage build"
 mode: code
 lang: dockerfile
 file: Dockerfile
+path: Dockerfile
 ---
 Rewrite as a two-stage build: a `build` stage (`FROM python:3.12-slim AS build`) that runs `pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt`, and a runtime stage that copies `/wheels` **from the build stage**, installs them, and copies the app. Keep the non-root user.
 ---starter

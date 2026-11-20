@@ -7,6 +7,9 @@ minutes: 25
 > [!project] Track project: shipping Taskboard
 > In the FastAPI track you built **Taskboard**, a task-tracking API. A copy lives in `~/taskboard` here: `main.py`, `requirements.txt`, tests, and a `.env` file with development secrets. Over this track you'll package it into an image, give it a PostgreSQL database, wire everything with Compose, and harden it for production. Each lesson's **Project** exercises run in the Docker simulator, so you'll see real output.
 
+> [!note] Before you start
+> Docker is driven from the command line. This track assumes the basics from the Bash track's first five lessons: running commands with options, `;` and `&&` between commands, pipes (`|`), quoting, and `>` to save output to a file. A few more tools appear along the way and are explained where they're first used.
+
 ## "Works on my machine"
 
 An application never runs alone. It needs a specific language runtime, libraries at specific versions, system packages, config files and environment variables. Differences between your laptop, a teammate's laptop, CI and production are where bugs hide.
@@ -309,6 +312,7 @@ docker run --rm python:3.12-slim python3 --version
 id: proj-dk-01-python
 level: 1
 title: "Project 1: which Python will Taskboard get?"
+path: ops/docker/01-python.sh
 ---
 Taskboard needs Python 3.12. Run a **throwaway** container from `python:3.12-slim` that prints the Python version.
 ---solution
@@ -319,6 +323,7 @@ docker run --rm python:3.12-slim python --version
 id: proj-dk-01-explore
 level: 2
 title: "Project 1b: look inside the base image"
+path: ops/docker/01-explore.sh
 ---
 Run a throwaway `python:3.12-slim` container that lists the contents of `/usr/local/bin` (where Python and pip are installed).
 ---solution

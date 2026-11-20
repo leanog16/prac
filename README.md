@@ -1,16 +1,22 @@
 # prac.
 
-A study site with lessons, quizzes and auto-graded exercises for nine tracks: **SQL, Bash, Docker, FastAPI, Spring Boot, CI/CD, AWS, Java OOP and System Design**. Each track applies its lessons to a recurring project (exercises with the **Project** badge). Exercises are independent: drafts and progress are saved, but files and database changes do not carry between exercises. You can also build the projects in your own environment.
+A study site with lessons, quizzes and auto-graded exercises for nine tracks: **SQL, Bash, Docker, FastAPI, Spring Boot, CI/CD, AWS, Java OOP and System Design**.
 
-| Track | Project |
-|---|---|
-| SQL | Desk & Co sales report |
-| Bash | `logwatch`, a log-analysis toolkit |
-| FastAPI → Docker → CI/CD → AWS | Taskboard: build the API, containerize it, give it a pipeline, deploy it |
-| Java OOP → Spring Boot | Bookshelf: model a library in plain Java, then build its Spring Boot API |
-| System Design | Snip, a URL shortener, from requirements to global scale |
+One project runs through every module of every track: **Taskboard**, a task tracker for small teams. Each module's exercises with the **Project** badge add a piece of it, and each piece is saved as a file in the learner's Taskboard repo (`#project` shows the build and the repo, and downloads it as a zip). Project steps require an account: their work is stored server-side under the `project` data key.
 
-Lessons and exercises run in the browser; accounts are stored on the server. Signed-in progress and drafts are saved to the account and available across devices. When an account first saves progress, existing progress and drafts from that browser are copied to it. Signed-out activity stays in that browser.
+| Track | What it builds for Taskboard | Repo folder |
+|---|---|---|
+| SQL | the Monday team report on Taskboard's database (`members`, `boards`, `tasks`, `comments`, `labels`, `task_labels`) | `db/` |
+| Bash | `logwatch`, the toolkit for Taskboard's server logs | `ops/` |
+| FastAPI | the API in Python (the first module teaches the Python it needs) | `app/`, `tests/` |
+| Docker | the image, the Compose stack and production hardening | `Dockerfile`, `compose*.yaml` |
+| CI/CD | the GitHub Actions pipeline | `.github/workflows/` |
+| AWS | the AWS deployment | `infra/aws/` |
+| Java OOP | the domain model in plain Java | `java/` |
+| Spring Boot | the Java edition of the API | `spring/` |
+| System Design | Taskboard at 10 million daily users | `docs/design/` |
+
+Code exercises use a real code editor (CodeMirror 5, vendored in `site/vendor/`) with syntax highlighting, line numbers, bracket matching and auto-indent; Esc releases keyboard focus. Lessons and exercises run in the browser; accounts are stored on the server. Signed-in progress and drafts are saved to the account and available across devices. When an account first saves progress, existing progress and drafts from that browser are copied to it. Signed-out activity stays in that browser.
 
 Exercise engines:
 
@@ -39,7 +45,8 @@ Accounts are stored in MySQL. For local development, configure `MYSQL_HOST`, `MY
 
 ## Edit the content
 
-- Lessons and exercises: `src/<track>/*.md` (front matter, markdown, then `:::exercise` / `:::quiz` blocks). Callouts: `> [!tip]`, `[!warn]`, `[!note]`, `[!plain]` (in plain English), `[!mistake]`, `[!project]`. Exercise ids starting with `proj-` get the Project badge and are listed last.
+- Lessons and exercises: `src/<track>/*.md` (front matter, markdown, then `:::exercise` / `:::quiz` blocks). Callouts: `> [!tip]`, `[!warn]`, `[!note]`, `[!plain]` (in plain English), `[!mistake]`, `[!project]`. Exercise ids starting with `proj-` are Taskboard steps: they get the Project badge, are listed last, and take a `path:` field naming the file they write in the learner's Taskboard repo. Never rename an exercise `id`: saved progress is keyed by it.
+- Every exercise should be answerable from its lesson and the lessons before it (or a prerequisite named in the track's first lesson). Teach a command, flag, keyword or format in the lesson before an exercise asks for it.
 - Practice database: `tools/gen_db.py` writes `src/db.sql`
 - Practice home folders: `src/fs/home/student/` (Bash) and `src/fs-docker/home/student/` (Docker, Spring; includes `taskboard/`). Empty directories hold a `.keep` file so git keeps them; the build skips it.
 - Cheat sheets: `src/cheatsheet-<track>.md`

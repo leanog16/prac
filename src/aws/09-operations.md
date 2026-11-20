@@ -63,7 +63,7 @@ Clicking resources together in the console is fine for learning and terrible for
 
 ### CloudFormation
 
-AWS's native IaC: YAML/JSON **templates** deployed as **stacks**. CloudFormation tracks the stack's resources, applies changes in dependency order, and rolls back a failed update.
+AWS's native IaC: YAML/JSON **templates** deployed as **stacks**. (YAML basics: `key: value` pairs, nesting by indentation, `- ` for list items; the Docker track's Compose lesson and the CI/CD track's first workflow lesson each have a two-minute primer. CloudFormation adds tags like `!Ref Name`, which insert the value of another resource or parameter, `!GetAtt Resource.Attribute`, which reads one of a resource's attributes, and `!Sub "text-${Name}"`, which fills `${…}` placeholders inside a string.) CloudFormation tracks the stack's resources, applies changes in dependency order, and rolls back a failed update.
 
 ```yaml title=template.yaml
 AWSTemplateFormatVersion: "2010-09-09"
@@ -446,6 +446,7 @@ title: "Project 9: the 5xx alarm"
 mode: code
 lang: bash
 file: alarms.sh
+path: infra/aws/alarms.sh
 ---
 Create `taskboard-api-5xx`: namespace `AWS/ApplicationELB`, metric `HTTPCode_Target_5XX_Count`, dimension `LoadBalancer=app/taskboard-alb/abc123`, statistic `Sum`, period `60`, **5** evaluation periods with **3** datapoints to alarm, threshold `10`, `GreaterThanThreshold`, missing data `notBreaching`, notifying `arn:aws:sns:eu-west-1:222222222222:taskboard-oncall`.
 ---starter
@@ -507,6 +508,7 @@ title: "Project 9b: queues as code"
 mode: code
 lang: yaml
 file: queues.yaml
+path: infra/aws/queues.yaml
 ---
 Write a CloudFormation template with two resources: `TaskEventsDLQ` (`AWS::SQS::Queue`) and `TaskEvents` (`AWS::SQS::Queue`) with `VisibilityTimeout: 180` and a `RedrivePolicy` whose `deadLetterTargetArn` is `!GetAtt TaskEventsDLQ.Arn` and `maxReceiveCount` is `5`.
 ---starter

@@ -5,7 +5,7 @@ summary: Substitution with s///, flags and capture groups, addresses and ranges,
 minutes: 30
 ---
 > [!project] logwatch, step 8: anonymizing before sharing
-> Maya's developers want a copy of the access log, but IP addresses are personal data. Before logwatch hands logs to anyone, it masks them. `sed` rewrites text as it streams past.
+> Taskboard's front-end developers want a copy of the access log, but IP addresses are personal data. Before logwatch hands logs to anyone, it masks them. `sed` rewrites text as it streams past.
 
 ## What sed does
 
@@ -329,6 +329,7 @@ sed 's/<[^>]*>//g; /^[[:space:]]*$/d' projects/website/index.html
 id: proj-bash-08-anon
 level: 3
 title: "Project 8: anonymize the access log"
+path: ops/commands/08-anon.sh
 ---
 Print `logs/access.log` with the **last octet** of every client IP replaced by `x` (e.g. `10.0.0.5` → `10.0.0.x`). Use `sed -E` with a capture group.
 ---solution
@@ -339,6 +340,7 @@ sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+)\.[0-9]+/\1.x/' logs/access.log
 id: proj-bash-08-users
 level: 3
 title: "Project 8b: hide user names"
+path: ops/commands/08-users.sh
 ---
 Lines in `logs/app.log` can contain `user=NAME`. Print only the lines containing `user=`, with every name replaced by `user=***`.
 ---hint

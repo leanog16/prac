@@ -7,6 +7,9 @@ minutes: 30
 > [!project] Track project: Taskboard on AWS
 > Taskboard has code (FastAPI track), an image (Docker track) and a pipeline (CI/CD track). In this track it moves into AWS: an IAM role per component, a VPC with private subnets, attachments in S3, PostgreSQL on RDS, the API on ECS Fargate behind a load balancer, notifications through SQS and Lambda, alarms and infrastructure as code. Each lesson's **Project** exercises build one piece.
 
+> [!note] Before you start
+> AWS is driven from the command line (the Bash track's first five lessons cover the basics), and a few exercises use short Python with AWS's `boto3` library (the FastAPI track's first lesson covers the Python you need). Configuration and policies are written in **JSON**; its rules fit in one sentence: `{ }` holds `"key": value` pairs separated by commas, `[ ]` holds a list, strings use double quotes, and values are strings, numbers, `true`/`false`, `null`, or more objects and lists.
+
 ## Global infrastructure
 
 | Concept | Is | Why it matters |
@@ -342,6 +345,7 @@ title: "Project 1: profiles for both accounts"
 mode: code
 lang: properties
 file: ~/.aws/config
+path: infra/aws/config
 ---
 Add two SSO profiles using the session `acme`: `taskboard-staging` (account `111111111111`, role `Developer`) and `taskboard-prod` (account `222222222222`, role `ReadOnly`), both in region `eu-west-1`.
 ---starter

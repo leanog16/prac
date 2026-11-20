@@ -4,7 +4,7 @@ title: Path & query parameters
 summary: Typed path parameters and automatic conversion, query parameters with defaults and optional values, validation with Path and Query, enums, list parameters, and route ordering.
 minutes: 35
 ---
-> [!project] Taskboard, step 3: finding tasks
+> [!project] Taskboard, step 4: finding tasks
 > A board with 500 tasks needs filtering. This step adds `GET /tasks/{task_id}` and query parameters to filter by status and limit the result, with validation so bad input gets a clear 422 instead of a crash.
 
 ## Path parameters
@@ -53,6 +53,7 @@ The rules:
 
 - has a default → **optional**
 - default `None` with type `X | None` → optional and may be absent
+- type `X | None` **without** a default → still **required** (the hint only says the value *may be* None; the missing default is what makes a parameter required)
 - **no default → required**: missing it gives 422 with `"type": "missing"`
 
 `bool` query parameters accept `true/false`, `1/0`, `yes/no`, `on/off`.
@@ -578,10 +579,11 @@ Which is the `loc` of the error for `GET /teams/x/players?limit=5`? Write it as 
 :::exercise
 id: proj-fa-03-filter
 level: 2
-title: "Project 3: filter the board"
+title: "Project 4: filter the board"
 mode: code
 lang: python
 file: main.py
+path: app/main.py
 ---
 Define `class Status(str, Enum)` with members `todo`, `doing`, `done`. Change `GET /tasks` to accept an optional `status: Status | None = None` and `limit: Annotated[int, Query(ge=1, le=100)] = 20`, returning the matching tasks (all when `status` is None), at most `limit` of them.
 ---starter
@@ -651,12 +653,13 @@ def list_tasks(status: Status | None = None, limit: Annotated[int, Query(ge=1, l
 :::exercise
 id: proj-fa-03-one
 level: 2
-title: "Project 3b: one task by id"
+title: "Project 4b: one task by id"
 mode: code
 lang: python
 file: main.py
+path: app/main.py
 ---
-Add `GET /tasks/{task_id}` with `task_id: Annotated[int, Path(ge=1)]` that returns the matching task dict, or `{"detail": "not found"}` if none matches (proper 404s come in lesson 5).
+Add `GET /tasks/{task_id}` with `task_id: Annotated[int, Path(ge=1)]` that returns the matching task dict, or `{"detail": "not found"}` if none matches (proper 404s come in lesson 6).
 ---starter
 from typing import Annotated
 

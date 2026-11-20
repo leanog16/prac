@@ -83,6 +83,19 @@ So:
 
 - Set the visibility timeout **longer** than your processing time (for Lambda: at least 6× the function timeout), or messages are processed twice while still in progress.
 - Configure a **dead-letter queue (DLQ)** with `maxReceiveCount` (e.g. 5): a "poison" message that always fails moves aside instead of retrying forever. Alarm on DLQ depth.
+Both settings are **queue attributes**. Their values are always strings, and the redrive policy is itself a JSON document written **as a string**, so its inner quotes are escaped:
+
+```json title=attributes.json
+{
+  "VisibilityTimeout": "180",
+  "RedrivePolicy": "{\"deadLetterTargetArn\":\"arn:aws:sqs:eu-west-1:123456789012:jobs-dlq\",\"maxReceiveCount\":\"5\"}"
+}
+```
+
+```bash
+aws sqs set-queue-attributes --queue-url "$QUEUE_URL" --attributes file://attributes.json
+```
+
 - **Standard** queues deliver **at least once**, in roughly the order sent. **FIFO** queues deduplicate sends within a limited window and preserve order within each message group. Consumers must still handle retries and duplicate processing.
 - Because delivery is at-least-once, consumers must be **idempotent**: processing the same message twice must not charge a card twice. Record processed message or business IDs (a DynamoDB conditional put works well).
 
@@ -465,6 +478,7 @@ title: "Project 8: publish a task event"
 mode: code
 lang: python
 file: events.py
+path: infra/aws/events.py
 ---
 Write `publish_completed(task_id: int, board_id: str, actor: str)`: build the event dict with `"type": "task.completed"`, `"version": 1`, `task_id`, `board_id`, `actor`, `"event_id": uuid4().hex` and `"occurred_at": datetime.now(timezone.utc).isoformat()`, and send it to `QUEUE_URL` with `sqs.send_message(QueueUrl=QUEUE_URL, MessageBody=json.dumps(event))`.
 ---starter
@@ -528,6 +542,7 @@ title: "Project 8b: the notify Lambda"
 mode: code
 lang: python
 file: notify.py
+path: infra/aws/notify.py
 ---
 Write the Lambda `handler(event, context)`: for each record, parse the body; skip it if `already_sent(msg["event_id"])` is true; otherwise call `send_notification(msg)` and then `mark_sent(msg["event_id"])`. Wrap each record in `try`/`except Exception` and return `{"batchItemFailures": failures}` with the failed `messageId`s.
 ---starter

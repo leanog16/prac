@@ -4,8 +4,8 @@ title: Boss round: mixed problems
 summary: Interview- and exam-style problems that combine everything. Read the problem, sketch the steps, then build the query one CTE at a time.
 minutes: 60
 ---
-> [!project] Desk & Co, final step: Maya's Monday dashboard
-> Everything comes together here. The last project exercises combine joins, aggregation, CTEs and window functions into the queries that power Maya's dashboard.
+> [!project] Taskboard, final step: Ana's Monday report
+> Everything comes together here. The last project exercises combine joins, aggregation, CTEs and window functions into the three queries at the top of the report.
 
 ## How to attack a hard query
 
@@ -292,34 +292,52 @@ FROM employees GROUP BY band_start ORDER BY band_start;
 :::exercise
 id: proj-sql-16-lifetime
 level: 4
-title: "Project 16: customer lifetime value"
+title: "Project 16: the member scorecard"
 ordered: true
+path: db/reports/16-scorecard.sql
 ---
-One row per customer (**all** customers): `name`, `orders` (number of non-cancelled orders, 0 if none) and `lifetime_value` (their total spend on non-cancelled orders, rounded to 2 decimals, 0 if none). Sort by `lifetime_value` descending, then `name`. Watch out for fan-out when counting orders.
+One row per member (**all** members): `name`, `open_tasks` (assigned tasks not `done`), `done_tasks` (assigned tasks `done`) and `comments` (comments they wrote), each 0 when there are none. Sort by `done_tasks` descending, then `name`. Watch out for fan-out: tasks and comments are two different "many" tables.
+---hint
+Aggregate tasks per assignee in one CTE and comments per author in another, then LEFT JOIN both to `members`.
+---hint
+Joining members to tasks **and** comments directly multiplies the rows (every task paired with every comment) and inflates every count.
 ---solution
-WITH order_totals AS (SELECT o.order_id, o.customer_id, SUM(oi.quantity * oi.unit_price) AS total FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status <> 'cancelled' GROUP BY o.order_id, o.customer_id), per_customer AS (SELECT customer_id, COUNT(*) AS orders, SUM(total) AS lifetime_value FROM order_totals GROUP BY customer_id) SELECT c.name, COALESCE(pc.orders, 0) AS orders, ROUND(COALESCE(pc.lifetime_value, 0), 2) AS lifetime_value FROM customers c LEFT JOIN per_customer pc ON pc.customer_id = c.customer_id ORDER BY lifetime_value DESC, c.name;
+WITH t AS (
+  SELECT assignee_id,
+         SUM(CASE WHEN status <> 'done' THEN 1 ELSE 0 END) AS open_tasks,
+         SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done_tasks
+  FROM tasks WHERE assignee_id IS NOT NULL GROUP BY assignee_id
+),
+c AS (SELECT author_id, COUNT(*) AS comments FROM comments GROUP BY author_id)
+SELECT m.name, COALESCE(t.open_tasks, 0) AS open_tasks, COALESCE(t.done_tasks, 0) AS done_tasks, COALESCE(c.comments, 0) AS comments
+FROM members m
+LEFT JOIN t ON t.assignee_id = m.member_id
+LEFT JOIN c ON c.author_id = m.member_id
+ORDER BY done_tasks DESC, m.name;
 :::
 
 :::exercise
 id: proj-sql-16-category-share
 level: 4
-title: "Project 16b: category share of revenue"
+title: "Project 16b: each board's share of finished work"
 ordered: true
+path: db/reports/16-board-share.sql
 ---
-For non-cancelled orders, show each `category`, its `revenue` (rounded to 2 decimals), and `pct`, its percentage of total revenue rounded to 1 decimal, biggest first.
+For tasks with status `done`, show each board's `name`, its number of finished tasks as `completed`, and `pct`, its percentage of all finished tasks rounded to 1 decimal. Biggest first, ties by name.
 ---hint
-`SUM(revenue) OVER ()` is the grand total on every row.
+`SUM(completed) OVER ()` is the grand total on every row.
 ---solution
-WITH cat AS (SELECT p.category, SUM(oi.quantity * oi.unit_price) AS revenue FROM order_items oi JOIN products p ON p.product_id = oi.product_id JOIN orders o ON o.order_id = oi.order_id WHERE o.status <> 'cancelled' GROUP BY p.category) SELECT category, ROUND(revenue, 2) AS revenue, ROUND(100.0 * revenue / SUM(revenue) OVER (), 1) AS pct FROM cat ORDER BY revenue DESC;
+WITH per_board AS (SELECT b.name, COUNT(*) AS completed FROM tasks t JOIN boards b ON b.board_id = t.board_id WHERE t.status = 'done' GROUP BY b.board_id, b.name) SELECT name, completed, ROUND(100.0 * completed / SUM(completed) OVER (), 1) AS pct FROM per_board ORDER BY completed DESC, name;
 :::
 
 :::exercise
 id: proj-sql-16-best-month
 level: 4
-title: "Project 16c: each category's best month"
+title: "Project 16c: each board's busiest month"
 ordered: true
+path: db/reports/16-busiest-month.sql
 ---
-For each category, the month (`YYYY-MM`) with its highest revenue from non-cancelled orders: columns `category`, `month`, `revenue` (rounded to 2 decimals), sorted by category. Break ties by the earlier month.
+For each board that has tasks, the month (`YYYY-MM`, from `created_on`) in which the most tasks were created: columns `board` (the board's name), `month`, `created`, sorted by board name. Break ties by the earlier month.
 ---solution
-WITH cm AS (SELECT p.category, strftime('%Y-%m', o.order_date) AS month, SUM(oi.quantity * oi.unit_price) AS revenue FROM order_items oi JOIN products p ON p.product_id = oi.product_id JOIN orders o ON o.order_id = oi.order_id WHERE o.status <> 'cancelled' GROUP BY p.category, month), ranked AS (SELECT category, month, revenue, ROW_NUMBER() OVER (PARTITION BY category ORDER BY revenue DESC, month) AS rn FROM cm) SELECT category, month, ROUND(revenue, 2) AS revenue FROM ranked WHERE rn = 1 ORDER BY category;
+WITH bm AS (SELECT b.name AS board, STRFTIME('%Y-%m', t.created_on) AS month, COUNT(*) AS created FROM tasks t JOIN boards b ON b.board_id = t.board_id GROUP BY b.board_id, b.name, month), ranked AS (SELECT board, month, created, ROW_NUMBER() OVER (PARTITION BY board ORDER BY created DESC, month) AS rn FROM bm) SELECT board, month, created FROM ranked WHERE rn = 1 ORDER BY board;
 :::

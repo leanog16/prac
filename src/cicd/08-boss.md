@@ -448,6 +448,7 @@ title: "Project 8: release on a tag"
 mode: code
 lang: yaml
 file: .github/workflows/release.yml
+path: .github/workflows/release.yml
 ---
 Write `release.yml`: trigger on pushed tags `v*.*.*`; permissions `contents: write` and `packages: write`; one job `release` that checks out, logs in to `ghcr.io` (`docker/login-action@v3`, actor + `GITHUB_TOKEN`), runs `docker/metadata-action@v5` (id `meta`, images `ghcr.io/acme/taskboard`, tags `type=semver,pattern={{version}}`), builds and pushes with `docker/build-push-action@v6`, and finally runs `gh release create "$GITHUB_REF_NAME" --generate-notes` with `GH_TOKEN: ${{ github.token }}`.
 ---starter

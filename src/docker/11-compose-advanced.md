@@ -513,6 +513,7 @@ mode: file
 file: compose.override.yaml
 cwd: /home/student/taskboard
 setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile && printf 'services:\n  api:\n    build: .\n  db:\n    image: postgres:16\n' > compose.yaml
+path: compose.override.yaml
 ---run
 docker compose up -d >/dev/null 2>&1
 docker compose ps --format '{{.Service}} {{.Ports}}' | sort
@@ -539,6 +540,7 @@ title: "Project 11b: the production file"
 mode: code
 lang: yaml
 file: compose.prod.yaml
+path: compose.prod.yaml
 ---
 Write `compose.prod.yaml`: `api` publishes **only on localhost** (`127.0.0.1:8000:8000`), restarts `unless-stopped`, has a read-only filesystem with a tmpfs at `/tmp`, and is limited to `1` CPU and `384M` with `deploy.resources.limits`; `db` gets `POSTGRES_PASSWORD_FILE: /run/secrets/db_password` and the secret `db_password`, defined at the top level from `./secrets/db_password.txt`.
 ---starter

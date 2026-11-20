@@ -4,36 +4,36 @@ title: REST controllers
 summary: @RestController and request mappings, path variables, query parameters with defaults, request bodies as Java records, ResponseEntity and status codes, Location headers for created resources, request headers, and how Jackson turns objects into JSON.
 minutes: 35
 ---
-> [!project] Bookshelf, step 3: the catalog API
-> The catalog is Bookshelf's front door: list books, look one up, add one, remove one. This step writes `BookController` with request and response records.
+> [!project] Taskboard, step 3: the board API
+> The board is Taskboard's front door: list tasks, look one up, add one, remove one. This step writes `TaskController` with request and response records.
 
 ## A controller
 
 ```java
 @RestController
-@RequestMapping("/api/books")
-public class BookController {
+@RequestMapping("/api/tasks")
+public class TaskController {
 
-    private final BookService books;
+    private final TaskService tasks;
 
-    public BookController(BookService books) {
-        this.books = books;
+    public TaskController(TaskService tasks) {
+        this.tasks = tasks;
     }
 
     @GetMapping
-    public List<Book> list() {
-        return books.findAll();
+    public List<Task> list() {
+        return tasks.findAll();
     }
 
     @GetMapping("/{id}")
-    public Book get(@PathVariable long id) {
-        return books.get(id);
+    public Task get(@PathVariable long id) {
+        return tasks.get(id);
     }
 }
 ```
 
 - **`@RestController`** = `@Controller` + `@ResponseBody`: return values are written to the response body as JSON (by Jackson), not treated as view names.
-- **`@RequestMapping("/api/books")`** on the class sets a prefix for every method.
+- **`@RequestMapping("/api/tasks")`** on the class sets a prefix for every method.
 - **`@GetMapping`, `@PostMapping`, `@PutMapping`, `@PatchMapping`, `@DeleteMapping`** map one HTTP method and path each.
 
 Try it on the practice project:
@@ -65,14 +65,14 @@ curl -s "localhost:8080/api/echo/hi?times=3"; echo
 
 | Annotation | Reads | Example |
 |---|---|---|
-| `@PathVariable` | a `{placeholder}` in the path | `/books/{id}` → `@PathVariable long id` |
+| `@PathVariable` | a `{placeholder}` in the path | `/tasks/{id}` → `@PathVariable long id` |
 | `@RequestParam` | a query-string parameter | `?page=2` → `@RequestParam int page` |
 | `@RequestParam(defaultValue = "20")` | optional, with a default | |
 | `@RequestParam(required = false)` | optional, `null` when absent | or use `Optional<String>` |
-| `@RequestBody` | the JSON body, deserialized | `@RequestBody CreateBook body` |
+| `@RequestBody` | the JSON body, deserialized | `@RequestBody CreateTask body` |
 | `@RequestHeader` | a header | `@RequestHeader("X-Request-ID") String rid` |
 
-Spring converts types for you: `"42"` → `long`, `"true"` → `boolean`, `"2026-11-13"` → `LocalDate`. A value that doesn't convert (`/books/abc` for a `long`) is a **400 Bad Request**.
+Spring converts types for you: `"42"` → `long`, `"true"` → `boolean`, `"2026-11-13"` → `LocalDate`. A value that doesn't convert (`/tasks/abc` for a `long`) is a **400 Bad Request**.
 
 > [!tip] Compile with `-parameters`
 > `@PathVariable long id` works without repeating the name (`@PathVariable("id")`) because the Boot parent compiles with `-parameters`, which keeps parameter names in the bytecode.
@@ -82,13 +82,13 @@ Spring converts types for you: `"42"` → `long`, `"true"` → `boolean`, `"2026
 Java **records** are ideal DTOs (data transfer objects): immutable, concise, and Jackson handles them out of the box.
 
 ```java
-public record CreateBook(String title, String author, int year) {}
-public record BookResponse(long id, String title, String author, int year) {}
+public record CreateTask(String title, String assignee, int points) {}
+public record TaskResponse(long id, String title, String assignee, int points) {}
 
 @PostMapping
-public BookResponse create(@RequestBody CreateBook body) {
-    Book saved = books.create(body.title(), body.author(), body.year());
-    return new BookResponse(saved.getId(), saved.getTitle(), saved.getAuthor(), saved.getYear());
+public TaskResponse create(@RequestBody CreateTask body) {
+    Task saved = tasks.create(body.title(), body.assignee(), body.points());
+    return new TaskResponse(saved.getId(), saved.getTitle(), saved.getAssignee(), saved.getPoints());
 }
 ```
 
@@ -102,19 +102,19 @@ A plain return value is a **200 OK**. For other codes, either annotate the metho
 @DeleteMapping("/{id}")
 @ResponseStatus(HttpStatus.NO_CONTENT)                   // 204, no body
 public void delete(@PathVariable long id) {
-    books.delete(id);
+    tasks.delete(id);
 }
 
 @PostMapping
-public ResponseEntity<BookResponse> create(@RequestBody CreateBook body) {
-    BookResponse created = books.create(body);
-    URI location = URI.create("/api/books/" + created.id());
+public ResponseEntity<TaskResponse> create(@RequestBody CreateTask body) {
+    TaskResponse created = tasks.create(body);
+    URI location = URI.create("/api/tasks/" + created.id());
     return ResponseEntity.created(location).body(created);   // 201 + Location header
 }
 
 @GetMapping("/{id}")
-public ResponseEntity<BookResponse> get(@PathVariable long id) {
-    return books.find(id)                          // Optional<BookResponse>
+public ResponseEntity<TaskResponse> get(@PathVariable long id) {
+    return tasks.find(id)                          // Optional<TaskResponse>
             .map(ResponseEntity::ok)               // 200 with body
             .orElse(ResponseEntity.notFound().build());   // 404, no body
 }
@@ -153,28 +153,28 @@ A request with the wrong `Content-Type` gets **415 Unsupported Media Type**; one
 
 ## Worked example: one request through the layers
 
-`POST /api/books` with `{"isbn": "9780441013593", "title": "Dune", "author": "Frank Herbert", "year": 1965}`:
+`POST /api/tasks` with `{"key": "TB-101", "title": "Write API", "assignee": "Ana", "points": 3}`:
 
 ```
-HTTP ──► BookController.create(@RequestBody BookRequest)     web layer: HTTP ↔ Java
+HTTP ──► TaskController.create(@RequestBody TaskRequest)     web layer: HTTP ↔ Java
               │  converts the request record, calls the service
               ▼
-          BookService.add(BookRequest)                         business layer: rules
-              │  checks the ISBN isn't taken, builds a Book
+          TaskService.add(TaskRequest)                         business layer: rules
+              │  checks the key isn't taken, builds a Task
               ▼
-          BookRepository.save(Book)                            persistence layer: SQL
+          TaskRepository.save(Task)                            persistence layer: SQL
               ▲
-          returns Book ──► BookResponse.from(book) ──► 201 Created + Location: /api/books/7
+          returns Task ──► TaskResponse.from(task) ──► 201 Created + Location: /api/tasks/7
 ```
 
 Each layer has one job, and only the controller knows about HTTP. That's why the service can be reused by a CSV importer or a scheduled job, and why each layer can be tested on its own (lesson 9).
 
 ```java
-public record BookRequest(String isbn, String title, String author, int year) {}
+public record TaskRequest(String key, String title, String assignee, int points) {}
 
-public record BookResponse(long id, String isbn, String title, String author, int year, boolean available) {
-    static BookResponse from(Book b) {
-        return new BookResponse(b.getId(), b.getIsbn(), b.getTitle(), b.getAuthor(), b.getYear(), b.isAvailable());
+public record TaskResponse(long id, String key, String title, String assignee, int points, boolean available) {
+    static TaskResponse from(Task b) {
+        return new TaskResponse(b.getId(), b.getKey(), b.getTitle(), b.getAssignee(), b.getPoints(), b.isAvailable());
     }
 }
 ```
@@ -185,7 +185,7 @@ public record BookResponse(long id, String isbn, String title, String author, in
 ## Common mistakes
 
 > [!mistake] Business logic in controllers
-> Checking "is this ISBN already used?" inside the controller means the importer and the scheduled job skip that check. Controllers should translate HTTP and delegate.
+> Checking "is this key already used?" inside the controller means the importer and the scheduled job skip that check. Controllers should translate HTTP and delegate.
 
 :::quiz
 q: What's the difference between `@Controller` and `@RestController`?
@@ -197,7 +197,7 @@ why: @RestController = @Controller + @ResponseBody on every method.
 :::
 
 :::quiz
-q: `@GetMapping("/{id}")` with `@PathVariable long id` receives `/api/books/abc`. What happens?
+q: `@GetMapping("/{id}")` with `@PathVariable long id` receives `/api/tasks/abc`. What happens?
 - id is 0
 - 404 Not Found
 + 400 Bad Request: "abc" can't be converted to long
@@ -610,15 +610,16 @@ What JSON does `GET /price` return?
 :::exercise
 id: proj-sp-03-catalog-run
 level: 2
-title: "Project 3: a first catalog endpoint"
+title: "Project 3: a first board endpoint"
 mode: file
-file: spring-app/src/main/java/com/example/demo/CatalogController.java
+file: spring-app/src/main/java/com/example/demo/BoardController.java
+path: spring/src/main/java/com/example/demo/BoardController.java
 ---run
 cd spring-app && ./mvnw -q package && java -jar target/demo-0.0.1-SNAPSHOT.jar > /dev/null 2>&1
-curl -s localhost:8080/api/books/featured; echo
-curl -s localhost:8080/api/books/isbn/9780441013593; echo
+curl -s localhost:8080/api/tasks/featured; echo
+curl -s localhost:8080/api/tasks/key/TB-101; echo
 ---
-Write `CatalogController` under `/api/books` (class-level mapping) with `GET /featured` returning `Map.of("title", "Dune", "author", "Frank Herbert")`, and `GET /isbn/{isbn}` returning `Map.of("isbn", isbn, "found", "false")`.
+Write `BoardController` under `/api/tasks` (class-level mapping) with `GET /featured` returning `Map.of("title", "Write API", "assignee", "Ana")`, and `GET /key/{key}` returning `Map.of("key", key, "found", "false")`.
 ---starter
 package com.example.demo;
 
@@ -626,7 +627,7 @@ import java.util.Map;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-public class CatalogController {
+public class BoardController {
 }
 ---solution
 package com.example.demo;
@@ -635,17 +636,17 @@ import java.util.Map;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/books")
-public class CatalogController {
+@RequestMapping("/api/tasks")
+public class BoardController {
 
     @GetMapping("/featured")
     public Map<String, String> featured() {
-        return Map.of("title", "Dune", "author", "Frank Herbert");
+        return Map.of("title", "Write API", "assignee", "Ana");
     }
 
-    @GetMapping("/isbn/{isbn}")
-    public Map<String, String> byIsbn(@PathVariable String isbn) {
-        return Map.of("isbn", isbn, "found", "false");
+    @GetMapping("/key/{key}")
+    public Map<String, String> byKey(@PathVariable String key) {
+        return Map.of("key", key, "found", "false");
     }
 }
 :::
@@ -653,19 +654,20 @@ public class CatalogController {
 :::exercise
 id: proj-sp-03-controller
 level: 3
-title: "Project 3b: BookController"
+title: "Project 3b: TaskController"
 mode: code
 lang: java
-file: BookController.java
+file: TaskController.java
+path: spring/src/main/java/dev/taskboard/TaskController.java
 ---
-Write `BookController` for `/api/books` with an injected `BookService books`:
+Write `TaskController` for `/api/tasks` with an injected `TaskService tasks`:
 
-- `GET` (no path) returns `List<BookResponse>` from `books.findAll()`;
-- `GET /{id}` returns `books.get(id)`;
-- `POST` takes `@RequestBody BookRequest body` and returns `ResponseEntity<BookResponse>`: **201** with `Location` `/api/books/{id}` via `ResponseEntity.created(URI.create("/api/books/" + created.id())).body(created)`;
+- `GET` (no path) returns `List<TaskResponse>` from `tasks.findAll()`;
+- `GET /{id}` returns `tasks.get(id)`;
+- `POST` takes `@RequestBody TaskRequest body` and returns `ResponseEntity<TaskResponse>`: **201** with `Location` `/api/tasks/{id}` via `ResponseEntity.created(URI.create("/api/tasks/" + created.id())).body(created)`;
 - `DELETE /{id}` returns **204** via `@ResponseStatus(HttpStatus.NO_CONTENT)`.
 ---starter
-package org.library.bookshelf;
+package dev.taskboard;
 
 import java.net.URI;
 import java.util.List;
@@ -674,32 +676,32 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/books")
-public class BookController {
+@RequestMapping("/api/tasks")
+public class TaskController {
 
-    private final BookService books;
+    private final TaskService tasks;
 
-    public BookController(BookService books) {
-        this.books = books;
+    public TaskController(TaskService tasks) {
+        this.tasks = tasks;
     }
 }
 ---rule
-@GetMapping\s*\n\s*public\s+List<BookResponse>\s+\w+\(\s*\)\s*\{\s*return\s+books\.findAll\(\s*\)\s*;
-`GET` → `books.findAll()`
+@GetMapping\s*\n\s*public\s+List<TaskResponse>\s+\w+\(\s*\)\s*\{\s*return\s+tasks\.findAll\(\s*\)\s*;
+`GET` → `tasks.findAll()`
 ---rule
-@GetMapping\(\s*"/\{id\}"\s*\)\s*\n\s*public\s+BookResponse\s+\w+\(\s*@PathVariable\s+(long|Long)\s+id\s*\)\s*\{\s*return\s+books\.get\(\s*id\s*\)\s*;
-`GET /{id}` → `books.get(id)`
+@GetMapping\(\s*"/\{id\}"\s*\)\s*\n\s*public\s+TaskResponse\s+\w+\(\s*@PathVariable\s+(long|Long)\s+id\s*\)\s*\{\s*return\s+tasks\.get\(\s*id\s*\)\s*;
+`GET /{id}` → `tasks.get(id)`
 ---rule
-@PostMapping\s*\n\s*public\s+ResponseEntity<BookResponse>\s+\w+\(\s*@RequestBody\s+BookRequest\s+body\s*\)
-`POST` with `@RequestBody BookRequest`
+@PostMapping\s*\n\s*public\s+ResponseEntity<TaskResponse>\s+\w+\(\s*@RequestBody\s+TaskRequest\s+body\s*\)
+`POST` with `@RequestBody TaskRequest`
 ---rule
-ResponseEntity\.created\(\s*URI\.create\(\s*"/api/books/"\s*\+\s*\w+\.id\(\s*\)\s*\)\s*\)\.body\(\s*\w+\s*\)
+ResponseEntity\.created\(\s*URI\.create\(\s*"/api/tasks/"\s*\+\s*\w+\.id\(\s*\)\s*\)\s*\)\.body\(\s*\w+\s*\)
 201 with Location
 ---rule
 @DeleteMapping\(\s*"/\{id\}"\s*\)\s*\n\s*@ResponseStatus\(\s*HttpStatus\.NO_CONTENT\s*\)|@ResponseStatus\(\s*HttpStatus\.NO_CONTENT\s*\)\s*\n\s*@DeleteMapping\(\s*"/\{id\}"\s*\)
 `DELETE /{id}` → 204
 ---solution
-package org.library.bookshelf;
+package dev.taskboard;
 
 import java.net.URI;
 import java.util.List;
@@ -708,35 +710,35 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/books")
-public class BookController {
+@RequestMapping("/api/tasks")
+public class TaskController {
 
-    private final BookService books;
+    private final TaskService tasks;
 
-    public BookController(BookService books) {
-        this.books = books;
+    public TaskController(TaskService tasks) {
+        this.tasks = tasks;
     }
 
     @GetMapping
-    public List<BookResponse> list() {
-        return books.findAll();
+    public List<TaskResponse> list() {
+        return tasks.findAll();
     }
 
     @GetMapping("/{id}")
-    public BookResponse get(@PathVariable long id) {
-        return books.get(id);
+    public TaskResponse get(@PathVariable long id) {
+        return tasks.get(id);
     }
 
     @PostMapping
-    public ResponseEntity<BookResponse> create(@RequestBody BookRequest body) {
-        BookResponse created = books.add(body);
-        return ResponseEntity.created(URI.create("/api/books/" + created.id())).body(created);
+    public ResponseEntity<TaskResponse> create(@RequestBody TaskRequest body) {
+        TaskResponse created = tasks.add(body);
+        return ResponseEntity.created(URI.create("/api/tasks/" + created.id())).body(created);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable long id) {
-        books.remove(id);
+        tasks.remove(id);
     }
 }
 :::

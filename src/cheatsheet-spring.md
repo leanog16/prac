@@ -31,22 +31,22 @@ public class AppConfig {
 
 ```java
 @RestController
-@RequestMapping("/api/books")
-public class BookController {
+@RequestMapping("/api/tasks")
+public class TaskController {
     @GetMapping("/{id}")
-    public ResponseEntity<BookResponse> get(@PathVariable long id) {
-        return books.find(id).map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<TaskResponse> get(@PathVariable long id) {
+        return tasks.find(id).map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping
-    public ResponseEntity<BookResponse> create(@Valid @RequestBody CreateBook body) {
-        BookResponse b = books.create(body);
-        return ResponseEntity.created(URI.create("/api/books/" + b.id())).body(b);
+    public ResponseEntity<TaskResponse> create(@Valid @RequestBody CreateTask body) {
+        TaskResponse b = tasks.create(body);
+        return ResponseEntity.created(URI.create("/api/tasks/" + b.id())).body(b);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable long id) { books.delete(id); }
+    public void delete(@PathVariable long id) { tasks.delete(id); }
 }
 ```
 
@@ -129,5 +129,5 @@ First matching rule wins · `PasswordEncoderFactories.createDelegatingPasswordEn
 | `@Testcontainers` + `@Container @ServiceConnection` | a real database in Docker |
 
 ```java
-mvc.perform(get("/api/books/1")).andExpect(status().isOk()).andExpect(jsonPath("$.title").value("Dune"));
+mvc.perform(get("/api/tasks/1")).andExpect(status().isOk()).andExpect(jsonPath("$.title").value("Write API"));
 ```

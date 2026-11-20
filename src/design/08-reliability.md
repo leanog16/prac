@@ -4,8 +4,8 @@ title: Reliability & resilience
 summary: Failure as the normal case, redundancy and failover, timeouts, retries with exponential backoff and jitter, circuit breakers, bulkheads, rate limiting with token buckets, load shedding and graceful degradation, health checks, and disaster recovery with RPO and RTO.
 minutes: 40
 ---
-> [!project] Snip, step 8: staying up when things break
-> At Snip's scale something is always failing: a disk, an instance, a dependency, a network link. This step makes failure routine: timeouts and retries for the database, a circuit breaker for the analytics broker, a rate limiter against abuse, and a recovery plan for losing a whole region.
+> [!project] Taskboard, step 8: staying up when things break
+> At Taskboard's scale something is always failing: a disk, an instance, the email provider, a network link. This step makes failure routine: timeouts and retries for dependencies, a circuit breaker around the email provider, a rate limiter for API integrations, and a recovery plan for losing a whole region.
 
 ## Everything fails
 
@@ -22,7 +22,7 @@ Design principles:
 
 Every network call needs a timeout. Without one, a hung dependency holds your threads or connections until they run out, and your service hangs too: a **cascading failure**.
 
-Set timeouts from the dependency's normal latency (e.g. p99 × 2–3) and your own deadline. If Snip promises a 50 ms redirect, a 2-second database timeout makes no sense; 20–30 ms with a fallback does.
+Set timeouts from the dependency's normal latency (e.g. p99 × 2–3) and your own deadline. If Taskboard promises a 200 ms board load, a 5-second cache timeout makes no sense; 20 ms, then falling back to the database, does.
 
 ## Retries with backoff and jitter
 
@@ -42,6 +42,8 @@ def call_with_retries(fn, attempts=4, base=0.1, cap=2.0):
             time.sleep(random.uniform(0, delay))           # "full jitter"
 ```
 
+Reading the code: `base * 2 ** attempt` doubles the delay on each attempt (`**` is "to the power of"), `min(cap, …)` stops it growing past `cap`, and `random.uniform(0, delay)` picks a random time between 0 and that delay.
+
 - **Exponential backoff** spreads retries out over time.
 - **Jitter** (randomness) stops thousands of clients from retrying in synchronized waves.
 - Only retry **idempotent** operations (or use idempotency keys), and only **transient** errors: retrying a 400 is pointless.
@@ -57,19 +59,45 @@ CLOSED ──(failures exceed threshold)──► OPEN ──(after a cooldown)�
    └──────────(trial requests succeed)───  use fallback)  ◄──(trial fails)┘
 ```
 
-Snip wraps its analytics publisher in a breaker: if the broker is down, redirects **skip** publishing (or buffer locally) instead of waiting on timeouts. Redirects keep working; some click counts are lost or delayed. That's graceful degradation.
+Taskboard's notification workers wrap the email provider in a breaker: when the provider is down, they stop calling it and leave notifications in the queue for later, instead of every worker hanging on timeouts. Boards keep working; emails arrive late. That's graceful degradation.
+
+In code, a breaker remembers how many calls failed in a row (`failures`) and when it opened (`opened_at`). Time is measured with `time.monotonic()`, a clock that only moves forward (unlike the wall clock, which can jump when the system time is corrected), so `time.monotonic() - opened_at` is reliably "seconds since it opened":
+
+```python
+def call(self, fn):
+    if self.opened_at is not None and time.monotonic() - self.opened_at < self.cooldown:
+        raise CircuitOpen()                 # open: fail fast, don't even try
+    try:
+        result = fn()                       # closed (or half-open trial): try the call
+    except Exception:
+        self.failures += 1
+        if self.failures >= self.threshold:
+            self.opened_at = time.monotonic()   # too many failures: open
+        raise                               # a bare raise re-raises the same error
+    self.failures = 0                       # success: close again
+    self.opened_at = None
+    return result
+```
 
 ## Bulkheads
 
-Separate resource pools per dependency (thread pools, connection pools, even separate service instances), like the watertight compartments of a ship. A slow analytics backend can then exhaust only its own pool, not the threads that serve redirects.
+Separate resource pools per dependency (thread pools, connection pools, even separate service instances), like the watertight compartments of a ship. A slow search backend can then exhaust only its own pool, not the threads that serve boards.
 
 ## Rate limiting
 
-Protect Snip from abuse (bots creating millions of links, scanners probing codes) and from any single client using everything. The **token bucket** is the standard algorithm:
+Protect Taskboard from abuse and from any single client using everything: a customer's script that creates 10,000 tasks a second through the API would slow every other team on the same shard. The **token bucket** is the standard algorithm:
 
 - Each client has a bucket of up to `capacity` tokens, refilled at `rate` tokens per second.
 - Each request takes one token; with none left, the request is rejected with **429 Too Many Requests** and a `Retry-After` header.
 - Bursts up to `capacity` are allowed; the long-run average is limited to `rate`.
+
+The bucket doesn't need a timer: each time a request arrives, add the tokens earned since the last request (`elapsed seconds × rate`), cap the total at `capacity`, then try to spend one:
+
+```python
+now = time.monotonic()
+self.tokens = min(self.capacity, self.tokens + (now - self.updated) * self.rate)
+self.updated = now
+```
 
 In a fleet of servers, keep the counters in a shared store (Redis, with atomic scripts), or rate-limit at the API gateway or load balancer.
 
@@ -78,14 +106,14 @@ In a fleet of servers, keep the counters in a shared store (Redis, with atomic s
 
 ## Load shedding and degradation
 
-When overloaded, reject some work early (fast 503s for low-priority requests) so the important work succeeds, instead of everything slowing until it all times out. Decide in advance what's essential: for Snip, redirects > link creation > analytics dashboards.
+When overloaded, reject some work early (fast 503s for low-priority requests) so the important work succeeds, instead of everything slowing until it all times out. Decide in advance what's essential: for Taskboard, loading and changing boards > search > reports and exports.
 
 ## Disaster recovery: RPO and RTO
 
-| Term | Question | Snip target |
+| Term | Question | Taskboard target |
 |---|---|---|
-| **RPO** (recovery point objective) | how much data can we lose? | ≤ 1 minute of new links |
-| **RTO** (recovery time objective) | how long can we be down? | ≤ 15 minutes for redirects |
+| **RPO** (recovery point objective) | how much data can we lose? | ≤ 1 minute of changes |
+| **RTO** (recovery time objective) | how long can we be down? | ≤ 15 minutes for boards |
 
 Strategies from cheapest to most resilient: backups restored elsewhere (RPO hours, RTO hours) → pilot light (minimal standby infrastructure in a second region) → warm standby (scaled-down copy, continuous replication) → active-active (both regions serve traffic). And **test** the recovery: an untested backup is a hope, not a plan.
 
@@ -173,10 +201,11 @@ With `base = 0.1` and `cap = 2.0`, what is the **maximum** possible delay for `a
 :::exercise
 id: proj-design-08-bucket
 level: 4
-title: "Project 8: Snip's token bucket"
+title: "Project 8: a rate limit for API integrations"
 mode: code
 lang: python
 file: ratelimit.py
+path: docs/design/ratelimit.py
 ---
 Implement `TokenBucket.allow()`: compute `now = time.monotonic()`, add `(now - self.updated) * self.rate` tokens (capped at `self.capacity`), set `self.updated = now`; then if at least 1 token is available, subtract 1 and return `True`, otherwise return `False`.
 ---starter
@@ -231,10 +260,11 @@ class TokenBucket:
 :::exercise
 id: proj-design-08-breaker
 level: 4
-title: "Project 8b: a circuit breaker"
+title: "Project 8b: a breaker around the email provider"
 mode: code
 lang: python
 file: breaker.py
+path: docs/design/breaker.py
 ---
 Complete `CircuitBreaker.call(fn)`: if `self.opened_at` is set and fewer than `self.cooldown` seconds have passed (`time.monotonic() - self.opened_at < self.cooldown`), raise `CircuitOpen()`. Otherwise try `result = fn()`; on success reset `self.failures = 0` and `self.opened_at = None` and return the result; on `Exception`, increment `self.failures`, and if it reaches `self.threshold`, set `self.opened_at = time.monotonic()`; then re-raise.
 ---starter
@@ -308,7 +338,7 @@ level: 2
 title: "Project 8c: RPO or RTO?"
 mode: answer
 ---
-"After losing the primary region, Snip must be redirecting again within 15 minutes." Is that an RPO or an RTO?
+"After losing the primary region, Taskboard must be serving boards again within 15 minutes." Is that an RPO or an RTO?
 ---answer
 RTO
 ---solution

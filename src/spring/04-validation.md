@@ -4,8 +4,8 @@ title: Validation & error handling
 summary: Bean Validation annotations on records, @Valid and @Validated, validating path and query parameters, nested and custom constraints, custom exceptions, @RestControllerAdvice with @ExceptionHandler, RFC 9457 ProblemDetail responses, and mapping exceptions to the right status codes.
 minutes: 35
 ---
-> [!project] Bookshelf, step 4: rejecting bad input politely
-> Librarians make typos: ISBNs with 12 digits, books "published" next year, blank titles. This step validates `BookRequest` and turns every failure into a clear `ProblemDetail` response.
+> [!project] Taskboard, step 4: rejecting bad input politely
+> Librarians make typos: keys with 12 digits, tasks "published" next points, blank titles. This step validates `TaskRequest` and turns every failure into a clear `ProblemDetail` response.
 
 ## Bean Validation
 
@@ -103,8 +103,8 @@ public class NotFoundException extends RuntimeException {
     public NotFoundException(String message) { super(message); }
 }
 
-public Book get(long id) {
-    return repo.findById(id).orElseThrow(() -> new NotFoundException("Book " + id + " not found"));
+public Task get(long id) {
+    return repo.findById(id).orElseThrow(() -> new NotFoundException("Task " + id + " not found"));
 }
 ```
 
@@ -159,8 +159,8 @@ public class ApiExceptionHandler {
   "type": "about:blank",
   "title": "Resource not found",
   "status": 404,
-  "detail": "Book 42 not found",
-  "instance": "/api/books/42"
+  "detail": "Task 42 not found",
+  "instance": "/api/tasks/42"
 }
 ```
 
@@ -184,23 +184,23 @@ Never leak stack traces or SQL errors to clients. Log them server-side and retur
 
 ## Worked example: from rule to annotation
 
-| Rule from the librarians | Annotation |
+| Rule from the team leads | Annotation |
 |---|---|
 | title is required and at most 200 characters | `@NotBlank @Size(max = 200)` |
-| ISBN-13 is exactly 13 digits | `@Pattern(regexp = "\\d{13}")` |
-| author is required | `@NotBlank` |
-| year between 1450 (printing press) and this year | `@Min(1450)` + a custom check, or `@PastOrPresent` on a date |
+| key-13 is exactly a key like `TB-123` | `@Pattern(regexp = "TB-\\d+")` |
+| assignee is required | `@NotBlank` |
+| points between 1450 (printing press) and this points | `@Min(1450)` + a custom check, or `@PastOrPresent` on a date |
 
 ```java
-public record BookRequest(
-        @NotBlank @Pattern(regexp = "\\d{13}", message = "must be 13 digits") String isbn,
+public record TaskRequest(
+        @NotBlank @Pattern(regexp = "TB-\\d+", message = "must be a key like `TB-123`") String key,
         @NotBlank @Size(max = 200) String title,
-        @NotBlank String author,
-        @Min(1450) @Max(2100) int year
+        @NotBlank String assignee,
+        @Min(1450) @Max(2100) int points
 ) {}
 ```
 
-Note the `message` attribute: default messages ("must match \"\\d{13}\"") are written for developers. Write messages for the people who'll read them.
+Note the `message` attribute: default messages ("must match \"TB-\\d+\"") are written for developers. Write messages for the people who'll read them.
 
 Then one handler turns every validation failure into the same shape:
 
@@ -210,7 +210,7 @@ Then one handler turns every validation failure into the same shape:
   "title": "Bad Request",
   "status": 400,
   "detail": "Validation failed",
-  "errors": { "isbn": "must be 13 digits", "title": "must not be blank" }
+  "errors": { "key": "must be a key like `TB-123`", "title": "must not be blank" }
 }
 ```
 
@@ -644,75 +644,77 @@ A service throws `IllegalStateException("stock exhausted")`. There's no `@Except
 :::exercise
 id: proj-sp-04-request
 level: 2
-title: "Project 4: a validated BookRequest"
+title: "Project 4: a validated TaskRequest"
 mode: code
 lang: java
-file: BookRequest.java
+file: TaskRequest.java
+path: spring/src/main/java/dev/taskboard/TaskRequest.java
 ---
-Add constraints to `BookRequest`: `isbn` is not blank and matches `\\d{13}` with message `"must be 13 digits"`; `title` is not blank and at most 200 characters; `author` is not blank; `year` is between 1450 and 2100.
+Add constraints to `TaskRequest`: `key` is not blank and matches `TB-\\d+` with message `"must be a key like `TB-123`"`; `title` is not blank and at most 200 characters; `assignee` is not blank; `points` is between 1450 and 2100.
 ---starter
-package org.library.bookshelf;
+package dev.taskboard;
 
 import jakarta.validation.constraints.*;
 
-public record BookRequest(
-        String isbn,
+public record TaskRequest(
+        String key,
         String title,
-        String author,
-        int year
+        String assignee,
+        int points
 ) {}
 ---rule
-@NotBlank\s+@Pattern\((?=[^)]*regexp\s*=\s*"\\\\d\{13\}")(?=[^)]*message\s*=\s*"must be 13 digits")[^)]*\)\s+String\s+isbn
-`isbn`: `@NotBlank @Pattern(regexp = "\\d{13}", message = "must be 13 digits")`
+@NotBlank\s+@Pattern\((?=[^)]*regexp\s*=\s*"TB-\\\\d\+")(?=[^)]*message\s*=\s*"must be a key like `TB-123`")[^)]*\)\s+String\s+key
+`key`: `@NotBlank @Pattern(regexp = "TB-\\d+", message = "must be a key like `TB-123`")`
 ---rule
 @NotBlank\s+@Size\(\s*max\s*=\s*200\s*\)\s+String\s+title
 `title`: `@NotBlank @Size(max = 200)`
 ---rule
-@NotBlank\s+String\s+author
-`author`: `@NotBlank`
+@NotBlank\s+String\s+assignee
+`assignee`: `@NotBlank`
 ---rule
-@Min\(\s*1450\s*\)\s+@Max\(\s*2100\s*\)\s+int\s+year
-`year`: `@Min(1450) @Max(2100)`
+@Min\(\s*1450\s*\)\s+@Max\(\s*2100\s*\)\s+int\s+points
+`points`: `@Min(1450) @Max(2100)`
 ---solution
-package org.library.bookshelf;
+package dev.taskboard;
 
 import jakarta.validation.constraints.*;
 
-public record BookRequest(
-        @NotBlank @Pattern(regexp = "\\d{13}", message = "must be 13 digits") String isbn,
+public record TaskRequest(
+        @NotBlank @Pattern(regexp = "TB-\\d+", message = "must be a key like `TB-123`") String key,
         @NotBlank @Size(max = 200) String title,
-        @NotBlank String author,
-        @Min(1450) @Max(2100) int year
+        @NotBlank String assignee,
+        @Min(1450) @Max(2100) int points
 ) {}
 :::
 
 :::exercise
 id: proj-sp-04-advice
 level: 3
-title: "Project 4b: Bookshelf's error handler"
+title: "Project 4b: Taskboard's error handler"
 mode: code
 lang: java
-file: LibraryExceptionHandler.java
+file: TaskboardExceptionHandler.java
+path: spring/src/main/java/dev/taskboard/TaskboardExceptionHandler.java
 ---
-Write a `@RestControllerAdvice` class `LibraryExceptionHandler` with two handlers returning `ProblemDetail`: `BookNotFoundException` → **404** with `ex.getMessage()`; `DuplicateIsbnException` → **409** with `ex.getMessage()`.
+Write a `@RestControllerAdvice` class `TaskboardExceptionHandler` with two handlers returning `ProblemDetail`: `TaskNotFoundException` → **404** with `ex.getMessage()`; `DuplicateKeyException` → **409** with `ex.getMessage()`.
 ---starter
-package org.library.bookshelf;
+package dev.taskboard;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 ---rule
-@RestControllerAdvice\s*\n\s*public\s+class\s+LibraryExceptionHandler
+@RestControllerAdvice\s*\n\s*public\s+class\s+TaskboardExceptionHandler
 The advice class
 ---rule
-@ExceptionHandler\(\s*BookNotFoundException\.class\s*\)\s*\n\s*public\s+ProblemDetail\s+\w+\(\s*BookNotFoundException\s+ex\s*\)\s*\{\s*return\s+ProblemDetail\.forStatusAndDetail\(\s*HttpStatus\.NOT_FOUND\s*,\s*ex\.getMessage\(\s*\)\s*\)
-404 for `BookNotFoundException`
+@ExceptionHandler\(\s*TaskNotFoundException\.class\s*\)\s*\n\s*public\s+ProblemDetail\s+\w+\(\s*TaskNotFoundException\s+ex\s*\)\s*\{\s*return\s+ProblemDetail\.forStatusAndDetail\(\s*HttpStatus\.NOT_FOUND\s*,\s*ex\.getMessage\(\s*\)\s*\)
+404 for `TaskNotFoundException`
 ---rule
-@ExceptionHandler\(\s*DuplicateIsbnException\.class\s*\)\s*\n\s*public\s+ProblemDetail\s+\w+\(\s*DuplicateIsbnException\s+ex\s*\)\s*\{\s*return\s+ProblemDetail\.forStatusAndDetail\(\s*HttpStatus\.CONFLICT\s*,\s*ex\.getMessage\(\s*\)\s*\)
-409 for `DuplicateIsbnException`
+@ExceptionHandler\(\s*DuplicateKeyException\.class\s*\)\s*\n\s*public\s+ProblemDetail\s+\w+\(\s*DuplicateKeyException\s+ex\s*\)\s*\{\s*return\s+ProblemDetail\.forStatusAndDetail\(\s*HttpStatus\.CONFLICT\s*,\s*ex\.getMessage\(\s*\)\s*\)
+409 for `DuplicateKeyException`
 ---solution
-package org.library.bookshelf;
+package dev.taskboard;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -720,15 +722,15 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
-public class LibraryExceptionHandler {
+public class TaskboardExceptionHandler {
 
-    @ExceptionHandler(BookNotFoundException.class)
-    public ProblemDetail notFound(BookNotFoundException ex) {
+    @ExceptionHandler(TaskNotFoundException.class)
+    public ProblemDetail notFound(TaskNotFoundException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
-    @ExceptionHandler(DuplicateIsbnException.class)
-    public ProblemDetail duplicate(DuplicateIsbnException ex) {
+    @ExceptionHandler(DuplicateKeyException.class)
+    public ProblemDetail duplicate(DuplicateKeyException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 }

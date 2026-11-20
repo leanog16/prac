@@ -20,6 +20,31 @@ minutes: 35
 | **runner** | the machine: GitHub-hosted (`ubuntu-latest`, `windows-latest`, `macos-latest`) or self-hosted |
 | **action** | a reusable unit, e.g. `actions/checkout@v4`, from the Marketplace or your own repo |
 
+## YAML in two minutes
+
+Workflows are written in **YAML**. If you met it in the Docker or System Design track, skim this; otherwise read it before the first workflow. YAML is a plain-text format for structured data. Everything is built from three pieces:
+
+```yaml
+# a comment
+name: taskboard              # a key, a colon and a space, then a value
+replicas: 2                  # numbers and true/false are written plainly
+image: "postgres:16"         # quote values that contain a colon or other symbols
+
+environment:                 # a key with nothing after the colon holds a nested map...
+  POSTGRES_USER: app         # ...whose entries are indented (2 spaces, never tabs)
+  POSTGRES_DB: appdb
+
+ports:                       # a list: one "- " item per line
+  - "8000:8000"
+  - "9000:9000"
+```
+
+- **Indentation is the structure**: everything indented under a key belongs to it, and entries at the same level line up exactly.
+- A list item can itself be a map: `- name: build` starts an item, and the item's other keys line up under `name`.
+- **Flow style** writes short lists and maps on one line: `branches: [main, dev]` is the same as a two-item list, and `{a: 1, b: 2}` is a one-line map.
+- `|` after a key starts a **multi-line string**: every indented line below it is kept as written (handy for shell scripts).
+- Quote strings that contain `: `, start with a symbol (`*`, `&`, `{`, `[`, `@`), or could be misread as a number: `"8000:8000"`, `"3.12"` (unquoted, `3.10` would become the number 3.1).
+
 ## Your first workflow
 
 ```yaml title=.github/workflows/ci.yml
@@ -602,6 +627,7 @@ title: "Project 2: Taskboard's ci.yml"
 mode: code
 lang: yaml
 file: .github/workflows/ci.yml
+path: .github/workflows/ci.yml
 ---
 Write Taskboard's workflow `CI`, triggered on pushes to `main` and on all pull requests, with one job `test` (ubuntu-latest) that checks out, sets up Python `"3.12"`, runs `pip install -r requirements.txt ruff`, then `ruff check .`, then `pytest -q`.
 ---starter
@@ -651,6 +677,7 @@ title: "Project 2b: lint and test in parallel"
 mode: code
 lang: yaml
 file: .github/workflows/ci.yml
+path: .github/workflows/ci.yml
 ---
 Split the job in two so they run **in parallel**: `lint` (checkout, setup-python 3.12, `pip install ruff`, `ruff check .`) and `test` (checkout, setup-python 3.12, `pip install -r requirements.txt`, `pytest -q`). Neither needs the other.
 ---starter

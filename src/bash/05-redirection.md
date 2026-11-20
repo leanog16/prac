@@ -120,7 +120,10 @@ A **here string** `<<<` feeds a single string:
 ```bash run
 wc -w <<< "how many words are here"
 tr a-z A-Z <<< "shout"
+bc <<< "2 + 3 * 4"
 ```
+
+`bc` is a calculator that reads arithmetic from its input and prints the result; here strings are a handy way to feed it.
 
 ## Process substitution
 
@@ -130,9 +133,13 @@ tr a-z A-Z <<< "shout"
 diff <(head -3 data/words.txt) <(tail -3 data/words.txt)
 ```
 
+`diff A B` compares two files line by line and prints only the differences: lines starting with `<` are in A only, lines starting with `>` are in B only.
+
 ## Exit status travels separately
 
 Every command returns an exit status: `0` for success, non-zero for failure. `$?` holds the last one. In a pipeline, `$?` is the status of the **last** command (unless `set -o pipefail`).
+
+`grep -q` is grep's **quiet** mode: it prints nothing and only reports, through its exit status, whether anything matched.
 
 ```bash run
 grep -q ERROR logs/app.log; echo "status: $?"
@@ -378,13 +385,13 @@ diff <(sort -u data/words.txt) <(tr ' ' '\n' <<< "apple banana kiwi plum" | sort
 :::exercise
 id: io-pipeline-top
 level: 4
-title: Most active IP
+title: Most common word
 ---
-From `logs/access.log`, print the IP address (first field) that made the **most** requests, along with its count, as produced by `uniq -c` (e.g. `     12 10.0.0.5`).
+Print the word that appears **most often** in `data/words.txt`, along with its count, as `uniq -c` prints it (e.g. `      3 apple`). Build it from the pipeline in the "Pipes" section.
 ---hint
-`cut -d' ' -f1` extracts the IP. Then sort, count, sort by count, take one.
+Sort so equal words are adjacent, count them with `uniq -c`, sort by the count descending (`sort -rn`), then keep one line.
 ---solution
-cut -d' ' -f1 logs/access.log | sort | uniq -c | sort -rn | head -n 1
+sort data/words.txt | uniq -c | sort -rn | head -n 1
 :::
 
 :::exercise
@@ -392,6 +399,7 @@ id: proj-bash-05-report
 level: 2
 title: "Project 5: the error report"
 compare: verify
+path: ops/commands/05-report.sh
 ---
 Create `reports/errors.txt` (make the `reports` folder first) containing a first line `ERRORS`, followed by every line of `logs/app.log` that contains `ERROR`. Then **append** a line `WARNINGS` followed by every line containing `WARN`.
 ---verify
@@ -409,6 +417,7 @@ id: proj-bash-05-tee
 level: 2
 title: "Project 5b: show and save"
 compare: verify
+path: ops/commands/05-tee.sh
 ---
 Count the lines in `logs/access.log` that contain `404`, showing the count on screen **and** saving it to `reports/404-count.txt` in one pipeline (create `reports` first).
 ---verify

@@ -4,7 +4,7 @@ title: Dependency injection & auth
 summary: Depends for shared parameters, classes as dependencies, yield dependencies for setup/teardown, sub-dependencies, router-wide dependencies, API-key and bearer-token auth, and password hashing basics.
 minutes: 35
 ---
-> [!project] Taskboard, step 7: who is asking?
+> [!project] Taskboard, step 8: who is asking?
 > Taskboard is about to have real users. This step adds a reusable **pagination** dependency and a **current user** dependency, so every task records its owner and only the owner can delete it.
 
 ## What a dependency is
@@ -482,10 +482,11 @@ User-Agent
 :::exercise
 id: proj-fa-07-paging
 level: 2
-title: "Project 7: a pagination dependency"
+title: "Project 8: a pagination dependency"
 mode: code
 lang: python
 file: deps.py
+path: app/deps.py
 ---
 Write `pagination(offset: Annotated[int, Query(ge=0)] = 0, limit: Annotated[int, Query(ge=1, le=100)] = 20)` returning `{"offset": offset, "limit": limit}`, and define `Paging = Annotated[dict, Depends(pagination)]`.
 ---starter
@@ -523,10 +524,11 @@ Paging = Annotated[dict, Depends(pagination)]
 :::exercise
 id: proj-fa-07-owner
 level: 3
-title: "Project 7b: only owners delete"
+title: "Project 8b: only owners delete"
 mode: code
 lang: python
 file: routers/tasks.py
+path: app/routers/tasks.py
 ---
 Change `delete_task` to take `user: CurrentUser`. After finding the task, raise **403** `"Only the owner can delete this task"` when `task["owner"] != user["name"]`; otherwise delete it.
 ---starter

@@ -4,8 +4,8 @@ title: Aggregation & GROUP BY
 summary: COUNT, SUM, AVG, MIN, MAX; grouping rows; HAVING vs WHERE; the "every selected column must be grouped" rule; conditional aggregation.
 minutes: 35
 ---
-> [!project] Desk & Co, step 6: what's selling?
-> This is where the report becomes useful: **totals**. You'll count orders by status and find the best-selling products by units and revenue.
+> [!project] Taskboard, step 6: the numbers
+> This is where the report becomes useful: **totals**. You'll count tasks by status and find out who has the most open work.
 
 ## Aggregate functions collapse rows
 
@@ -112,6 +112,14 @@ GROUP BY term;
 
 ```sql run
 SELECT dept_id, GROUP_CONCAT(first_name, ', ') AS people
+FROM employees
+GROUP BY dept_id;
+```
+
+The names come out in whatever order the rows happen to be read. To control it, put an `ORDER BY` **inside** the aggregate's parentheses (SQLite 3.44+, PostgreSQL):
+
+```sql run
+SELECT dept_id, GROUP_CONCAT(first_name, ', ' ORDER BY first_name) AS people
 FROM employees
 GROUP BY dept_id;
 ```
@@ -358,21 +366,20 @@ FROM employees WHERE city IS NOT NULL GROUP BY city;
 :::exercise
 id: agg-monthly-revenue
 level: 4
-title: Monthly revenue report
+title: Monthly order report
 ordered: true
 ---
-Produce a monthly report for 2025 from `orders` and `order_items`. Exclude **cancelled** orders. Return `month` (formatted `2025-01`), `orders` (distinct orders that month) and `revenue` (sum of quantity × unit_price, 2 decimals), in month order.
+Produce a monthly report for 2025 from `orders`. Exclude **cancelled** orders. Return `month` (formatted `2025-01`), `orders` (how many orders that month) and `customers` (how many **different** customers ordered that month), in month order.
 ---hint
-You'll need both tables. `FROM orders o JOIN order_items oi ON oi.order_id = o.order_id` (joins are next module, but try it).
+Group by the formatted month: `STRFTIME('%Y-%m', order_date) AS month`.
 ---hint
-Count orders with `COUNT(DISTINCT o.order_id)`, since joining repeats each order once per item.
+"Different customers" is `COUNT(DISTINCT customer_id)`.
 ---solution
-SELECT STRFTIME('%Y-%m', o.order_date) AS month,
-       COUNT(DISTINCT o.order_id) AS orders,
-       ROUND(SUM(oi.quantity * oi.unit_price), 2) AS revenue
-FROM orders o
-JOIN order_items oi ON oi.order_id = o.order_id
-WHERE o.status <> 'cancelled'
+SELECT STRFTIME('%Y-%m', order_date) AS month,
+       COUNT(*) AS orders,
+       COUNT(DISTINCT customer_id) AS customers
+FROM orders
+WHERE status <> 'cancelled' AND order_date >= '2025-01-01' AND order_date < '2026-01-01'
 GROUP BY month
 ORDER BY month;
 :::
@@ -395,20 +402,26 @@ ORDER BY letter;
 :::exercise
 id: proj-sql-06-status
 level: 1
-title: "Project 6: orders by status"
+title: "Project 6: tasks by status"
+path: db/reports/06-by-status.sql
 ---
-Count the orders in each `status`, as columns `status` and `orders`.
+Count the tasks in each `status`, as columns `status` and `tasks`.
 ---solution
-SELECT status, COUNT(*) AS orders FROM orders GROUP BY status;
+SELECT status, COUNT(*) AS tasks FROM tasks GROUP BY status;
 :::
 
 :::exercise
 id: proj-sql-06-bestsellers
 level: 3
-title: "Project 6b: best sellers"
+title: "Project 6b: open workload"
 ordered: true
+path: db/reports/06-workload.sql
 ---
-For each `product_id` in `order_items`, show total `units` sold and `revenue` (sum of quantity × unit price, rounded to 2 decimals). Keep only products with **at least 5 units** sold, highest revenue first (ties by `product_id`).
+For tasks that are not `done` and have an assignee, show each `assignee_id`, the number of their open tasks as `open_tasks`, and the sum of those tasks' `estimate_hours` as `hours`. Keep only people with **at least 2** open tasks, most open tasks first (ties by `assignee_id`).
+---hint
+Row filters (not done, has an assignee) go in `WHERE`; the "at least 2" filter is on a group, so it goes in `HAVING`.
+---hint
+`SUM` skips tasks without an estimate, as lesson 5 explained.
 ---solution
-SELECT product_id, SUM(quantity) AS units, ROUND(SUM(quantity * unit_price), 2) AS revenue FROM order_items GROUP BY product_id HAVING SUM(quantity) >= 5 ORDER BY revenue DESC, product_id;
+SELECT assignee_id, COUNT(*) AS open_tasks, SUM(estimate_hours) AS hours FROM tasks WHERE status <> 'done' AND assignee_id IS NOT NULL GROUP BY assignee_id HAVING COUNT(*) >= 2 ORDER BY open_tasks DESC, assignee_id;
 :::

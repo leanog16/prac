@@ -4,7 +4,7 @@ title: Async, WebSockets & async databases
 summary: How the event loop really works, the blocking-call trap and how to escape it (def routes, run_in_threadpool, asyncio.to_thread), concurrent I/O with asyncio.gather and httpx.AsyncClient, WebSockets and a broadcast manager, and SQLAlchemy's AsyncSession.
 minutes: 40
 ---
-> [!project] Taskboard, step 12: a live board
+> [!project] Taskboard, step 13: a live board
 > When a teammate moves a task, everyone else's board should update instantly. This step adds a WebSocket that broadcasts task events, and a webhook call to a chat tool that runs without blocking the API.
 
 ## One thread, many requests
@@ -665,10 +665,11 @@ Plain `def` routes run in the thread pool, so their blocking calls don't stall t
 :::exercise
 id: proj-fa-12-board
 level: 3
-title: "Project 12: the board broadcaster"
+title: "Project 13: the board broadcaster"
 mode: code
 lang: python
 file: realtime.py
+path: app/realtime.py
 ---
 Implement `Board`: `join` accepts the socket and adds it to `self.clients` (a set); `leave` removes it with `discard`; `publish(event)` sends `event` with `send_json` to every client in `list(self.clients)`.
 ---starter
@@ -722,10 +723,11 @@ class Board:
 :::exercise
 id: proj-fa-12-notify
 level: 3
-title: "Project 12b: notify the chat channel"
+title: "Project 13b: notify the chat channel"
 mode: code
 lang: python
 file: notify.py
+path: app/notify.py
 ---
 Write `async def notify_chat(client: httpx.AsyncClient, task_title: str)` that POSTs JSON `{"text": f"Task done: {task_title}"}` to `WEBHOOK_URL` with `await client.post(...)`, and calls `raise_for_status()` on the response.
 ---starter

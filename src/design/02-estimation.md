@@ -4,8 +4,8 @@ title: Back-of-the-envelope estimation
 summary: Powers of ten and handy constants, turning monthly volumes into requests per second, peak factors, storage growth over years, bandwidth, memory for caching, the latency numbers every engineer should know, and sanity-checking a design with arithmetic.
 minutes: 35
 ---
-> [!project] Snip, step 2: how big is it?
-> Before choosing a database or counting servers, you need numbers: how many requests per second, how much storage over five years, how much memory a cache needs. This lesson turns Snip's "100 million new links a month" into the figures every later decision depends on.
+> [!project] Taskboard, step 2: how big is it?
+> Before choosing a database or counting servers, you need numbers: how many requests per second, how much storage over five years, how much memory a cache needs. This lesson turns "10 million people use Taskboard every day" into the figures every later decision depends on.
 
 ## Why estimate?
 
@@ -22,48 +22,53 @@ Estimation tells you **which problems you actually have**. 10 writes per second 
 | 1 million requests per day | ≈ **12 per second** |
 | 1 billion requests per day | ≈ **12,000 per second** |
 
-## Worked example: Snip's traffic
+The notation 10⁵ means 1 followed by 5 zeros (100,000). Multiplying powers of ten adds the exponents (10³ × 10⁶ = 10⁹); dividing subtracts them (10⁹ ÷ 10⁵ = 10⁴).
 
-**Writes** (new links): 100 M per month.
+## Worked example: Taskboard's traffic
 
-100 × 10⁶ ÷ (2.5 × 10⁶ s) ≈ **40 writes/second** on average.
+Start from people, then multiply by what each person does. Taskboard has **10 million daily active users** (DAU). A typical user makes about **10 changes** a day (create, move, assign, comment) and **100 reads** (opening boards and tasks).
 
-**Reads** (redirects): 100× writes ≈ **4,000 reads/second** on average.
+**Writes**: 10⁷ users × 10 = 10⁸ per day ÷ 10⁵ s ≈ **1,000 writes/second** on average.
 
-**Peak**: traffic isn't flat. A typical rule of thumb is **2–3× the average** at peak (viral links can spike far higher locally). Plan for ~**10,000 redirects/s** peak.
+**Reads**: 10⁷ × 100 = 10⁹ per day ÷ 10⁵ s ≈ **10,000 reads/second** on average. That's the 10:1 read:write ratio from lesson 1.
+
+**Peak**: traffic isn't flat. Work happens on weekday mornings, so a typical rule of thumb is **2–3× the average** at peak. Plan for ~**30,000 reads/s** and **3,000 writes/s**.
+
+For a figure given **per month**, divide by about 2.5 million seconds instead: 250 million requests a month is 2.5 × 10⁸ ÷ 2.5 × 10⁶ = 100 per second.
 
 > [!plain] In plain English
-> Divide "per month" by about 2.5 million to get "per second". Multiply by 2–3 for the busiest hour.
+> Divide "per day" by 100,000 (or "per month" by 2.5 million) to get "per second". Multiply by 2–3 for the busiest hour.
 
-## Worked example: Snip's storage
+## Worked example: Taskboard's storage
 
-What does one link record cost?
+What does one task cost?
 
 | Field | Bytes |
 |---|---|
-| short code (7 chars) | 7 |
-| long URL (average) | ~100 |
-| owner id, created_at, expires_at | ~30 |
-| index and row overhead | ~60 |
-| **total** | **~200 bytes** |
+| ids (task, board, workspace, assignee) | ~32 |
+| title (average) | ~60 |
+| description (average) | ~600 |
+| status, dates, version | ~30 |
+| index and row overhead | ~280 |
+| **total** | **~1 KB** |
 
-Links are kept for **5 years**: 100 M/month × 12 × 5 = **6 billion links**.
+If each active user creates about **1 task a day**, that's 10⁷ tasks × 1 KB = 10¹⁰ B = **10 GB per day**, about **3.65 TB a year**, and ≈ **18 TB over 5 years**. With 3 copies for safety (replication, lesson 5): ~**55 TB**.
 
-6 × 10⁹ × 200 B = 1.2 × 10¹² B ≈ **1.2 TB**. With replication (×3): ~**3.6 TB**. That's comfortably within one modern database server's disk, which is useful to know: Snip's storage **isn't** the hard part; its read traffic and availability are.
+That's more than one database server comfortably holds and backs up, which is useful to know early: Taskboard **will** need to split its data across machines (sharding, lesson 5). Compare a URL shortener storing 200-byte links, which fits easily on one server: the per-record size and count decide this, not the product's popularity.
 
 ## Bandwidth
 
-Redirect responses are tiny (~500 bytes with headers): 10,000/s × 500 B = **5 MB/s** at peak. Bandwidth isn't a concern either. (For a video service, this line of the estimate is where everything gets hard.)
+Multiply requests per second by bytes per response. A board load returns ~**20 KB** of JSON (the visible tasks). At 30,000 reads/s peak that's 30,000 × 20 KB = 600 MB/s, roughly **5 Gbit/s** leaving the servers. That's real money and real network capacity, so it's worth compressing responses, paginating long boards, and sending live updates as small changes ("task 42 moved to done") instead of the whole board again.
 
 ## Cache memory: the 80/20 rule
 
-Link popularity is very skewed: a small fraction of links gets most clicks. If we cache the hottest 20% of **one day's** distinct links:
+Usage is skewed: on any day, a minority of boards gets most of the views. A common rule of thumb is that **20% of the items get 80% of the reads**, so caching that 20% absorbs most traffic.
 
-- daily redirects ≈ 4,000/s × 10⁵ s ≈ 4 × 10⁸ requests
-- assume ~10⁸ distinct links accessed per day; 20% = 2 × 10⁷ links
-- × ~200 B = **4 GB** of cache
+- about **5 million** distinct boards are opened on a typical day
+- 20% of them = 10⁶ boards
+- × ~20 KB per cached board = 2 × 10¹⁰ B = **20 GB** of cache
 
-4 GB fits in the memory of a single cache node. So a small Redis cluster can absorb most of Snip's read traffic.
+20 GB fits in the memory of one large cache node, or a small cluster of three. So a modest Redis cluster can serve most board loads (lesson 6).
 
 ## Latency numbers every engineer should know
 
@@ -81,11 +86,15 @@ Approximate, but the **ratios** are what matter:
 | round trip US East ↔ Europe | ~80 ms |
 | round trip US ↔ Australia | ~150–200 ms |
 
-Takeaways: memory is ~1,000× faster than SSD, and network round trips dominate everything. A redirect target of 50 ms p99 means **no cross-ocean round trips** on the hot path: users must be served from a nearby region.
+Takeaways: memory is ~1,000× faster than SSD, and network round trips dominate everything. Taskboard's 200 ms board-load target leaves room for a few round trips inside a data center, but not many cross-ocean ones: a user in Sydney talking to servers in Virginia spends most of that budget on the trip itself.
+
+## Counting servers
+
+Divide the peak load by what one server handles **safely** (well below its maximum, as lesson 1 explained), and **round up**: you can't run half a server. Then add spares so a failure doesn't drop you below peak capacity. Keeping one extra is called **N+1**: if 15 servers carry the peak, run 16, and losing any one still leaves 15.
 
 ## Sanity checks
 
-Estimates catch impossible designs early: "each redirect does 3 database queries" × 10,000/s = 30,000 queries/s on one database: too many → you need a cache or replicas. "Store every click as a row": 4 × 10⁸ rows a day is about 146 billion rows a year → you need a different storage approach for analytics (lesson 7).
+Estimates catch impossible designs early: "each board load does 5 database queries" × 30,000/s = 150,000 queries/s on one database: far too many → you need a cache or replicas. "Write an activity row for every board view": 10⁹ rows a day is about 365 billion rows a year → you need a different storage approach for analytics (lesson 7).
 
 :::quiz
 q: About how many requests per second is 1 billion requests per day?
@@ -106,12 +115,12 @@ why: ~100 ns vs ~100 µs vs ~0.5 ms vs ~80 ms.
 :::
 
 :::quiz
-q: Snip needs ~1.2 TB of link storage over 5 years. What does that tell you?
-+ storage volume alone doesn't force a distributed database; reads and availability are the harder problems
-- Snip must shard immediately
-- links must be compressed
-- storage is the main bottleneck
-why: A single server can hold a few TB; the design pressure comes elsewhere.
+q: Taskboard needs ~18 TB of task storage over 5 years (~55 TB with 3 copies). What does that tell you?
++ the data will outgrow one database server, so plan how to split it across machines
+- storage is irrelevant at this size
+- tasks must be deleted after a year
+- one bigger disk solves it permanently
+why: Tens of terabytes, growing every year, push the design toward sharding.
 :::
 
 :::quiz
@@ -169,29 +178,35 @@ Peak traffic is 30,000 requests per second. One app server handles 2,000 request
 :::exercise
 id: proj-design-02-reads
 level: 2
-title: "Project 2: Snip's read traffic"
+title: "Project 2: Taskboard's write traffic"
 mode: answer
 ---
-Snip creates 100 million links per month with a 100:1 read:write ratio. Roughly how many redirects per second on average? (Use 2.5 million seconds per month.)
+Taskboard has 10 million daily active users who each make about 10 changes a day. Roughly how many writes per second on **average**? (Use 10⁵ seconds per day.)
 ---answer
-4000
+1000
 ---answer
-4,000
+1,000
 ---solution
-4000
+1000
+---explain
+10⁷ × 10 = 10⁸ writes per day ÷ 10⁵ s = 10³ per second.
 :::
 
 :::exercise
 id: proj-design-02-storage
 level: 3
-title: "Project 2b: Snip's storage"
+title: "Project 2b: Taskboard's storage"
 mode: answer
 ---
-Snip keeps 6 billion links of ~200 bytes each, replicated **3** times. Roughly how many **terabytes** is that?
+Taskboard stores about 18 billion tasks after 5 years, at ~1 KB each, kept in **3** copies. Roughly how many **terabytes** is that?
 ---answer
-3.6
+54
+---answer
+54 TB
 ---solution
-3.6
+54
+---explain
+1.8 × 10¹⁰ × 10³ B = 1.8 × 10¹³ B = 18 TB; × 3 copies = 54 TB.
 :::
 
 :::exercise
@@ -200,11 +215,13 @@ level: 3
 title: "Project 2c: cache sizing"
 mode: answer
 ---
-Snip wants to cache 20% of the **50 million** distinct links clicked per day, at 200 bytes each. How many **gigabytes** of cache is that?
+Taskboard wants to cache the hottest 20% of the **5 million** boards opened per day, at 20 KB each. How many **gigabytes** of cache is that?
 ---answer
-2
+20
+---answer
+20 GB
 ---solution
-2
+20
 ---explain
-0.2 × 5 × 10⁷ = 10⁷ links × 200 B = 2 × 10⁹ B = 2 GB.
+0.2 × 5 × 10⁶ = 10⁶ boards × 2 × 10⁴ B = 2 × 10¹⁰ B = 20 GB.
 :::

@@ -355,16 +355,17 @@ bash show.sh
 :::exercise
 id: vr-rename-ext
 level: 4
-title: Change every extension
+title: Change the extension
 ---
-For each file in `data/` ending in `.txt`, print the name it would have with a `.md` extension instead, one per line, like `contacts.md`. Use a `for` loop over `data/*.txt` and parameter expansion (no sed).
+Given `f=data/report.final.txt`, print the name it would have with a `.md` extension instead of `.txt`, **without** the directory: `report.final.md`. Use only parameter expansion (no sed, no basename).
 ---hint
-`for f in data/*.txt; do b="${f##*/}"; echo "${b%.txt}.md"; done`
+First strip the directory with `${f##*/}` into a new variable, then remove `.txt` from the end with `%`.
+---hint
+`%` removes the shortest match from the end, so `${b%.txt}` removes only the final `.txt`.
 ---solution
-for f in data/*.txt; do
-  b="${f##*/}"
-  echo "${b%.txt}.md"
-done
+f=data/report.final.txt
+b="${f##*/}"
+echo "${b%.txt}.md"
 :::
 
 :::exercise
@@ -384,6 +385,7 @@ id: proj-bash-11-summary
 level: 2
 title: "Project 11: a summary script"
 mode: script
+path: ops/scripts/11-summary.sh
 ---
 Write a script that stores the path `logs/app.log` in a variable `LOG`, counts the lines containing `ERROR` and `WARN`, and prints exactly two lines:
 
@@ -407,6 +409,7 @@ id: proj-bash-11-level-env
 level: 3
 title: "Project 11b: configurable level"
 mode: script
+path: ops/scripts/11-level-env.sh
 ---
 Write a script that counts the lines of `logs/app.log` containing the level given in the environment variable `LEVEL`, defaulting to `ERROR` when it's not set, and prints `LEVEL: COUNT` (e.g. `ERROR: 5`).
 ---test

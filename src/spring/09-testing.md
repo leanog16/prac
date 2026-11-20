@@ -4,8 +4,8 @@ title: Testing Spring Boot apps
 summary: The testing pyramid in Spring, plain unit tests with Mockito, @WebMvcTest slices with MockMvc and @MockitoBean, JSON assertions, testing security, @DataJpaTest, full @SpringBootTest integration tests, Testcontainers with @ServiceConnection, and keeping the suite fast.
 minutes: 40
 ---
-> [!project] Bookshelf, step 9: proving the rules
-> The borrowing rules are the most important code in Bookshelf, so they get the most tests: fast unit tests for `LoanService` with mocks and a fixed clock, and a web slice test for the catalog endpoints.
+> [!project] Taskboard, step 9: proving the rules
+> The picking up rules are the most important code in Taskboard, so they get the most tests: fast unit tests for `AssignmentService` with mocks and a fixed clock, and a web slice test for the board endpoints.
 
 ## Pick the smallest test that proves the point
 
@@ -103,6 +103,11 @@ void adminCanDelete() throws Exception {
 void anonymousIsRejected() throws Exception {
     mvc.perform(get("/api/orders")).andExpect(status().isUnauthorized());
 }
+```
+
+`status()` has a matcher for each common code: `isOk()` (200), `isCreated()` (201), `isNoContent()` (204), `isBadRequest()` (400), `isUnauthorized()` (401: not logged in), `isForbidden()` (403: logged in, but not allowed), `isNotFound()` (404), `isConflict()` (409). For anything else, `is(418)`.
+
+```java
 
 @Test
 void jwtWithScope() throws Exception {
@@ -183,42 +188,42 @@ class ApiIT {
 - Name integration tests `*IT` and run them with the Failsafe plugin (`./mvnw verify`), keeping `./mvnw test` quick.
 - Use `@ActiveProfiles("test")` and an `application-test.properties` for test-specific settings.
 
-## Worked example: testing borrow() without Spring
+## Worked example: testing pickUp() without Spring
 
 ```java
-class LoanServiceTest {
+class AssignmentServiceTest {
 
     private final MemberRepository members = mock(MemberRepository.class);
-    private final BookRepository books = mock(BookRepository.class);
-    private final LoanRepository loans = mock(LoanRepository.class);
-    private final LoanPolicy policy = new StandardLoanPolicy();                       // 14 days
+    private final TaskRepository tasks = mock(TaskRepository.class);
+    private final AssignmentRepository assignments = mock(AssignmentRepository.class);
+    private final AssignmentPolicy policy = new StandardAssignmentPolicy();                       // 14 days
     private final Clock clock = Clock.fixed(Instant.parse("2026-03-01T10:00:00Z"), ZoneOffset.UTC);
 
-    private final LoanService service = new LoanService(members, books, loans, policy, clock);
+    private final AssignmentService service = new AssignmentService(members, tasks, assignments, policy, clock);
 
     @Test
-    void borrowingSetsDueDateAndMarksBookOut() {
+    void pickingUpSetsDueDateAndMarksTaskTaken() {
         Member ada = new Member("Ada");
-        Book dune = new Book("9780441013593", "Dune", "Frank Herbert", 1965);
+        Task api = new Task("TB-101", "Write API", "Ana", 3);
         when(members.findById(1L)).thenReturn(Optional.of(ada));
-        when(books.findById(7L)).thenReturn(Optional.of(dune));
-        when(loans.save(any(Loan.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(tasks.findById(7L)).thenReturn(Optional.of(api));
+        when(assignments.save(any(Assignment.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        LoanResponse loan = service.borrow(1L, 7L);
+        AssignmentResponse assignment = service.pickUp(1L, 7L);
 
-        assertThat(loan.dueOn()).isEqualTo(LocalDate.of(2026, 3, 15));
-        assertThat(dune.isAvailable()).isFalse();
+        assertThat(assignment.dueOn()).isEqualTo(LocalDate.of(2026, 3, 15));
+        assertThat(api.isAvailable()).isFalse();
     }
 
     @Test
-    void cannotBorrowABookThatIsOut() {
-        Book dune = new Book("9780441013593", "Dune", "Frank Herbert", 1965);
-        dune.setAvailable(false);
+    void cannotPickUpATaskThatIsTaken() {
+        Task api = new Task("TB-101", "Write API", "Ana", 3);
+        api.setAvailable(false);
         when(members.findById(1L)).thenReturn(Optional.of(new Member("Ada")));
-        when(books.findById(7L)).thenReturn(Optional.of(dune));
+        when(tasks.findById(7L)).thenReturn(Optional.of(api));
 
-        assertThatThrownBy(() -> service.borrow(1L, 7L)).isInstanceOf(BookUnavailableException.class);
-        verify(loans, never()).save(any());
+        assertThatThrownBy(() -> service.pickUp(1L, 7L)).isInstanceOf(TaskTakenException.class);
+        verify(assignments, never()).save(any());
     }
 }
 ```
@@ -333,9 +338,9 @@ level: 3
 title: A controller slice test
 mode: code
 lang: java
-file: BookControllerTest.java
+file: TaskControllerTest.java
 ---
-Make this a `@WebMvcTest` for `BookController`, with `BookService` replaced by a `@MockitoBean` field `books`. In the test, stub `books.get(7L)` to return `new BookResponse(7L, "Dune")`, perform `GET /api/books/7`, and expect status 200 and `$.title` equal to `"Dune"`.
+Make this a `@WebMvcTest` for `TaskController`, with `TaskService` replaced by a `@MockitoBean` field `tasks`. In the test, stub `tasks.get(7L)` to return `new TaskResponse(7L, "Write API")`, perform `GET /api/tasks/7`, and expect status 200 and `$.title` equal to `"Write API"`.
 ---starter
 package com.example.demo;
 
@@ -349,33 +354,33 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-class BookControllerTest {
+class TaskControllerTest {
 
     @Autowired
     MockMvc mvc;
 
     @Test
-    void getsBook() throws Exception {
+    void getsTask() throws Exception {
     }
 }
 ---rule
-@WebMvcTest\(\s*BookController\.class\s*\)\s*\n\s*class\s+BookControllerTest
-`@WebMvcTest(BookController.class)`
+@WebMvcTest\(\s*TaskController\.class\s*\)\s*\n\s*class\s+TaskControllerTest
+`@WebMvcTest(TaskController.class)`
 ---rule
-@MockitoBean\s*\n?\s*BookService\s+books\s*;
-`@MockitoBean BookService books;`
+@MockitoBean\s*\n?\s*TaskService\s+tasks\s*;
+`@MockitoBean TaskService tasks;`
 ---rule
-when\(\s*books\.get\(\s*7L\s*\)\s*\)\.thenReturn\(\s*new\s+BookResponse\(\s*7L\s*,\s*"Dune"\s*\)\s*\)
-Stub `books.get(7L)`
+when\(\s*tasks\.get\(\s*7L\s*\)\s*\)\.thenReturn\(\s*new\s+TaskResponse\(\s*7L\s*,\s*"Write API"\s*\)\s*\)
+Stub `tasks.get(7L)`
 ---rule
-mvc\.perform\(\s*get\(\s*"/api/books/7"\s*\)\s*\)
-`mvc.perform(get("/api/books/7"))`
+mvc\.perform\(\s*get\(\s*"/api/tasks/7"\s*\)\s*\)
+`mvc.perform(get("/api/tasks/7"))`
 ---rule
 \.andExpect\(\s*status\(\s*\)\.isOk\(\s*\)\s*\)
 Expect 200
 ---rule
-\.andExpect\(\s*jsonPath\(\s*"\$\.title"\s*\)\.value\(\s*"Dune"\s*\)\s*\)
-Expect `$.title` = `"Dune"`
+\.andExpect\(\s*jsonPath\(\s*"\$\.title"\s*\)\.value\(\s*"Write API"\s*\)\s*\)
+Expect `$.title` = `"Write API"`
 ---solution
 package com.example.demo;
 
@@ -389,22 +394,22 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(BookController.class)
-class BookControllerTest {
+@WebMvcTest(TaskController.class)
+class TaskControllerTest {
 
     @Autowired
     MockMvc mvc;
 
     @MockitoBean
-    BookService books;
+    TaskService tasks;
 
     @Test
-    void getsBook() throws Exception {
-        when(books.get(7L)).thenReturn(new BookResponse(7L, "Dune"));
+    void getsTask() throws Exception {
+        when(tasks.get(7L)).thenReturn(new TaskResponse(7L, "Write API"));
 
-        mvc.perform(get("/api/books/7"))
+        mvc.perform(get("/api/tasks/7"))
            .andExpect(status().isOk())
-           .andExpect(jsonPath("$.title").value("Dune"));
+           .andExpect(jsonPath("$.title").value("Write API"));
     }
 }
 :::
@@ -415,9 +420,9 @@ level: 3
 title: Test validation
 mode: code
 lang: java
-file: BookControllerTest.java
+file: TaskControllerTest.java
 ---
-Add a test `rejectsBlankTitle` that POSTs `{"title": ""}` as JSON to `/api/books` and expects **400**.
+Add a test `rejectsBlankTitle` that POSTs `{"title": ""}` as JSON to `/api/tasks` and expects **400**.
 ---starter
 package com.example.demo;
 
@@ -431,21 +436,21 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(BookController.class)
-class BookControllerTest {
+@WebMvcTest(TaskController.class)
+class TaskControllerTest {
 
     @Autowired
     MockMvc mvc;
 
     @MockitoBean
-    BookService books;
+    TaskService tasks;
 }
 ---rule
 @Test\s*\n\s*void\s+rejectsBlankTitle\(\s*\)
 `@Test void rejectsBlankTitle()`
 ---rule
-post\(\s*"/api/books"\s*\)
-POST to `/api/books`
+post\(\s*"/api/tasks"\s*\)
+POST to `/api/tasks`
 ---rule
 \.contentType\(\s*MediaType\.APPLICATION_JSON\s*\)
 JSON content type
@@ -468,18 +473,18 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(BookController.class)
-class BookControllerTest {
+@WebMvcTest(TaskController.class)
+class TaskControllerTest {
 
     @Autowired
     MockMvc mvc;
 
     @MockitoBean
-    BookService books;
+    TaskService tasks;
 
     @Test
     void rejectsBlankTitle() throws Exception {
-        mvc.perform(post("/api/books")
+        mvc.perform(post("/api/tasks")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"title\": \"\"}"))
            .andExpect(status().isBadRequest());
@@ -651,11 +656,12 @@ level: 3
 title: "Project 9: test the unavailable rule"
 mode: code
 lang: java
-file: LoanServiceTest.java
+file: AssignmentServiceTest.java
+path: spring/src/test/java/dev/taskboard/AssignmentServiceTest.java
 ---
-Write `cannotBorrowABookThatIsOut()`: make `dune` unavailable with `dune.setAvailable(false)`, stub `members.findById(1L)` and `books.findById(7L)` to return them in `Optional`s, assert with `assertThatThrownBy(() -> service.borrow(1L, 7L)).isInstanceOf(BookUnavailableException.class)`, and verify `loans` **never** saved anything.
+Write `cannotPickUpATaskThatIsTaken()`: make `api` unavailable with `api.setAvailable(false)`, stub `members.findById(1L)` and `tasks.findById(7L)` to return them in `Optional`s, assert with `assertThatThrownBy(() -> service.pickUp(1L, 7L)).isInstanceOf(TaskTakenException.class)`, and verify `assignments` **never** saved anything.
 ---starter
-package org.library.bookshelf;
+package dev.taskboard;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -664,33 +670,33 @@ import static org.mockito.Mockito.*;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-class LoanServiceTest {
+class AssignmentServiceTest {
 
-    // members, books, loans mocks, policy, clock and service are set up here
+    // members, tasks, assignments mocks, policy, clock and service are set up here
 
     @Test
-    void cannotBorrowABookThatIsOut() {
+    void cannotPickUpATaskThatIsTaken() {
         Member ada = new Member("Ada");
-        Book dune = new Book("9780441013593", "Dune", "Frank Herbert", 1965);
+        Task api = new Task("TB-101", "Write API", "Ana", 3);
     }
 }
 ---rule
-dune\.setAvailable\(\s*false\s*\)
-Make the book unavailable
+api\.setAvailable\(\s*false\s*\)
+Make the task unavailable
 ---rule
 when\(\s*members\.findById\(\s*1L\s*\)\s*\)\.thenReturn\(\s*Optional\.of\(\s*ada\s*\)\s*\)
 Stub the member
 ---rule
-when\(\s*books\.findById\(\s*7L\s*\)\s*\)\.thenReturn\(\s*Optional\.of\(\s*dune\s*\)\s*\)
-Stub the book
+when\(\s*tasks\.findById\(\s*7L\s*\)\s*\)\.thenReturn\(\s*Optional\.of\(\s*api\s*\)\s*\)
+Stub the task
 ---rule
-assertThatThrownBy\(\s*\(\)\s*->\s*service\.borrow\(\s*1L\s*,\s*7L\s*\)\s*\)\.isInstanceOf\(\s*BookUnavailableException\.class\s*\)
+assertThatThrownBy\(\s*\(\)\s*->\s*service\.pickUp\(\s*1L\s*,\s*7L\s*\)\s*\)\.isInstanceOf\(\s*TaskTakenException\.class\s*\)
 Assert the exception
 ---rule
-verify\(\s*loans\s*,\s*never\(\s*\)\s*\)\.save\(\s*any\(\s*(Loan\.class)?\s*\)\s*\)
+verify\(\s*assignments\s*,\s*never\(\s*\)\s*\)\.save\(\s*any\(\s*(Assignment\.class)?\s*\)\s*\)
 Verify nothing was saved
 ---solution
-package org.library.bookshelf;
+package dev.taskboard;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -699,20 +705,20 @@ import static org.mockito.Mockito.*;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-class LoanServiceTest {
+class AssignmentServiceTest {
 
-    // members, books, loans mocks, policy, clock and service are set up here
+    // members, tasks, assignments mocks, policy, clock and service are set up here
 
     @Test
-    void cannotBorrowABookThatIsOut() {
+    void cannotPickUpATaskThatIsTaken() {
         Member ada = new Member("Ada");
-        Book dune = new Book("9780441013593", "Dune", "Frank Herbert", 1965);
-        dune.setAvailable(false);
+        Task api = new Task("TB-101", "Write API", "Ana", 3);
+        api.setAvailable(false);
         when(members.findById(1L)).thenReturn(Optional.of(ada));
-        when(books.findById(7L)).thenReturn(Optional.of(dune));
+        when(tasks.findById(7L)).thenReturn(Optional.of(api));
 
-        assertThatThrownBy(() -> service.borrow(1L, 7L)).isInstanceOf(BookUnavailableException.class);
-        verify(loans, never()).save(any());
+        assertThatThrownBy(() -> service.pickUp(1L, 7L)).isInstanceOf(TaskTakenException.class);
+        verify(assignments, never()).save(any());
     }
 }
 :::
@@ -720,14 +726,15 @@ class LoanServiceTest {
 :::exercise
 id: proj-sp-09-webmvc
 level: 3
-title: "Project 9b: the catalog slice test"
+title: "Project 9b: the board slice test"
 mode: code
 lang: java
-file: BookControllerTest.java
+file: TaskControllerTest.java
+path: spring/src/test/java/dev/taskboard/TaskControllerTest.java
 ---
-Write a `@WebMvcTest(BookController.class)` test class with `@MockitoBean BookService books` and a test `missingBookIs404` that stubs `books.get(99L)` to throw `new BookNotFoundException("Book 99 not found")` and expects `GET /api/books/99` to return **404**.
+Write a `@WebMvcTest(TaskController.class)` test class with `@MockitoBean TaskService tasks` and a test `missingBookIs404` that stubs `tasks.get(99L)` to throw `new TaskNotFoundException("Task 99 not found")` and expects `GET /api/tasks/99` to return **404**.
 ---starter
-package org.library.bookshelf;
+package dev.taskboard;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -739,28 +746,28 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-class BookControllerTest {
+class TaskControllerTest {
 
     @Autowired
     MockMvc mvc;
 }
 ---rule
-@WebMvcTest\(\s*BookController\.class\s*\)\s*\n\s*class\s+BookControllerTest
-`@WebMvcTest(BookController.class)`
+@WebMvcTest\(\s*TaskController\.class\s*\)\s*\n\s*class\s+TaskControllerTest
+`@WebMvcTest(TaskController.class)`
 ---rule
-@MockitoBean\s*\n?\s*BookService\s+books\s*;
-`@MockitoBean BookService books;`
+@MockitoBean\s*\n?\s*TaskService\s+tasks\s*;
+`@MockitoBean TaskService tasks;`
 ---rule
 @Test\s*\n\s*void\s+missingBookIs404\(\s*\)
 The test method
 ---rule
-when\(\s*books\.get\(\s*99L\s*\)\s*\)\.thenThrow\(\s*new\s+BookNotFoundException\(\s*"Book 99 not found"\s*\)\s*\)
+when\(\s*tasks\.get\(\s*99L\s*\)\s*\)\.thenThrow\(\s*new\s+TaskNotFoundException\(\s*"Task 99 not found"\s*\)\s*\)
 Stub the exception
 ---rule
-mvc\.perform\(\s*get\(\s*"/api/books/99"\s*\)\s*\)\s*\.andExpect\(\s*status\(\s*\)\.isNotFound\(\s*\)\s*\)
+mvc\.perform\(\s*get\(\s*"/api/tasks/99"\s*\)\s*\)\s*\.andExpect\(\s*status\(\s*\)\.isNotFound\(\s*\)\s*\)
 Expect 404
 ---solution
-package org.library.bookshelf;
+package dev.taskboard;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -772,19 +779,19 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(BookController.class)
-class BookControllerTest {
+@WebMvcTest(TaskController.class)
+class TaskControllerTest {
 
     @Autowired
     MockMvc mvc;
 
     @MockitoBean
-    BookService books;
+    TaskService tasks;
 
     @Test
     void missingBookIs404() throws Exception {
-        when(books.get(99L)).thenThrow(new BookNotFoundException("Book 99 not found"));
-        mvc.perform(get("/api/books/99")).andExpect(status().isNotFound());
+        when(tasks.get(99L)).thenThrow(new TaskNotFoundException("Task 99 not found"));
+        mvc.perform(get("/api/tasks/99")).andExpect(status().isNotFound());
     }
 }
 :::

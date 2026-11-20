@@ -34,6 +34,31 @@ volumes:
   pgdata:
 ```
 
+## YAML in two minutes
+
+A Compose file is written in **YAML**. YAML is a plain-text format for structured data. Everything is built from three pieces:
+
+```yaml
+# a comment
+name: taskboard              # a key, a colon and a space, then a value
+replicas: 2                  # numbers and true/false are written plainly
+image: "postgres:16"         # quote values that contain a colon or other symbols
+
+environment:                 # a key with nothing after the colon holds a nested map...
+  POSTGRES_USER: app         # ...whose entries are indented (2 spaces, never tabs)
+  POSTGRES_DB: appdb
+
+ports:                       # a list: one "- " item per line
+  - "8000:8000"
+  - "9000:9000"
+```
+
+- **Indentation is the structure**: everything indented under a key belongs to it, and entries at the same level line up exactly.
+- A list item can itself be a map: `- name: build` starts an item, and the item's other keys line up under `name`.
+- **Flow style** writes short lists and maps on one line: `branches: [main, dev]` is the same as a two-item list, and `{a: 1, b: 2}` is a one-line map.
+- `|` after a key starts a **multi-line string**: every indented line below it is kept as written (handy for shell scripts).
+- Quote strings that contain `: `, start with a symbol (`*`, `&`, `{`, `[`, `@`), or could be misread as a number: `"8000:8000"`, `"3.12"` (unquoted, `3.10` would become the number 3.1).
+
 ## What Compose does for you
 
 - Creates a **network** `<project>_default` and attaches every service, so services reach each other **by service name** (`db:5432` above).
@@ -60,7 +85,7 @@ The **project name** defaults to the directory name.
 | `networks:` | custom networks | `--network` |
 
 > [!warn] YAML gotchas
-> Indentation is structure (spaces only, no tabs). Quote port mappings: unquoted `22:22` can be parsed as a base-60 number by YAML 1.1 parsers. Lists use `- item`; maps use `key: value` with a space after the colon.
+> Indentation is structure (spaces only, no tabs). Quote port mappings: unquoted `22:22` can be parsed as a base-60 number by YAML 1.1 parsers.
 
 ## The workflow
 
@@ -468,7 +493,7 @@ title: Run a command in a service
 cwd: /home/student/fastapi-app
 setup: printf 'services:\n  cache:\n    image: redis:7-alpine\n' > compose.yaml && docker compose up -d >/dev/null 2>&1
 ---
-A compose project with a `cache` service (Redis) is running. Using `docker compose exec`, set the key `visits` to `41` and then increment it with `redis-cli`, so the output ends with `(integer) 42`.
+A compose project with a `cache` service (Redis) is running. Using `docker compose exec`, set the key `visits` to `41` and then increment it with `redis-cli`, so the output ends with `(integer) 42`. (Redis is a key-value store; `redis-cli SET key value` stores a value and `redis-cli INCR key` adds 1 to a number and prints the result.)
 ---solution
 docker compose exec cache redis-cli SET visits 41
 docker compose exec cache redis-cli INCR visits
@@ -482,6 +507,7 @@ mode: file
 file: compose.yaml
 cwd: /home/student/taskboard
 setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile
+path: compose.yaml
 ---run
 docker compose up -d >/dev/null 2>&1
 docker compose ps --format '{{.Service}} {{.Ports}}' | sort
@@ -514,6 +540,7 @@ title: "Project 8b: wait for a healthy database"
 mode: code
 lang: yaml
 file: compose.yaml
+path: compose.yaml
 ---
 Make `api` wait until `db` is **healthy**, and give `db` a healthcheck that runs `pg_isready -U postgres` (CMD-SHELL form) every `5s`.
 ---starter

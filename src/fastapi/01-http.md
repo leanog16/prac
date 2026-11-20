@@ -4,8 +4,8 @@ title: HTTP & REST essentials
 summary: The protocol under every web API — requests and responses, methods and their semantics, status codes, headers, JSON, and how to design RESTful resource URLs.
 minutes: 25
 ---
-> [!project] Track project: Taskboard, a task-tracking API
-> Across this track you'll design and build features for **Taskboard**: an API where a small team creates tasks, moves them from `todo` to `doing` to `done`, assigns them, attaches files and gets live updates. The **Project** exercises apply each lesson to that API. They are independent exercises, not commits to a shared codebase; you can also build the app in your own environment. The Docker, CI/CD and AWS tracks use the same project as their example.
+> [!project] Taskboard, step 2: speaking HTTP
+> Before writing Taskboard's endpoints, you need the protocol they speak. This lesson's Project exercises design Taskboard's URLs and pick the right methods and status codes for its operations.
 
 ## A request, a response
 
@@ -309,7 +309,7 @@ PUT
 :::exercise
 id: proj-fa-01-move
 level: 2
-title: "Project 1: moving a task"
+title: "Project 2: moving a task"
 mode: answer
 ---
 A user drags task 42 from `todo` to `doing`. Only the `status` field changes. Which HTTP **method** should the client use?
@@ -324,7 +324,7 @@ PATCH applies a partial update. PUT would mean "replace the whole task with this
 :::exercise
 id: proj-fa-01-comments-url
 level: 2
-title: "Project 1b: comments URL"
+title: "Project 2b: comments URL"
 mode: answer
 ---
 Write the method and path for **adding a comment** to task 42, e.g. `GET /something`.
@@ -337,7 +337,7 @@ POST /tasks/42/comments
 :::exercise
 id: proj-fa-01-delete-status
 level: 1
-title: "Project 1c: deleting succeeds"
+title: "Project 2c: deleting succeeds"
 mode: answer
 ---
 `DELETE /tasks/42` succeeded and returns no body. Which status code?

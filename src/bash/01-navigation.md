@@ -4,8 +4,8 @@ title: The shell & navigation
 summary: What a shell actually does, how paths work, and moving around the filesystem with pwd, ls and cd.
 minutes: 20
 ---
-> [!project] Track project: logwatch, a log-analysis toolkit
-> The server behind a small web shop writes three logs into `~/logs`: `access.log` (every web request), `app.log` (the application's messages) and `cron.log` (scheduled jobs). Through this track you'll build **logwatch**: first as one-line commands, then as a real script, `logwatch.sh`, with options, functions and error handling. Each lesson ends with a **Project** exercise. Everything you build runs against those real log files.
+> [!project] Track project: logwatch, Taskboard's log toolkit
+> **Taskboard** is the task tracker that runs through every track on this site. The server that runs its website and API writes three logs into `~/logs`: `access.log` (every web request), `app.log` (the application's messages) and `cron.log` (scheduled jobs such as backups). Through this track you'll build **logwatch**, the toolkit the team uses to keep an eye on that server: first as one-line commands, then as a real script, `logwatch.sh`, with options, functions and error handling. Each lesson ends with **Project** exercises, saved to `ops/` in your Taskboard repo. Everything you build runs against those real log files.
 
 ## What is the shell?
 
@@ -48,6 +48,7 @@ The most useful flags:
 |---|---|
 | `-l` | long format: permissions, size, date |
 | `-a` | include hidden files (names starting with `.`) |
+| `-A` | like `-a`, but leave out the `.` and `..` entries |
 | `-h` | human-readable sizes with `-l` (4.0K, 1.2M) |
 | `-t` | sort by modification time, newest first |
 | `-r` | reverse the sort |
@@ -114,6 +115,30 @@ pwd
 ```bash run
 tree projects
 ```
+
+On a big folder the drawing gets long. `tree -L 2` limits it to 2 **L**evels deep (any number works):
+
+```bash run
+tree -L 1 projects
+```
+
+## Several commands on one line
+
+You can type more than one command per line:
+
+| Separator | Runs the next command… |
+|---|---|
+| `a ; b` | always, after `a` finishes |
+| `a && b` | only if `a` **succeeded** |
+| `a \|\| b` | only if `a` **failed** |
+
+```bash run
+cd data && pwd
+cd nowhere && pwd   # fails on purpose
+cd; pwd
+```
+
+The second line prints only an error: `cd nowhere` failed, so `&&` skipped `pwd`. `&&` is the safe choice when the second command only makes sense if the first worked. (Lesson 12 explains how a command "succeeds" or "fails".)
 
 ## Getting help
 
@@ -299,6 +324,7 @@ tree -L 2 projects
 id: proj-bash-01-survey
 level: 1
 title: "Project 1: survey the logs"
+path: ops/commands/01-survey.sh
 ---
 Start the logwatch project by looking at what you have: list the files in `~/logs` in **long format with human-readable sizes**.
 ---hint
@@ -311,6 +337,7 @@ ls -lh logs
 id: proj-bash-01-tree
 level: 1
 title: "Project 1b: the big picture"
+path: ops/commands/01-tree.sh
 ---
 Show the directory tree of your home folder, but only **2 levels** deep, so you can see where the logs sit relative to everything else.
 ---solution

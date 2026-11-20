@@ -400,10 +400,11 @@ What status code does `GET /brew` return?
 :::exercise
 id: proj-fa-14-transition
 level: 4
-title: "Project 14: status transitions"
+title: "Project 15: status transitions"
 mode: code
 lang: python
 file: rules.py
+path: app/rules.py
 ---
 Write `ALLOWED = {"todo": {"doing"}, "doing": {"todo", "done"}, "done": set()}`, `class InvalidTransition(Exception)`, and `change_status(task, new: str)` that raises `InvalidTransition()` when `new not in ALLOWED[task.status]` and otherwise sets `task.status = new`.
 ---starter
@@ -439,10 +440,11 @@ def change_status(task, new: str) -> None:
 :::exercise
 id: proj-fa-14-main
 level: 4
-title: "Project 14b: the final main.py"
+title: "Project 15b: the final main.py"
 mode: code
 lang: python
 file: main.py
+path: app/main.py
 ---
 Assemble Taskboard: create `app = FastAPI(title="Taskboard", version="1.0.0", lifespan=lifespan)`; add the `add_request_id` middleware with `app.middleware("http")(add_request_id)`; add CORS with `allow_origins=settings.cors_origins`; include the `auth`, `tasks` and `export` routers; and register an exception handler for `InvalidTransition` returning **409** `{"detail": "Invalid status change"}`.
 ---starter

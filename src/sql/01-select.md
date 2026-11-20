@@ -4,8 +4,8 @@ title: Tables & SELECT
 summary: How relational data is shaped, and how to pull columns, expressions and distinct values out of a table.
 minutes: 25
 ---
-> [!project] Track project: the Desk & Co sales report
-> Maya runs **Desk & Co**, a small online shop for desk gear. Her data lives in four tables you'll meet in this lesson: `customers`, `products`, `orders` and `order_items`. Over the 16 lessons of this track you'll build, one query at a time, the sales report she reads every Monday: what sells, what's running out, who her best customers are, and how revenue moves month to month. Each lesson ends with a **Project** exercise that adds the next piece.
+> [!project] Track project: Taskboard's Monday report
+> **Taskboard** is the task tracker that runs through every track on this site: teams put tasks on boards and move them from `todo` to `doing` to `done`. Its own team plans their work in it, and its data lives in this practice database too: `members`, `boards`, `tasks`, `comments`, `labels` and `task_labels` (see the [schema reference](#sql-schema)). Over the 16 lessons of this track you'll build, one query at a time, the report Ana, the team lead, reads every Monday: what's open, what's overdue, who's overloaded and how fast work gets done. Each lesson ends with **Project** exercises that add the next piece, saved to `db/reports/` in your Taskboard repo.
 
 ## The relational model in five minutes
 
@@ -25,7 +25,7 @@ Two ideas matter more than anything else:
 2. **Keys connect tables.** Instead of copying a department's name into every employee row, each employee stores a `dept_id`, and you *join* to `departments` to get the name. That's the whole game of relational design.
 
 > [!note] The practice database
-> Every query on this site runs against a real SQLite database living in your browser. It has three little worlds: a **company** (`departments`, `employees`), a **university** (`students`, `courses`, `instructors`, `enrollments`) and a **store** (`customers`, `products`, `orders`, `order_items`). Open the [schema reference](#sql-schema) any time.
+> Every query on this site runs against a real SQLite database living in your browser. It has four little worlds: a **company** (`departments`, `employees`), a **university** (`students`, `courses`, `instructors`, `enrollments`), a **store** (`customers`, `products`, `orders`, `order_items`) and **Taskboard**, the project (`members`, `boards`, `tasks`, `comments`, `labels`, `task_labels`). Lessons draw examples from all four; the Project exercises use Taskboard. Open the [schema reference](#sql-schema) any time.
 
 ## Your first query
 
@@ -56,6 +56,8 @@ SELECT first_name || ' ' || last_name AS full_name,
        ROUND(salary * 1.03) AS after_raise
 FROM employees;
 ```
+
+`ROUND(x)` rounds to a whole number; give it a second argument to keep that many decimal places: `ROUND(2.71828, 2)` is `2.72`. Lesson 4 lists more functions like it.
 
 Notice `salary / 12`: both sides are integers, so SQLite does **integer division** and drops the remainder. Write `salary / 12.0` to get a decimal. This trips people up on exams constantly.
 
@@ -118,6 +120,8 @@ Read the result column by column and say out loud what one row **means**: "order
 ```sql run
 SELECT COUNT(*) FROM order_items;
 ```
+
+`COUNT(*)` counts the rows: a quick way to see how big a table is. (Lesson 6 covers counting and totals properly.)
 
 ```sql run
 SELECT order_id, product_id, quantity, unit_price, quantity * unit_price AS line_total
@@ -282,23 +286,23 @@ SELECT 17 / 5 AS a, 17 / 5.0 AS b, 17 % 5 AS c;
 :::exercise
 id: proj-sql-01-lines
 level: 2
-title: "Project 1: order lines with totals"
+title: "Project 1: the task list"
+path: db/reports/01-task-list.sql
 ---
-Start Maya's report with the raw material: every row of `order_items` showing `order_id`, `product_id`, `quantity`, `unit_price`, and a computed column `line_total` equal to quantity times unit price.
+Start the report with the raw material: every task's `task_id`, a computed column `task_key` that puts `TB-` in front of the id (so task 7 becomes `TB-7`), then `title` and `status`, in that column order.
 ---hint
-A computed column is an expression with an alias: `quantity * unit_price AS line_total`.
+`||` joins text: `'TB-' || task_id AS task_key`.
 ---solution
-SELECT order_id, product_id, quantity, unit_price, quantity * unit_price AS line_total FROM order_items;
+SELECT task_id, 'TB-' || task_id AS task_key, title, status FROM tasks;
 :::
 
 :::exercise
 id: proj-sql-01-catalog
 level: 2
-title: "Project 1b: the catalog sheet"
+title: "Project 1b: estimates in minutes"
+path: db/reports/01-estimates.sql
 ---
-Maya also wants a catalog sheet: each product's `name`, `category`, `price`, and a column `price_with_tax` that adds 7% sales tax, rounded to 2 decimals.
----hint
-`ROUND(price * 1.07, 2) AS price_with_tax`
+The team estimates work in hours, but the time tracker counts minutes. Show each task's `title`, `estimate_hours`, and a computed column `estimate_minutes` equal to the estimate times 60. (Tasks nobody estimated show `NULL`, meaning "no value"; lesson 5 is all about it.)
 ---solution
-SELECT name, category, price, ROUND(price * 1.07, 2) AS price_with_tax FROM products;
+SELECT title, estimate_hours, estimate_hours * 60 AS estimate_minutes FROM tasks;
 :::

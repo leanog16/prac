@@ -4,7 +4,7 @@ title: Request bodies & Pydantic models
 summary: Declaring JSON bodies with Pydantic models, Field constraints, optional and default fields, nested models, response_model to shape and filter output, and separate input/output schemas.
 minutes: 35
 ---
-> [!project] Taskboard, step 4: creating tasks
+> [!project] Taskboard, step 5: creating tasks
 > Until now tasks were hard-coded dicts. This step introduces Pydantic **models**: one describing what clients send (`TaskCreate`), one describing what the API returns (`TaskOut`), and `POST /tasks` to create tasks.
 
 ## A model is a schema
@@ -73,7 +73,7 @@ The body is then `{"name": "...", "address": {"street": "...", "city": "...", "z
 
 ## Shaping the output: response_model
 
-Declaring the **response model** (via `response_model=` or the return annotation) does two things: documents the output in /docs and **filters** whatever you return down to the model's fields. That's how you avoid leaking data:
+Declaring the **response model** (via `response_model=` or the return annotation) does three things: documents the output in /docs, **filters** whatever you return down to the model's fields, and **validates** it. If your code returns data that doesn't fit the model (a required field missing, a wrong type), that's a bug on the server, so the client gets **500 Internal Server Error**, not a 422. Filtering is how you avoid leaking data:
 
 ```python
 class UserOut(BaseModel):
@@ -563,10 +563,11 @@ The client sends `{"name": "Bolt"}`. Write the `loc` of the validation error as 
 :::exercise
 id: proj-fa-04-models
 level: 2
-title: "Project 4: TaskCreate and TaskOut"
+title: "Project 5: TaskCreate and TaskOut"
 mode: code
 lang: python
 file: models.py
+path: app/models.py
 ---
 Write `TaskBase` with `title: str = Field(min_length=1, max_length=120)`, `description: str = ""` and `priority: int = Field(default=3, ge=1, le=5)`. Then `TaskCreate(TaskBase)` with no extra fields (`pass`), and `TaskOut(TaskBase)` adding `id: int` and `status: str`.
 ---starter
@@ -611,10 +612,11 @@ class TaskOut(TaskBase):
 :::exercise
 id: proj-fa-04-create
 level: 3
-title: "Project 4b: POST /tasks"
+title: "Project 5b: POST /tasks"
 mode: code
 lang: python
 file: main.py
+path: app/main.py
 ---
 Write `POST /tasks` with `response_model=TaskOut` and `status_code=201`. It takes `data: TaskCreate`, builds `task = {"id": len(TASKS) + 1, "status": "todo", **data.model_dump()}`, appends it to `TASKS`, and returns it.
 ---starter
@@ -664,7 +666,7 @@ def create_task(data: TaskCreate):
 :::exercise
 id: proj-fa-04-predict
 level: 2
-title: "Project 4c: predict the validation"
+title: "Project 5c: predict the validation"
 mode: answer
 ---
 With the models above, a client sends `POST /tasks` with `{"title": "Ship it", "priority": 9}`. What status code comes back?

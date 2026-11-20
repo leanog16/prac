@@ -131,6 +131,8 @@ RUN useradd --create-home appuser
 USER appuser
 ```
 
+`useradd --create-home appuser` (short form `useradd -m appuser`) is the Linux command that creates a user with a home directory; `USER` makes every later instruction, and the container's process, run as that user.
+
 ```bash run
 mkdir who && cd who
 printf 'FROM python:3.12-slim\nRUN useradd -m appuser\nUSER appuser\nCMD ["whoami"]\n' > Dockerfile
@@ -497,6 +499,7 @@ title: "Project 4: Taskboard's Dockerfile"
 mode: file
 file: Dockerfile
 cwd: /home/student/taskboard
+path: Dockerfile
 ---run
 docker build -q -t taskboard . >/dev/null
 docker run -d --name api -p 8000:8000 taskboard >/dev/null
@@ -521,6 +524,7 @@ title: "Project 4b: run the tests in the image"
 compare: verify
 cwd: /home/student/taskboard
 setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile
+path: ops/docker/04-run-tests.sh
 ---
 Build the image as `taskboard:dev` from `~/taskboard`, then run a **throwaway** container from it that lists the `/app/tests` directory instead of starting the server (override the command).
 ---verify

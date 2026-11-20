@@ -4,18 +4,18 @@ title: Inheritance
 summary: Extending a class, what is and isn't inherited, super constructors and super method calls, overriding with @Override, protected members, the Object class and its equals/hashCode/toString contract, final classes and methods, and when inheritance is the wrong tool.
 minutes: 40
 ---
-> [!project] Bookshelf, step 4: more than books
-> The library also lends DVDs and magazines. They share a lot with books (an id, a title, availability, borrowing), but each has its own details and rules: DVDs have a runtime and a shorter loan period; magazines can't be borrowed at all. Inheritance lets them share what's common.
+> [!project] Taskboard, step 4: more than tasks
+> The team also assigns bugs and milestones. They share a lot with tasks (an id, a title, availability, picking up), but each has its own details and rules: bugs have a severity and a shorter target time; milestones mark a point in a sprint and can't be picked up by anyone. Inheritance lets them share what's common.
 
 ## Extracting what's common
 
 ```java
-public class LibraryItem {
+public class WorkItem {
     private final String id;
     private final String title;
     private boolean available = true;
 
-    public LibraryItem(String id, String title) {
+    public WorkItem(String id, String title) {
         this.id = id;
         this.title = title;
     }
@@ -24,56 +24,56 @@ public class LibraryItem {
     public String getTitle() { return title; }
     public boolean isAvailable() { return available; }
 
-    public void borrow() {
-        if (!available) throw new IllegalStateException(title + " is already borrowed");
+    public void pickUp() {
+        if (!available) throw new IllegalStateException(title + " is already taken");
         available = false;
     }
 
-    public void giveBack() { available = true; }
+    public void putBack() { available = true; }
 
-    public int loanDays() { return 21; }
+    public int targetDays() { return 21; }
 
     public String describe() { return title; }
 }
 ```
 
 ```java
-public class Book extends LibraryItem {
-    private final String author;
+public class Task extends WorkItem {
+    private final String assignee;
 
-    public Book(String isbn, String title, String author) {
-        super(isbn, title);                 // must be the first statement
-        this.author = author;
+    public Task(String key, String title, String assignee) {
+        super(key, title);                 // must be the first statement
+        this.assignee = assignee;
     }
 
     @Override
     public String describe() {
-        return getTitle() + " by " + author;
+        return getTitle() + " by " + assignee;
     }
 }
 
-public class Dvd extends LibraryItem {
-    private final int minutes;
+public class Bug extends WorkItem {
+    private final int severity;
 
-    public Dvd(String id, String title, int minutes) {
+    public Bug(String id, String title, int severity) {
         super(id, title);
-        this.minutes = minutes;
+        this.severity = severity;
     }
 
     @Override
-    public int loanDays() { return 7; }
+    public int targetDays() { return 7; }
 
     @Override
     public String describe() {
-        return getTitle() + " (DVD, " + minutes + " min)";
+        return getTitle() + " (bug, severity " + severity + ")";
     }
 }
 ```
 
-`Book` and `Dvd` **are** `LibraryItem`s: they inherit `getId()`, `borrow()`, `isAvailable()` and the rest, and **override** what's different.
+`Task` and `Bug` **are** `WorkItem`s: they inherit `getId()`, `pickUp()`, `isAvailable()` and the rest, and **override** what's different.
 
 > [!plain] In plain English
-> `class Dvd extends LibraryItem` means "a DVD is a kind of library item: it has everything an item has, plus or instead of a few things".
+> `class Bug extends WorkItem` means "a bug is a kind of work item: it has everything an item has, plus or instead of a few things".
 
 ## What a subclass gets
 
@@ -95,22 +95,22 @@ A subclass method with the same signature **replaces** the parent's version for 
 - Call the parent's version with `super.method()`:
 
 ```java
-public class Magazine extends LibraryItem {
-    private final int issue;
+public class Milestone extends WorkItem {
+    private final int sprint;
 
-    public Magazine(String id, String title, int issue) {
+    public Milestone(String id, String title, int sprint) {
         super(id, title);
-        this.issue = issue;
+        this.sprint = sprint;
     }
 
     @Override
-    public void borrow() {
-        throw new UnsupportedOperationException("Magazines are reference-only");
+    public void pickUp() {
+        throw new UnsupportedOperationException("Milestones are not assignable");
     }
 
     @Override
     public String describe() {
-        return super.describe() + " #" + issue;      // reuse the parent's text
+        return super.describe() + " (sprint " + sprint + ")";      // reuse the parent's text
     }
 }
 ```
@@ -123,7 +123,7 @@ Every class extends `java.lang.Object` (directly or indirectly), which provides 
 @Override
 public boolean equals(Object o) {
     if (this == o) return true;
-    if (!(o instanceof LibraryItem other)) return false;
+    if (!(o instanceof WorkItem other)) return false;
     return id.equals(other.id);
 }
 
@@ -145,9 +145,9 @@ public int hashCode() {
 Inheritance models **"is-a"**, and it's the tightest coupling Java has: a subclass depends on its parent's internals. Prefer **composition** ("has-a") when you only want to reuse code:
 
 ```java
-// A Loan isn't a kind of Book. It *has* an item and a member.
-public class Loan {
-    private final LibraryItem item;
+// A Assignment isn't a kind of Task. It *has* an item and a member.
+public class Assignment {
+    private final WorkItem item;
     private final Member member;
     private final LocalDate dueOn;
     // ...
@@ -157,10 +157,10 @@ public class Loan {
 The famous trap is `class Stack extends ArrayList`: the stack inherits `add(index, x)`, `remove(index)` and other methods that let callers break its last-in-first-out rule. A stack that **has** a list and exposes only `push` and `pop` is correct.
 
 > [!mistake] Deep hierarchies
-> `Item → PhysicalItem → PrintedItem → BoundItem → Book → Hardcover` is hard to understand and harder to change. Keep hierarchies shallow, one or two levels, and use interfaces (next lesson) for shared capabilities.
+> `Item → PhysicalItem → PrintedItem → BoundItem → Task → Hardcover` is hard to understand and harder to change. Keep hierarchies shallow, one or two levels, and use interfaces (next lesson) for shared capabilities.
 
 :::quiz
-q: What must a subclass constructor do if the parent has only `LibraryItem(String id, String title)`?
+q: What must a subclass constructor do if the parent has only `WorkItem(String id, String title)`?
 + call `super(id, title)` as its first statement
 - nothing; constructors are inherited
 - call `this(id, title)`
@@ -187,58 +187,58 @@ why: Equal objects must have equal hash codes.
 :::
 
 :::quiz
-q: Which relationship should `Loan` have with `Member`?
-- Loan extends Member
-- Member extends Loan
-+ Loan has a Member field (composition)
+q: Which relationship should `Assignment` have with `Member`?
+- Assignment extends Member
+- Member extends Assignment
++ Assignment has a Member field (composition)
 - none
-why: A loan isn't a kind of member; it refers to one.
+why: An assignment isn't a kind of member; it refers to one.
 :::
 
 :::exercise
 id: ji-dvd
 level: 2
-title: A Dvd subclass
+title: A Bug subclass
 mode: code
 lang: java
-file: Dvd.java
+file: Bug.java
 ---
-Write `Dvd extends LibraryItem` with a `private final int minutes`, a public constructor `Dvd(String id, String title, int minutes)` that calls `super(id, title)`, and overrides (with `@Override`) of `loanDays()` returning `7` and `describe()` returning `getTitle() + " (DVD, " + minutes + " min)"`.
+Write `Bug extends WorkItem` with a `private final int severity`, a public constructor `Bug(String id, String title, int severity)` that calls `super(id, title)`, and overrides (with `@Override`) of `targetDays()` returning `7` and `describe()` returning `getTitle() + " (bug, severity " + severity + ")"`.
 ---starter
-public class Dvd {
+public class Bug {
 }
 ---rule
-public\s+class\s+Dvd\s+extends\s+LibraryItem
-`extends LibraryItem`
+public\s+class\s+Bug\s+extends\s+WorkItem
+`extends WorkItem`
 ---rule
-private\s+final\s+int\s+minutes\s*;
-`private final int minutes;`
+private\s+final\s+int\s+severity\s*;
+`private final int severity;`
 ---rule
-public\s+Dvd\(\s*String\s+id\s*,\s*String\s+title\s*,\s*int\s+minutes\s*\)\s*\{\s*super\(\s*id\s*,\s*title\s*\)\s*;
+public\s+Bug\(\s*String\s+id\s*,\s*String\s+title\s*,\s*int\s+severity\s*\)\s*\{\s*super\(\s*id\s*,\s*title\s*\)\s*;
 Constructor calls `super(id, title)` first
 ---rule
-@Override\s*\n\s*public\s+int\s+loanDays\(\s*\)\s*\{\s*return\s+7\s*;
-`loanDays()` → 7
+@Override\s*\n\s*public\s+int\s+targetDays\(\s*\)\s*\{\s*return\s+7\s*;
+`targetDays()` → 7
 ---rule
-@Override\s*\n\s*public\s+String\s+describe\(\s*\)\s*\{\s*return\s+getTitle\(\s*\)\s*\+\s*" \(DVD, "\s*\+\s*minutes\s*\+\s*" min\)"\s*;
+@Override\s*\n\s*public\s+String\s+describe\(\s*\)\s*\{\s*return\s+getTitle\(\s*\)\s*\+\s*" \(bug, severity "\s*\+\s*severity\s*\+\s*"\)"\s*;
 `describe()`
 ---solution
-public class Dvd extends LibraryItem {
-    private final int minutes;
+public class Bug extends WorkItem {
+    private final int severity;
 
-    public Dvd(String id, String title, int minutes) {
+    public Bug(String id, String title, int severity) {
         super(id, title);
-        this.minutes = minutes;
+        this.severity = severity;
     }
 
     @Override
-    public int loanDays() {
+    public int targetDays() {
         return 7;
     }
 
     @Override
     public String describe() {
-        return getTitle() + " (DVD, " + minutes + " min)";
+        return getTitle() + " (bug, severity " + severity + ")";
     }
 }
 :::
@@ -249,15 +249,15 @@ level: 3
 title: equals and hashCode
 mode: code
 lang: java
-file: LibraryItem.java
+file: WorkItem.java
 ---
-Two `LibraryItem` objects with the same `id` are the same item. Override `equals(Object o)` (return true for `this == o`; false unless `o instanceof LibraryItem other`; otherwise compare `id`s with `equals`) and `hashCode()` (return `id.hashCode()`).
+Two `WorkItem` objects with the same `id` are the same item. Override `equals(Object o)` (return true for `this == o`; false unless `o instanceof WorkItem other`; otherwise compare `id`s with `equals`) and `hashCode()` (return `id.hashCode()`).
 ---starter
-public class LibraryItem {
+public class WorkItem {
     private final String id;
     private final String title;
 
-    public LibraryItem(String id, String title) {
+    public WorkItem(String id, String title) {
         this.id = id;
         this.title = title;
     }
@@ -269,7 +269,7 @@ public class LibraryItem {
 if\s*\(\s*this\s*==\s*o\s*\)\s*return\s+true\s*;
 Same reference → true
 ---rule
-if\s*\(\s*!\s*\(\s*o\s+instanceof\s+LibraryItem\s+other\s*\)\s*\)\s*return\s+false\s*;
+if\s*\(\s*!\s*\(\s*o\s+instanceof\s+WorkItem\s+other\s*\)\s*\)\s*return\s+false\s*;
 Wrong type → false
 ---rule
 return\s+id\.equals\(\s*other\.id\s*\)\s*;
@@ -278,11 +278,11 @@ Compare ids
 @Override\s*\n\s*public\s+int\s+hashCode\(\s*\)\s*\{\s*return\s+id\.hashCode\(\s*\)\s*;
 `hashCode()` from the id
 ---solution
-public class LibraryItem {
+public class WorkItem {
     private final String id;
     private final String title;
 
-    public LibraryItem(String id, String title) {
+    public WorkItem(String id, String title) {
         this.id = id;
         this.title = title;
     }
@@ -290,7 +290,7 @@ public class LibraryItem {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof LibraryItem other)) return false;
+        if (!(o instanceof WorkItem other)) return false;
         return id.equals(other.id);
     }
 
@@ -308,17 +308,17 @@ title: Predict: which describe()?
 mode: answer
 ---
 ```java
-LibraryItem item = new Dvd("D1", "Alien", 117);
-System.out.println(item.describe() + " / " + item.loanDays());
+WorkItem item = new Bug("B1", "Login crash", 2);
+System.out.println(item.describe() + " / " + item.targetDays());
 ```
 
-(using the `Dvd` class from the lesson) What does it print?
+(using the `Bug` class from the lesson) What does it print?
 ---answer
-Alien (DVD, 117 min) / 7
+Login crash (bug, severity 2) / 7
 ---solution
-Alien (DVD, 117 min) / 7
+Login crash (bug, severity 2) / 7
 ---explain
-The variable's type is LibraryItem, but the object is a Dvd, and Java calls the object's overriding methods. That's polymorphism (lesson 6).
+The variable's type is WorkItem, but the object is a Bug, and Java calls the object's overriding methods. That's polymorphism (lesson 6).
 :::
 
 :::exercise
@@ -347,47 +347,48 @@ Each constructor implicitly calls `super()` first, so the parents finish initial
 :::exercise
 id: proj-java-04-magazine
 level: 3
-title: "Project 4: reference-only magazines"
+title: "Project 4: not assignable milestones"
 mode: code
 lang: java
-file: Magazine.java
+file: Milestone.java
+path: java/src/main/java/taskboard/Milestone.java
 ---
-Write `Magazine extends LibraryItem` with `private final int issue`, constructor `Magazine(String id, String title, int issue)` calling `super`, an override of `borrow()` that throws `new UnsupportedOperationException("Magazines are reference-only")`, and an override of `describe()` returning `super.describe() + " #" + issue`.
+Write `Milestone extends WorkItem` with `private final int sprint`, constructor `Milestone(String id, String title, int sprint)` calling `super`, an override of `pickUp()` that throws `new UnsupportedOperationException("Milestones are not assignable")`, and an override of `describe()` returning `super.describe() + " (sprint " + sprint + ")"`.
 ---starter
-public class Magazine {
+public class Milestone {
 }
 ---rule
-public\s+class\s+Magazine\s+extends\s+LibraryItem
-`extends LibraryItem`
+public\s+class\s+Milestone\s+extends\s+WorkItem
+`extends WorkItem`
 ---rule
-private\s+final\s+int\s+issue\s*;
-`private final int issue;`
+private\s+final\s+int\s+sprint\s*;
+`private final int sprint;`
 ---rule
-Magazine\(\s*String\s+id\s*,\s*String\s+title\s*,\s*int\s+issue\s*\)\s*\{\s*super\(\s*id\s*,\s*title\s*\)\s*;
+Milestone\(\s*String\s+id\s*,\s*String\s+title\s*,\s*int\s+sprint\s*\)\s*\{\s*super\(\s*id\s*,\s*title\s*\)\s*;
 Constructor with `super`
 ---rule
-@Override\s*\n\s*public\s+void\s+borrow\(\s*\)\s*\{\s*throw\s+new\s+UnsupportedOperationException\(\s*"Magazines are reference-only"\s*\)\s*;
-`borrow()` is refused
+@Override\s*\n\s*public\s+void\s+pickUp\(\s*\)\s*\{\s*throw\s+new\s+UnsupportedOperationException\(\s*"Milestones are not assignable"\s*\)\s*;
+`pickUp()` is refused
 ---rule
-@Override\s*\n\s*public\s+String\s+describe\(\s*\)\s*\{\s*return\s+super\.describe\(\s*\)\s*\+\s*" #"\s*\+\s*issue\s*;
+@Override\s*\n\s*public\s+String\s+describe\(\s*\)\s*\{\s*return\s+super\.describe\(\s*\)\s*\+\s*" \(sprint "\s*\+\s*sprint\s*\+\s*"\)"\s*;
 `describe()` reuses `super.describe()`
 ---solution
-public class Magazine extends LibraryItem {
-    private final int issue;
+public class Milestone extends WorkItem {
+    private final int sprint;
 
-    public Magazine(String id, String title, int issue) {
+    public Milestone(String id, String title, int sprint) {
         super(id, title);
-        this.issue = issue;
+        this.sprint = sprint;
     }
 
     @Override
-    public void borrow() {
-        throw new UnsupportedOperationException("Magazines are reference-only");
+    public void pickUp() {
+        throw new UnsupportedOperationException("Milestones are not assignable");
     }
 
     @Override
     public String describe() {
-        return super.describe() + " #" + issue;
+        return super.describe() + " (sprint " + sprint + ")";
     }
 }
 :::
@@ -395,19 +396,20 @@ public class Magazine extends LibraryItem {
 :::exercise
 id: proj-java-04-loan
 level: 3
-title: "Project 4b: Loan uses composition"
+title: "Project 4b: Assignment uses composition"
 mode: code
 lang: java
-file: Loan.java
+file: Assignment.java
+path: java/src/main/java/taskboard/Assignment.java
 ---
-Write an immutable `Loan` class (not a subclass of anything) with `private final` fields `LibraryItem item`, `Member member` and `LocalDate dueOn`, a public constructor taking all three, getters, and `public boolean isOverdue(LocalDate today)` returning `today.isAfter(dueOn)`.
+Write an immutable `Assignment` class (not a subclass of anything) with `private final` fields `WorkItem item`, `Member member` and `LocalDate dueOn`, a public constructor taking all three, getters, and `public boolean isOverdue(LocalDate today)` returning `today.isAfter(dueOn)`.
 ---starter
 import java.time.LocalDate;
 ---rule
-public\s+(final\s+)?class\s+Loan\s*\{
+public\s+(final\s+)?class\s+Assignment\s*\{
 A plain class, no `extends`
 ---rule
-private\s+final\s+LibraryItem\s+item\s*;
+private\s+final\s+WorkItem\s+item\s*;
 Has an item
 ---rule
 private\s+final\s+Member\s+member\s*;
@@ -416,10 +418,10 @@ Has a member
 private\s+final\s+LocalDate\s+dueOn\s*;
 Has a due date
 ---rule
-public\s+Loan\(\s*LibraryItem\s+item\s*,\s*Member\s+member\s*,\s*LocalDate\s+dueOn\s*\)
+public\s+Assignment\(\s*WorkItem\s+item\s*,\s*Member\s+member\s*,\s*LocalDate\s+dueOn\s*\)
 The constructor
 ---rule
-public\s+LibraryItem\s+getItem\(\s*\)[\s\S]*public\s+Member\s+getMember\(\s*\)[\s\S]*public\s+LocalDate\s+getDueOn\(\s*\)
+public\s+WorkItem\s+getItem\(\s*\)[\s\S]*public\s+Member\s+getMember\(\s*\)[\s\S]*public\s+LocalDate\s+getDueOn\(\s*\)
 Getters
 ---rule
 public\s+boolean\s+isOverdue\(\s*LocalDate\s+today\s*\)\s*\{\s*return\s+today\.isAfter\(\s*dueOn\s*\)\s*;
@@ -427,18 +429,18 @@ public\s+boolean\s+isOverdue\(\s*LocalDate\s+today\s*\)\s*\{\s*return\s+today\.i
 ---solution
 import java.time.LocalDate;
 
-public final class Loan {
-    private final LibraryItem item;
+public final class Assignment {
+    private final WorkItem item;
     private final Member member;
     private final LocalDate dueOn;
 
-    public Loan(LibraryItem item, Member member, LocalDate dueOn) {
+    public Assignment(WorkItem item, Member member, LocalDate dueOn) {
         this.item = item;
         this.member = member;
         this.dueOn = dueOn;
     }
 
-    public LibraryItem getItem() { return item; }
+    public WorkItem getItem() { return item; }
     public Member getMember() { return member; }
     public LocalDate getDueOn() { return dueOn; }
 

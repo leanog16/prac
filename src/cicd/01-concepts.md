@@ -42,6 +42,28 @@ The output of the build stage is an **artifact**: a Docker image, a jar, a wheel
 
 Never rebuild for each environment. A rebuild can pick up a different dependency version or base image, so what you tested isn't what you ship. Environment differences belong in **configuration** (environment variables, secrets), not in different builds.
 
+## Git in two minutes
+
+Pipelines react to what happens in a **Git** repository, so a handful of Git terms appear everywhere in this track:
+
+| Term | Means |
+|---|---|
+| **repository** (repo) | a project's files plus their full history; on GitHub, `acme/taskboard` is the repo `taskboard` owned by `acme` |
+| **commit** | a saved snapshot of the files with a message; identified by a **SHA**, a 40-character hash like `3f2c1ab9…` (usually shortened to 7 characters) |
+| **branch** | a movable name pointing at the latest commit of a line of work; `main` is the shared, deployable one |
+| **push** | upload your new commits to GitHub (`git push`); this is the event that starts most CI runs |
+| **pull request** (PR) | a request to merge a branch into `main`, where teammates review the change and CI reports its checks |
+| **merge** | combine a branch's commits into another branch |
+| **tag** | a fixed name for one commit, typically a release version like `v2.5.0` |
+| **fork** | someone else's copy of a repository, from which they can open pull requests |
+
+```bash
+git switch -c fix-login        # start a branch
+git commit -am "Fix login"     # save a snapshot of the changed files
+git push -u origin fix-login   # upload it; then open a pull request on GitHub
+git tag v1.4.0 && git push --tags   # mark a release
+```
+
 ## Branching: trunk-based development
 
 CI works best when branches are short-lived:

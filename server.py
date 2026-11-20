@@ -90,7 +90,7 @@ def get_account_data(request: Request):
 @app.put('/api/data/{key}')
 def save_account_data(key: str, data: AccountData, request: Request):
     check_origin(request)
-    if key not in ('progress', 'drafts'):
+    if key not in ('progress', 'drafts', 'project'):
         raise HTTPException(404, 'Not found.')
     value = json.dumps(data.value, ensure_ascii=False)
     if len(value.encode('utf-8')) > 2_000_000:

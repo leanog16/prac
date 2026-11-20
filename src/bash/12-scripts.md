@@ -194,6 +194,7 @@ echo "$log: $errors errors"
 
 Each part has a job:
 
+- **`usage() { … }`** defines a **function**: a named group of commands. Writing `usage` later runs them. Lesson 14 covers functions; here it simply avoids repeating the same two lines.
 - **Shebang** `#!/bin/bash` picks the interpreter.
 - **`set -euo pipefail`** catches unset variables and many command or pipeline failures; `-e` has exceptions in conditions and `&&`/`||` lists, so handle expected errors explicitly.
 - **Usage errors and missing files go to stderr** (`>&2`), so they don't pollute output that's piped somewhere.
@@ -588,6 +589,7 @@ level: 3
 title: "Project 12: logwatch.sh v1"
 mode: script
 file: logwatch.sh
+path: ops/logwatch.sh
 ---
 Write `logwatch.sh`:
 
@@ -621,6 +623,7 @@ id: proj-bash-12-severity
 level: 3
 title: "Project 12b: severity verdict"
 mode: script
+path: ops/scripts/12-severity.sh
 ---
 Write a script that takes a log file and prints `OK` when it has no `ERROR` lines, `WARNING` when it has 1–3, and `CRITICAL` when it has more than 3. Use `case` or `if`/`elif`.
 ---test

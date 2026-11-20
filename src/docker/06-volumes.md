@@ -295,6 +295,7 @@ id: proj-dk-06-pgdata
 level: 2
 title: "Project 6: persistent tasks"
 compare: verify
+path: ops/docker/06-pgdata.sh
 ---
 Start `taskboard-db` (postgres:16, password `devpass`) with its data in a named volume `taskboard-pgdata`. Then simulate an upgrade: **remove** the container and start a new `taskboard-db` with the same volume.
 ---verify
@@ -312,6 +313,7 @@ level: 3
 title: "Project 6b: live-edit the API"
 cwd: /home/student/taskboard
 setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile && docker build -q -t taskboard:dev . >/dev/null 2>&1
+path: ops/docker/06-dev-mount.sh
 ---
 `taskboard:dev` is built. Run it in the background as `api-dev` on port 8000 with the current directory **bind-mounted** at `/app`, overriding the command to `uvicorn main:app --host 0.0.0.0 --port 8000 --reload` so code changes are picked up. Then change the health response on the host with `sed -i 's/"ok"/"live"/' main.py`, and curl `/health` to see the change without rebuilding.
 ---solution

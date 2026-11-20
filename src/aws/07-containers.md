@@ -37,6 +37,37 @@ docker push 123456789012.dkr.ecr.eu-west-1.amazonaws.com/shop-api:1.4.2
 - **Scan on push** (or Inspector enhanced scanning) reports CVEs.
 - **Lifecycle policies** delete old images automatically, e.g. keep the last 30 tagged images and expire untagged ones after 7 days. Otherwise storage costs grow forever.
 
+A lifecycle policy is JSON: a list of `rules`, applied in `rulePriority` order (lowest first). Each rule **selects** images and says what to do with them:
+
+```json title=ecr-lifecycle.json
+{
+  "rules": [
+    {
+      "rulePriority": 1,
+      "description": "keep the last 30 tagged images",
+      "selection": {
+        "tagStatus": "tagged",
+        "tagPrefixList": ["v"],
+        "countType": "imageCountMoreThan",
+        "countNumber": 30
+      },
+      "action": { "type": "expire" }
+    }
+  ]
+}
+```
+
+| Selection key | Means |
+|---|---|
+| `tagStatus` | `tagged`, `untagged` or `any` |
+| `countType` | `imageCountMoreThan` (keep the newest N) or `sinceImagePushed` (older than a time) |
+| `countUnit` | with `sinceImagePushed`: `days` |
+| `countNumber` | the N images, or the number of days |
+
+```bash
+aws ecr put-lifecycle-policy --repository-name shop-api --lifecycle-policy-text file://ecr-lifecycle.json
+```
+
 ## ECS concepts
 
 | Concept | Is |
@@ -461,6 +492,7 @@ title: "Project 7: Taskboard's task definition"
 mode: code
 lang: json
 file: taskboard-task.json
+path: infra/aws/taskboard-task.json
 ---
 Complete the task definition: Fargate (`requiresCompatibilities` `["FARGATE"]`, `networkMode` `awsvpc`), task `cpu` `"512"` and `memory` `"1024"`, `runtimePlatform` with `cpuArchitecture` `ARM64`; container `api` with port **8000**, environment `LOG_LEVEL=info`, secrets `DATABASE_PASSWORD` from `arn:aws:secretsmanager:eu-west-1:222222222222:secret:taskboard/prod/db` and `SECRET_KEY` from `arn:aws:secretsmanager:eu-west-1:222222222222:secret:taskboard/prod/app`, and `awslogs` logging to `/ecs/taskboard-api`.
 ---starter
@@ -547,6 +579,7 @@ title: "Project 7b: the service"
 mode: code
 lang: bash
 file: create-service.sh
+path: infra/aws/create-service.sh
 ---
 Create the service `taskboard-api` in cluster `taskboard` from `taskboard-api:1` with **2** tasks on `FARGATE`, in subnets `subnet-0priv-a` and `subnet-0priv-b` with security group `sg-0api` and **no public IP**, attached to target group `arn:aws:elasticloadbalancing:eu-west-1:222222222222:targetgroup/taskboard/abc123` (container `api`, port 8000), with the deployment circuit breaker **enabled with rollback**.
 ---starter

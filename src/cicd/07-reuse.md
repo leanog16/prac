@@ -580,6 +580,7 @@ title: "Project 7: the shared template"
 mode: code
 lang: yaml
 file: .github/workflows/python-service.yml
+path: .github/workflows/python-service.yml
 ---
 Write the reusable workflow: triggered by `workflow_call` with a `string` input `python-version` (default `"3.12"`); one job `test` (ubuntu-latest) that checks out, sets up Python with `${{ inputs.python-version }}` and pip cache, installs `requirements.txt`, and runs `pytest -q`.
 ---starter
@@ -632,6 +633,7 @@ title: "Project 7b: Taskboard calls the template"
 mode: code
 lang: yaml
 file: .github/workflows/ci.yml
+path: .github/workflows/ci.yml
 ---
 Replace Taskboard's CI with a call to `acme/ci-templates/.github/workflows/python-service.yml@v2` (job `ci`, input `python-version: "3.13"`), plus a top-level concurrency group `ci-${{ github.ref }}` that cancels superseded runs.
 ---starter

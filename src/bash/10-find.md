@@ -28,6 +28,9 @@ find projects
 | `-maxdepth N`, `-mindepth N` | limit how deep to go |
 | `! test`, `-not test` | negate |
 | `test1 -o test2` | or (tests are ANDed by default) |
+| `\( … \)` | group tests, like parentheses in math; the backslashes stop bash from treating `(` `)` specially |
+
+Mixing "or" with other tests needs grouping, because "and" binds tighter: `find . \( -name '*.csv' -o -name '*.tsv' \) -size +1k` means "(csv or tsv) and bigger than 1 KB".
 
 ```bash run
 find . -name '*.csv'
@@ -360,6 +363,7 @@ ls -l scripts | awk 'NR > 1 && substr($1, 4, 1) == "x" { print $NF }' | sort
 id: proj-bash-10-find-logs
 level: 2
 title: "Project 10: every log over 1 KB"
+path: ops/commands/10-find-logs.sh
 ---
 From your home directory, find all regular files whose names end in `.log` and that are **larger than 1 KB**, and print their line counts with a single `-exec … +`.
 ---solution
@@ -372,6 +376,7 @@ level: 2
 title: "Project 10b: install the script"
 compare: verify
 setup: mkdir -p logwatch/bin && printf '#!/bin/bash\necho "logwatch ready"\n' > logwatch/bin/logwatch.sh
+path: ops/commands/10-chmod.sh
 ---
 `~/logwatch/bin/logwatch.sh` exists but isn't executable. Give it permissions `rwxr-xr-x` using **numeric** mode, then run it.
 ---verify

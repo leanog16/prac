@@ -4,8 +4,8 @@ title: Configuration, profiles & operations
 summary: application.properties vs YAML, @Value and its pitfalls, type-safe @ConfigurationProperties records with validation, profiles and profile-specific files, secrets from the environment, logging levels, Actuator probes and metrics, caching with @Cacheable, scheduled jobs and outbound HTTP with RestClient.
 minutes: 40
 ---
-> [!project] Bookshelf, step 7: settings, not constants
-> The loan period (14 days) and the fine per overdue day are hard-coded. The library wants to change them without a release, and run H2 locally but PostgreSQL in production. Typed properties and profiles do both.
+> [!project] Taskboard, step 7: settings, not constants
+> The assignment period (14 days) and the credit per overdue day are hard-coded. The team wants to change them without a release, and run H2 locally but PostgreSQL in production. Typed properties and profiles do both.
 
 ## properties or YAML
 
@@ -82,6 +82,8 @@ src/main/resources/
 
 Activate profiles with `SPRING_PROFILES_ACTIVE=prod`, `--spring.profiles.active=prod`, or in tests with `@ActiveProfiles("test")`.
 
+That first form works because of **relaxed binding**: any property can be set from an environment variable by writing it in uppercase and replacing dots (and dashes) with underscores. `spring.profiles.active` ← `SPRING_PROFILES_ACTIVE`, `spring.datasource.password` ← `SPRING_DATASOURCE_PASSWORD`, `server.port` ← `SERVER_PORT`.
+
 Beans can be profile-specific too:
 
 ```java
@@ -144,7 +146,7 @@ management.endpoint.health.show-details=when-authorized
 public class ShopApplication { ... }
 
 @Service
-public class CatalogService {
+public class BoardService {
     @Cacheable("products")
     public ProductResponse get(long id) { ... }        // first call runs; later calls with the same id hit the cache
 
@@ -194,32 +196,32 @@ Configure timeouts on the underlying request factory, and wrap flaky calls with 
 
 ```java
 @Validated
-@ConfigurationProperties(prefix = "bookshelf.loans")
-public record LoanProperties(
+@ConfigurationProperties(prefix = "taskboard.assignments")
+public record AssignmentProperties(
         @Min(1) @Max(90) int days,
         @Min(1) int maxPerMember,
-        @NotNull BigDecimal finePerDay
+        @NotNull BigDecimal creditPerDay
 ) {}
 ```
 
 ```yaml title=application.yml
-bookshelf:
-  loans:
+taskboard:
+  assignments:
     days: 14
     max-per-member: 5
-    fine-per-day: 0.25
+    credit-per-day: 0.25
 ```
 
 ```yaml title=application-dev.yml
 spring:
   datasource:
-    url: jdbc:h2:mem:bookshelf
+    url: jdbc:h2:mem:taskboard
   jpa:
     hibernate:
       ddl-auto: create-drop
 logging:
   level:
-    org.library.bookshelf: DEBUG
+    dev.taskboard: DEBUG
 ```
 
 ```yaml title=application-prod.yml
@@ -233,7 +235,7 @@ spring:
       ddl-auto: validate
 ```
 
-`StandardLoanPolicy` from step 2 now reads `LoanProperties` instead of returning `14`. The summer reading program becomes `BOOKSHELF_LOANS_DAYS=28` in the environment, with no code change; restart the app (or use an explicitly configured refresh mechanism) to pick up the new environment value. And if someone sets `days: 0`, the app **refuses to start** and names the bad property, instead of creating loans due today.
+`StandardAssignmentPolicy` from step 2 now reads `AssignmentProperties` instead of returning `14`. The holiday period becomes `TASKBOARD_ASSIGNMENTS_DAYS=28` in the environment, with no code change; restart the app (or use an explicitly configured refresh mechanism) to pick up the new environment value. And if someone sets `days: 0`, the app **refuses to start** and names the bad property, instead of creating assignments due today.
 
 > [!plain] In plain English
 > Code says **what** to do; configuration says **with which values**. Values that differ between environments or change over time belong in configuration.
@@ -499,7 +501,7 @@ level: 3
 title: Cache and evict
 mode: code
 lang: java
-file: CatalogService.java
+file: BoardService.java
 ---
 Cache `get(long id)` in the cache `"products"`, and make `update(long id, String name)` evict that id's entry from the same cache using `key = "#id"`.
 ---starter
@@ -510,7 +512,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 @Service
-public class CatalogService {
+public class BoardService {
 
     public Product get(long id) {
         return load(id);
@@ -534,7 +536,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 @Service
-public class CatalogService {
+public class BoardService {
 
     @Cacheable("products")
     public Product get(long id) {
@@ -603,14 +605,15 @@ APP_MAIL_FROM
 :::exercise
 id: proj-sp-07-props
 level: 3
-title: "Project 7: LoanProperties"
+title: "Project 7: AssignmentProperties"
 mode: code
 lang: java
-file: LoanProperties.java
+file: AssignmentProperties.java
+path: spring/src/main/java/dev/taskboard/AssignmentProperties.java
 ---
-Write a validated `@ConfigurationProperties` record `LoanProperties` with prefix `bookshelf.loans` and components `@Min(1) @Max(90) int days`, `@Min(1) int maxPerMember` and `@NotNull BigDecimal finePerDay`.
+Write a validated `@ConfigurationProperties` record `AssignmentProperties` with prefix `taskboard.assignments` and components `@Min(1) @Max(90) int days`, `@Min(1) int maxPerMember` and `@NotNull BigDecimal creditPerDay`.
 ---starter
-package org.library.bookshelf;
+package dev.taskboard;
 
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
@@ -620,10 +623,10 @@ import org.springframework.validation.annotation.Validated;
 @Validated
 `@Validated`
 ---rule
-@ConfigurationProperties\(\s*(prefix\s*=\s*)?"bookshelf\.loans"\s*\)
-Prefix `bookshelf.loans`
+@ConfigurationProperties\(\s*(prefix\s*=\s*)?"taskboard\.assignments"\s*\)
+Prefix `taskboard.assignments`
 ---rule
-public\s+record\s+LoanProperties\(
+public\s+record\s+AssignmentProperties\(
 A record
 ---rule
 @Min\(\s*1\s*\)\s+@Max\(\s*90\s*\)\s+int\s+days
@@ -632,10 +635,10 @@ A record
 @Min\(\s*1\s*\)\s+int\s+maxPerMember
 `maxPerMember` ≥ 1
 ---rule
-@NotNull\s+BigDecimal\s+finePerDay
-`finePerDay` required
+@NotNull\s+BigDecimal\s+creditPerDay
+`creditPerDay` required
 ---solution
-package org.library.bookshelf;
+package dev.taskboard;
 
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
@@ -643,11 +646,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
 @Validated
-@ConfigurationProperties(prefix = "bookshelf.loans")
-public record LoanProperties(
+@ConfigurationProperties(prefix = "taskboard.assignments")
+public record AssignmentProperties(
         @Min(1) @Max(90) int days,
         @Min(1) int maxPerMember,
-        @NotNull BigDecimal finePerDay
+        @NotNull BigDecimal creditPerDay
 ) {}
 :::
 
@@ -658,6 +661,7 @@ title: "Project 7b: the production profile"
 mode: code
 lang: yaml
 file: application-prod.yml
+path: spring/src/main/resources/application-prod.yml
 ---
 Write `application-prod.yml`: datasource `url`, `username` and `password` from the environment variables `DATABASE_URL`, `DATABASE_USER` and `DATABASE_PASSWORD` (`${...}` placeholders), and Hibernate `ddl-auto: validate`.
 ---starter
@@ -691,12 +695,12 @@ spring:
 :::exercise
 id: proj-sp-07-env
 level: 2
-title: "Project 7c: summer reading"
+title: "Project 7c: the holiday period"
 mode: answer
 ---
-For the summer reading program, the library wants `bookshelf.loans.days` set to 28 in production **without** changing any file. Write the environment variable assignment (e.g. `NAME=value`).
+For the holiday period, the team wants `taskboard.assignments.days` set to 28 in production **without** changing any file. Write the environment variable assignment (e.g. `NAME=value`).
 ---answer
-BOOKSHELF_LOANS_DAYS=28
+TASKBOARD_ASSIGNMENTS_DAYS=28
 ---solution
-BOOKSHELF_LOANS_DAYS=28
+TASKBOARD_ASSIGNMENTS_DAYS=28
 :::

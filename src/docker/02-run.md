@@ -32,6 +32,8 @@ docker ps
 curl -s localhost:8080 | head -4
 ```
 
+`curl URL` fetches a URL and prints the response body, which makes it the quickest way to check a web server from the command line; `-s` (silent) hides its progress meter. Here it shows the start of nginx's welcome page.
+
 The `PORTS` column reads `0.0.0.0:8080->80/tcp`: **host** port 8080 forwards to **container** port 80. Without `-p`, the container's port is only reachable from other containers, not from your machine.
 
 > [!tip] Reading -p
@@ -114,7 +116,9 @@ Environment variables are how containers are configured: database URLs, ports, f
 docker run --rm -e GREETING=Howdy alpine sh -c 'echo "$GREETING from $HOSTNAME"'
 ```
 
-Single quotes matter there: they stop **your** shell from expanding `$GREETING` before Docker ever sees it, so the shell *inside the container* does the expansion.
+`sh -c '…'` starts a shell inside the container and runs the quoted text as a command line, which is how you use shell features (variables, `&&`, pipes) in a one-off container command. Single quotes matter there: they stop **your** shell from expanding `$GREETING` before Docker ever sees it, so the shell *inside the container* does the expansion.
+
+Every process ends with an **exit code**: 0 means success, anything else means failure. `sh -c 'exit 3'` ends with code 3 on purpose, which is handy for seeing how Docker reports a failed container (`Exited (3)`).
 
 ## Worked example: anatomy of a real `docker run`
 
@@ -387,6 +391,7 @@ id: proj-dk-02-db
 level: 2
 title: "Project 2: Taskboard's database"
 compare: verify
+path: ops/docker/02-db.sh
 ---
 Start PostgreSQL 16 in the background as `taskboard-db`, with user `taskboard`, password `devpass`, database `taskboard`, published on host port **5432**.
 ---verify
@@ -402,6 +407,7 @@ level: 2
 title: "Project 2b: the database that exits"
 compare: verify
 setup: docker run -d --name taskboard-db postgres:16 >/dev/null 2>&1
+path: ops/docker/02-fix.sh
 ---
 Someone started `taskboard-db` without a password, and it exited. Read its logs to confirm, remove it, and start it again correctly in the background with `POSTGRES_PASSWORD=devpass`.
 ---hint

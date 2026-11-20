@@ -193,7 +193,7 @@ A test suite that only uses SQLite passes even when:
 - a migration fails on PostgreSQL's stricter types;
 - a unique constraint behaves differently with NULLs.
 
-Running the same tests against a `postgres:16` service container catches all three, for about 10 extra seconds of CI time. Taskboard reads `DATABASE_URL` from settings (FastAPI lesson 13), so pointing the tests at PostgreSQL is just an environment variable.
+Running the same tests against a `postgres:16` service container catches all three, for about 10 extra seconds of CI time. Taskboard reads `DATABASE_URL` from settings (FastAPI lesson 14), so pointing the tests at PostgreSQL is just an environment variable.
 
 ## Worked example: caching that actually hits
 
@@ -649,6 +649,7 @@ title: "Project 3: matrix + PostgreSQL"
 mode: code
 lang: yaml
 file: .github/workflows/ci.yml
+path: .github/workflows/ci.yml
 ---
 Upgrade the `test` job: a matrix `python: ["3.12", "3.13"]` with `fail-fast: false`; setup-python uses `${{ matrix.python }}` with `cache: pip`; a service `postgres` (`postgres:16`, env `POSTGRES_PASSWORD: test`, port `5432:5432`, health check `--health-cmd "pg_isready -U postgres"`); and job-level env `DATABASE_URL: postgresql://postgres:test@localhost:5432/postgres`.
 ---starter
@@ -733,6 +734,7 @@ title: "Project 3b: keep the test report"
 mode: code
 lang: yaml
 file: .github/workflows/ci.yml
+path: .github/workflows/ci.yml
 ---
 Make pytest write a JUnit report (`pytest -q --junitxml=reports/junit.xml`), then upload the `reports/` folder as an artifact named `test-report` with `actions/upload-artifact@v4`, **even when tests fail**. Also limit the job to **15** minutes.
 ---starter

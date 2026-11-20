@@ -32,7 +32,9 @@
     error.hidden = true;
     password.value = confirm.value = '';
   }
-  function setUser(name) { user = name; account.textContent = name ? `${name} · Sign out` : 'Sign in'; }
+  function setUser(name) { user = name; window.pracUser = name || null; account.innerHTML = ''; if (name) { const n = document.createElement('span'); n.textContent = name; const a = document.createElement('span'); a.className = 'acct-action'; a.textContent = ' · Sign out'; account.append(n, a); account.setAttribute('aria-label', `Sign out (${name})`); account.title = 'Sign out'; } else { account.textContent = 'Sign in'; account.removeAttribute('aria-label'); account.removeAttribute('title'); } }
+  // Lets the app open the dialog, e.g. from a project step's sign-in prompt.
+  window.pracSignIn = next => { form.reset(); setMode(next === 'signup' ? 'signup' : 'signin'); dialog.showModal(); username.focus(); };
   async function api(path, options) {
     const response = await fetch('/api/' + path, options);
     const data = await response.json();
@@ -44,7 +46,7 @@
     if (user) {
       try { await new Promise(resolve => setTimeout(resolve, 500)); await pending; await api('signout', post({})); location.reload(); }
       catch (_) { alert('Could not sign out. Please try again.'); }
-    } else { setMode('signin'); form.reset(); dialog.showModal(); username.focus(); }
+    } else window.pracSignIn('signin');
   });
   $('auth-cancel').addEventListener('click', () => dialog.close());
   $('auth-switch').addEventListener('click', () => setMode(mode === 'signin' ? 'signup' : 'signin'));
@@ -82,7 +84,7 @@
             if (saved) { data[key] = JSON.parse(saved); await saveRemote(key, data[key]); }
           }
         }
-        for (const key of ['progress', 'drafts']) {
+        for (const key of ['progress', 'drafts', 'project']) {
           if (data[key] !== undefined) localStorage.setItem(window.pracStoragePrefix + key, JSON.stringify(data[key]));
           else localStorage.removeItem(window.pracStoragePrefix + key);
         }

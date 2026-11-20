@@ -15,7 +15,7 @@ For each instruction, BuildKit computes a cache key from:
 2. the **instruction text** itself, and
 3. for `COPY`/`ADD`, a **checksum of the files** being copied.
 
-If a matching layer exists, it's reused (`CACHED`). The moment one step misses, **every step after it rebuilds**, because their parent changed.
+If a matching layer exists, it's reused (`CACHED`). The moment one step misses, **every step after it rebuilds**, because their parent changed. To ignore the cache completely (for example, to pick up a newer version of a package that a cached `RUN` installed), build with `docker build --no-cache …`.
 
 ```bash run
 cd fastapi-app
@@ -128,7 +128,7 @@ docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}'
 The final image contains a JRE and one jar: no Maven, no JDK, no source, no 80 MB `~/.m2` cache. Only the **last** stage (or `--target NAME`) becomes the image.
 
 > [!tip] Inspect what you built
-> `docker history IMAGE` lists each layer with its size and the instruction that created it: the fastest way to find what's bloating an image.
+> `docker history IMAGE` lists each layer with its size and the instruction that created it: the fastest way to find what's bloating an image. Like `docker ps`, it takes `--format`: `docker history --format '{{.CreatedBy}} {{.Size}}' IMAGE` prints just the instruction and size of each layer, newest first.
 
 ## Worked example: proving the secret leak, then fixing it
 
@@ -415,6 +415,7 @@ mode: file
 file: .dockerignore
 cwd: /home/student/taskboard
 setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile
+path: .dockerignore
 ---run
 docker build -q -t taskboard . >/dev/null
 docker run --rm taskboard ls -a /app
@@ -433,6 +434,7 @@ title: "Project 5b: fix the cache order"
 mode: code
 lang: dockerfile
 file: Dockerfile
+path: Dockerfile
 ---
 Every edit to `main.py` reinstalls all dependencies. Reorder the Dockerfile so dependencies are installed **before** the source code is copied.
 ---starter

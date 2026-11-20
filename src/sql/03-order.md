@@ -4,8 +4,8 @@ title: Sorting & limiting
 summary: ORDER BY with multiple keys and directions, where NULLs land, LIMIT/OFFSET pagination, and top-N queries.
 minutes: 20
 ---
-> [!project] Desk & Co, step 3: the price list
-> Reports need a predictable order. In this lesson you'll sort Maya's catalog and produce her "premium picks" shortlist.
+> [!project] Taskboard, step 3: what's been waiting longest?
+> Reports need a predictable order. In this lesson you'll list the oldest unfinished work and sort the open tasks the way the board shows them.
 
 ## ORDER BY
 
@@ -261,21 +261,23 @@ SELECT DISTINCT salary FROM employees ORDER BY salary DESC LIMIT 1 OFFSET 1;
 :::exercise
 id: proj-sql-03-premium
 level: 2
-title: "Project 3: premium picks"
+title: "Project 3: the oldest open tasks"
 ordered: true
+path: db/reports/03-oldest-open.sql
 ---
-Show the `name`, `category` and `price` of the **5 most expensive** products, most expensive first. Break price ties alphabetically by name.
+Show the `title`, `created_on` and `status` of the **5 oldest** tasks that are not `done`, oldest first. Break ties alphabetically by title.
 ---solution
-SELECT name, category, price FROM products ORDER BY price DESC, name LIMIT 5;
+SELECT title, created_on, status FROM tasks WHERE status <> 'done' ORDER BY created_on, title LIMIT 5;
 :::
 
 :::exercise
 id: proj-sql-03-catalog-order
 level: 2
-title: "Project 3b: the printed catalog"
+title: "Project 3b: the board view"
 ordered: true
+path: db/reports/03-board-view.sql
 ---
-Sort the whole catalog (`name`, `category`, `price`) by category A→Z, then by price **low to high** within each category, then by name.
+List every task that is not `done` as `board_id`, `priority`, `title`, sorted by board (lowest id first), then priority (1 first), then title.
 ---solution
-SELECT name, category, price FROM products ORDER BY category, price, name;
+SELECT board_id, priority, title FROM tasks WHERE status <> 'done' ORDER BY board_id, priority, title;
 :::

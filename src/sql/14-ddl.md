@@ -4,8 +4,8 @@ title: Tables, constraints & indexes
 summary: CREATE TABLE with types and constraints (PRIMARY KEY, NOT NULL, UNIQUE, CHECK, DEFAULT, FOREIGN KEY), ALTER and DROP, indexes and when they help, and views.
 minutes: 35
 ---
-> [!project] Desk & Co, step 14: product reviews
-> Maya wants customers to leave reviews. That's a new table, and getting its constraints right means bad data can't get in, no matter which app writes to it.
+> [!project] Taskboard, step 14: time tracking
+> The team wants to log time against tasks. That's a new table, and getting its constraints right means bad data can't get in, no matter which app writes to it. You'll also save the open-task query as a view the whole report can reuse.
 
 ## Data Definition Language
 
@@ -378,20 +378,20 @@ title: Design a lending library
 ---
 Create three tables enforcing these rules:
 
-- `members`: `member_id` INTEGER PRIMARY KEY, `name` TEXT NOT NULL, `email` TEXT NOT NULL UNIQUE
+- `patrons`: `patron_id` INTEGER PRIMARY KEY, `name` TEXT NOT NULL, `email` TEXT NOT NULL UNIQUE
 - `items`: `item_id` INTEGER PRIMARY KEY, `title` TEXT NOT NULL, `kind` TEXT NOT NULL limited to `'book'`, `'dvd'`, `'magazine'`
-- `loans`: `loan_id` INTEGER PRIMARY KEY, `member_id` and `item_id` (both required foreign keys), `loaned_on` TEXT NOT NULL, `due_on` TEXT NOT NULL, `returned_on` TEXT (nullable), with a CHECK that `due_on` is **after** `loaned_on`.
+- `loans`: `loan_id` INTEGER PRIMARY KEY, `patron_id` and `item_id` (both required foreign keys), `loaned_on` TEXT NOT NULL, `due_on` TEXT NOT NULL, `returned_on` TEXT (nullable), with a CHECK that `due_on` is **after** `loaned_on`.
 
 The grader inserts valid and invalid rows using `INSERT OR IGNORE` and counts what was accepted.
 ---check
-INSERT OR IGNORE INTO members (name, email) VALUES ('Ana', 'ana@x.example'), ('Bo', 'ana@x.example'), ('Cy', 'cy@x.example'), (NULL, 'z@x.example');
+INSERT OR IGNORE INTO patrons (name, email) VALUES ('Ana', 'ana@x.example'), ('Bo', 'ana@x.example'), ('Cy', 'cy@x.example'), (NULL, 'z@x.example');
 INSERT OR IGNORE INTO items (title, kind) VALUES ('Dune', 'book'), ('Alien', 'dvd'), ('Wired', 'magazine'), ('Pong', 'game');
-INSERT OR IGNORE INTO loans (member_id, item_id, loaned_on, due_on) VALUES
+INSERT OR IGNORE INTO loans (patron_id, item_id, loaned_on, due_on) VALUES
   (1, 1, '2026-01-01', '2026-01-15'), (1, 2, '2026-01-10', '2026-01-05'), (2, 3, '2026-02-01', '2026-02-08'), (NULL, 1, '2026-03-01', '2026-03-10');
-SELECT (SELECT COUNT(*) FROM members) AS members, (SELECT COUNT(*) FROM items) AS items, (SELECT COUNT(*) FROM loans) AS loans;
+SELECT (SELECT COUNT(*) FROM patrons) AS patrons, (SELECT COUNT(*) FROM items) AS items, (SELECT COUNT(*) FROM loans) AS loans;
 ---solution
-CREATE TABLE members (
-  member_id INTEGER PRIMARY KEY,
+CREATE TABLE patrons (
+  patron_id INTEGER PRIMARY KEY,
   name      TEXT NOT NULL,
   email     TEXT NOT NULL UNIQUE
 );
@@ -402,7 +402,7 @@ CREATE TABLE items (
 );
 CREATE TABLE loans (
   loan_id     INTEGER PRIMARY KEY,
-  member_id   INTEGER NOT NULL REFERENCES members(member_id),
+  patron_id   INTEGER NOT NULL REFERENCES patrons(patron_id),
   item_id     INTEGER NOT NULL REFERENCES items(item_id),
   loaned_on   TEXT NOT NULL,
   due_on      TEXT NOT NULL,
@@ -414,24 +414,28 @@ CREATE TABLE loans (
 :::exercise
 id: proj-sql-14-reviews
 level: 3
-title: "Project 14: the reviews table"
+title: "Project 14: the time_entries table"
+path: db/migrations/14-time-entries.sql
 ---
-Create the `reviews` table: `review_id` integer primary key; `customer_id` and `product_id`, both required and referencing their tables; `rating`, a required integer that must be between 1 and 5; an optional `comment`; and a `UNIQUE` constraint on `(customer_id, product_id)`. Then insert one review: customer 1 rates product 5 with **4** and the comment `Bright and sturdy`.
+Create `time_entries`: `entry_id` integer primary key; `task_id` and `member_id`, both required and referencing `tasks` and `members`; `minutes`, a required integer that must be **greater than 0**; `logged_on`, required text; and an optional `note`. Then insert one entry: member **4** logged **90** minutes on task **2** on `2026-11-20` with the note `Token bucket prototype`.
 ---check
-SELECT customer_id, product_id, rating, comment FROM reviews;
+SELECT task_id, member_id, minutes, logged_on, note FROM time_entries
 ---solution
-CREATE TABLE reviews (review_id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL REFERENCES customers(customer_id), product_id INTEGER NOT NULL REFERENCES products(product_id), rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5), comment TEXT, UNIQUE (customer_id, product_id));
-INSERT INTO reviews (customer_id, product_id, rating, comment) VALUES (1, 5, 4, 'Bright and sturdy');
+CREATE TABLE time_entries (entry_id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(task_id), member_id INTEGER NOT NULL REFERENCES members(member_id), minutes INTEGER NOT NULL CHECK (minutes > 0), logged_on TEXT NOT NULL, note TEXT);
+INSERT INTO time_entries (task_id, member_id, minutes, logged_on, note) VALUES (2, 4, 90, '2026-11-20', 'Token bucket prototype');
 :::
 
 :::exercise
 id: proj-sql-14-view
 level: 3
-title: "Project 14b: a reusable view"
+title: "Project 14b: an open_tasks view"
+path: db/migrations/14-open-tasks-view.sql
 ---
-Create a view `order_totals` with one row per order: `order_id`, `customer_id`, `status` and `total` (sum of quantity × unit price, rounded to 2 decimals). Then query it for the **delivered** orders with a total over 300.
+Create a view `open_tasks` with one row per task that is not `done`: `task_id`, `title`, `board` (the board's name), `assignee` (the member's name, NULL when unassigned) and `due_on`. The grader then queries it for the overdue ones.
+---hint
+Unassigned tasks must stay in the view, so join `members` with a LEFT JOIN.
 ---check
-SELECT order_id, customer_id, total FROM order_totals WHERE status = 'delivered' AND total > 300 ORDER BY order_id;
+SELECT task_id, title, board, assignee, due_on FROM open_tasks WHERE due_on < '2026-11-20' ORDER BY task_id
 ---solution
-CREATE VIEW order_totals AS SELECT o.order_id, o.customer_id, o.status, ROUND(SUM(oi.quantity * oi.unit_price), 2) AS total FROM orders o JOIN order_items oi ON oi.order_id = o.order_id GROUP BY o.order_id, o.customer_id, o.status;
+CREATE VIEW open_tasks AS SELECT t.task_id, t.title, b.name AS board, m.name AS assignee, t.due_on FROM tasks t JOIN boards b ON b.board_id = t.board_id LEFT JOIN members m ON m.member_id = t.assignee_id WHERE t.status <> 'done';
 :::

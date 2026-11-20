@@ -4,7 +4,7 @@ title: Lifespan, files & streaming
 summary: Startup and shutdown with the lifespan context manager and app.state, form data, file uploads with UploadFile, size and type checks, FileResponse, StreamingResponse, server-sent events and serving static files.
 minutes: 35
 ---
-> [!project] Taskboard, step 10: attachments and exports
+> [!project] Taskboard, step 11: attachments and exports
 > Teams attach screenshots and specs to tasks, and managers want a CSV of the board. This step adds a lifespan that prepares the database and upload folder at startup, file attachments, and a streaming CSV export.
 
 ## Startup and shutdown: lifespan
@@ -662,10 +662,11 @@ Without the `with` block, TestClient doesn't run the lifespan, so `app.state.rea
 :::exercise
 id: proj-fa-10-lifespan
 level: 3
-title: "Project 10: Taskboard's lifespan"
+title: "Project 11: Taskboard's lifespan"
 mode: code
 lang: python
 file: main.py
+path: app/main.py
 ---
 Write an `@asynccontextmanager` `lifespan(app: FastAPI)` that creates the upload folder with `UPLOAD_DIR.mkdir(exist_ok=True)` and the tables with `SQLModel.metadata.create_all(engine)` before `yield`, and calls `engine.dispose()` after it. Pass it to the app.
 ---starter
@@ -723,10 +724,11 @@ app = FastAPI(title="Taskboard", version="0.4.0", lifespan=lifespan)
 :::exercise
 id: proj-fa-10-export
 level: 3
-title: "Project 10b: CSV export"
+title: "Project 11b: CSV export"
 mode: code
 lang: python
 file: routers/export.py
+path: app/routers/export.py
 ---
 Write a generator `task_rows(tasks)` that yields `"id,title,status\n"` and then `f"{t.id},{t.title},{t.status}\n"` for each task. Add `GET /tasks.csv` that loads `session.exec(select(Task).order_by(Task.id)).all()` and returns `StreamingResponse(task_rows(tasks), media_type="text/csv")`.
 ---starter

@@ -24,6 +24,11 @@ When something's wrong, work from the outside in:
 | Secrets in the image | `docker run --rm IMAGE ls -a /app`, `docker history` | missing `.dockerignore`, secrets in ENV/ARG |
 | `unable to find user` | `docker inspect -f '{{.Config.User}}'` | `USER` set to a user that was never created |
 
+Two more commands you'll need:
+
+- `docker container prune -f` removes **every stopped container** at once (`-f` skips the confirmation). Running containers are left alone.
+- A container needs a main process that keeps running. For a general-purpose box you only want to `docker exec` into, give it a command that never ends: `docker run -d --name box ubuntu sleep infinity`.
+
 Each exercise below is set up broken. Diagnose first; the hints point at the right command.
 
 ## Worked example: diagnosing "the API is down"
@@ -326,6 +331,7 @@ title: "Project 12: the API that won't start"
 mode: file
 file: Dockerfile
 cwd: /home/student/taskboard
+path: Dockerfile
 ---run
 docker build -q -t taskboard . >/dev/null
 docker run -d --name api -p 8000:8000 taskboard >/dev/null
@@ -358,6 +364,7 @@ mode: file
 file: compose.yaml
 cwd: /home/student/taskboard
 setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile
+path: compose.yaml
 ---run
 docker compose up -d >/dev/null 2>&1
 docker exec taskboard-api-1 printenv DATABASE_URL
@@ -399,6 +406,7 @@ title: "Project 12c: the leaked secret"
 compare: verify
 cwd: /home/student/taskboard
 setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile
+path: ops/docker/12-leak.sh
 ---
 A security scan found `SECRET_KEY` inside the published Taskboard image. Add `.env` to a `.dockerignore` in `~/taskboard` (create the file), rebuild as `taskboard:fixed`, and confirm the file is gone by listing `/app` (with hidden files) in a throwaway container.
 ---verify

@@ -39,6 +39,29 @@ Secrets Manager · CloudWatch logs/metrics/alarms · CloudTrail · IaC (CDK/Terr
 | Messages stuck or duplicated | visibility timeout, DLQ, idempotency, batch failure reporting |
 | Bill spiked | Cost Explorer by service and tag: NAT data, data transfer, logs, forgotten resources |
 
+## Containment commands
+
+During an incident you stop the damage first and investigate after. A few commands come up again and again:
+
+```bash
+# a bucket is public: block all public access, then remove the policy that opened it
+aws s3api put-public-access-block --bucket acme-data \
+  --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+aws s3api delete-bucket-policy --bucket acme-data
+
+# an access key leaked: deactivate it first (you can still see where it was used), delete it after
+aws iam update-access-key --user-name deploy-bot --access-key-id AKIA… --status Inactive
+aws iam delete-access-key --user-name deploy-bot --access-key-id AKIA…
+
+# ECS tasks are killed before they finish starting: give health checks a grace period,
+# and let failed deployments roll back by themselves
+aws ecs update-service --cluster shop --service api \
+  --health-check-grace-period-seconds 90 \
+  --deployment-configuration "deploymentCircuitBreaker={enable=true,rollback=true}"
+```
+
+`--health-check-grace-period-seconds` tells ECS to ignore load-balancer health checks for that long after a task starts, so a slow-starting app isn't killed while it's still booting.
+
 ## Worked example: an incident write-up
 
 Good teams write a short, blameless **post-incident review** after every outage. Taskboard's first one:
@@ -365,6 +388,7 @@ title: "Project 10: give startup some room"
 mode: code
 lang: bash
 file: fix-service.sh
+path: infra/aws/fix-service.sh
 ---
 Apply two action items from the review to service `taskboard-api` in cluster `taskboard`: set the health check grace period to **120** seconds, and enable the deployment circuit breaker **with rollback**.
 ---starter

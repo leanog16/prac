@@ -4,8 +4,8 @@ title: Exceptions & error handling
 summary: How exceptions propagate, try/catch/finally, checked vs unchecked exceptions, the exception hierarchy, throwing with good messages, custom exception classes, try-with-resources, wrapping causes, and what not to do (swallowing, catching Exception everywhere, exceptions for control flow).
 minutes: 35
 ---
-> [!project] Bookshelf, step 8: failures with names
-> Borrowing can fail in several ways: the item is out, the member has too many loans, the member owes fees. Right now those are generic `IllegalStateException`s. This step gives each failure its own exception type, so the code that calls `borrow` can react to each one properly.
+> [!project] Taskboard, step 8: failures with names
+> Picking up can fail in several ways: the item is already taken, the member already has too many tasks, or the member still has overdue work to finish. Right now those are generic `IllegalStateException`s. This step gives each failure its own exception type, so the code that calls `pick up` can react to each one properly.
 
 ## What happens when something throws
 
@@ -14,10 +14,10 @@ public static void main(String[] args) {
     checkout("D-404");
 }
 static void checkout(String id) {
-    LibraryItem item = find(id);          // 2. find throws, so checkout stops here...
-    item.borrow();
+    WorkItem item = find(id);          // 2. find throws, so checkout stops here...
+    item.pickUp();
 }
-static LibraryItem find(String id) {
+static WorkItem find(String id) {
     throw new NoSuchElementException("No item " + id);   // 1. thrown here
 }
 ```
@@ -35,14 +35,14 @@ An exception **unwinds the call stack**: each method stops immediately, until so
 
 ```java
 try {
-    desk.lend(item, member);
-    System.out.println("Enjoy your book!");
-} catch (ItemUnavailableException e) {
+    planner.assign(item, member);
+    System.out.println("Enjoy your task!");
+} catch (TaskTakenException e) {
     System.out.println("Sorry, " + e.getMessage() + ". Want to reserve it?");
-} catch (LoanLimitException | OutstandingFeesException e) {   // multi-catch
-    System.out.println("Can't lend right now: " + e.getMessage());
+} catch (WorkloadLimitException | OverdueWorkException e) {   // multi-catch
+    System.out.println("Can't assign right now: " + e.getMessage());
 } finally {
-    audit.log("lend attempted");          // runs whether it succeeded, failed or returned
+    audit.log("assign attempted");          // runs whether it succeeded, failed or returned
 }
 ```
 
@@ -71,15 +71,15 @@ Most modern Java code (and Spring) uses unchecked exceptions for domain errors: 
 ## Custom exceptions
 
 ```java
-public class LibraryException extends RuntimeException {
-    public LibraryException(String message) { super(message); }
+public class TaskboardException extends RuntimeException {
+    public TaskboardException(String message) { super(message); }
 }
 
-public class ItemUnavailableException extends LibraryException {
+public class TaskTakenException extends TaskboardException {
     private final String itemId;
 
-    public ItemUnavailableException(String itemId, String title) {
-        super(title + " is already on loan");
+    public TaskTakenException(String itemId, String title) {
+        super(title + " is already on assignment");
         this.itemId = itemId;
     }
 
@@ -88,25 +88,25 @@ public class ItemUnavailableException extends LibraryException {
 ```
 
 - Name them after **what went wrong** in domain terms.
-- A shared base class (`LibraryException`) lets callers catch "any library rule violation" in one place, which is exactly what a web layer's error handler does.
+- A shared base class (`TaskboardException`) lets callers catch "any Taskboard rule violation" in one place, which is exactly what a web layer's error handler does.
 - Put useful data on them (`itemId`), not just in the message.
 
 ## Good messages
 
-`throw new IllegalArgumentException("bad input")` helps nobody. Say **what** was wrong and **with which value**: `"ISBN must be 13 digits, got '97804410'"`. The person reading it at 2 a.m. might be you.
+`throw new IllegalArgumentException("bad input")` helps nobody. Say **what** was wrong and **with which value**: `"key must be a key like `TB-123`, got '97804410'"`. The person reading it at 2 a.m. might be you.
 
 ## try-with-resources
 
 Files, sockets and database connections must be **closed**, even when an exception happens. Any `AutoCloseable` declared in the `try (...)` header is closed automatically:
 
 ```java
-try (BufferedReader in = Files.newBufferedReader(Path.of("catalog.csv"))) {
+try (BufferedReader in = Files.newBufferedReader(Path.of("board.csv"))) {
     String line;
     while ((line = in.readLine()) != null) {
-        catalog.add(parse(line));
+        board.add(parse(line));
     }
 } catch (IOException e) {
-    throw new CatalogLoadException("Couldn't read catalog.csv", e);   // keep the cause
+    throw new BoardLoadException("Couldn't read board.csv", e);   // keep the cause
 }
 ```
 
@@ -142,7 +142,7 @@ why: finally is for cleanup that must always happen.
 :::
 
 :::quiz
-q: Why pass the original exception when wrapping: `new CatalogLoadException("…", e)`?
+q: Why pass the original exception when wrapping: `new BoardLoadException("…", e)`?
 + to keep the root cause and its stack trace for debugging
 - it's required by the compiler
 - to make the exception checked
@@ -165,18 +165,18 @@ level: 2
 title: A custom exception
 mode: code
 lang: java
-file: LoanLimitException.java
+file: WorkloadLimitException.java
 ---
-Write `LoanLimitException extends LibraryException` with a `private final int limit` field, and a constructor `LoanLimitException(String memberName, int limit)` that calls `super(memberName + " already has " + limit + " loans")` and stores the limit. Add `getLimit()`.
+Write `WorkloadLimitException extends TaskboardException` with a `private final int limit` field, and a constructor `WorkloadLimitException(String memberName, int limit)` that calls `super(memberName + " already has " + limit + " open tasks")` and stores the limit. Add `getLimit()`.
 ---starter
 ---rule
-public\s+class\s+LoanLimitException\s+extends\s+LibraryException
-`extends LibraryException`
+public\s+class\s+WorkloadLimitException\s+extends\s+TaskboardException
+`extends TaskboardException`
 ---rule
 private\s+final\s+int\s+limit\s*;
 `private final int limit;`
 ---rule
-LoanLimitException\(\s*String\s+memberName\s*,\s*int\s+limit\s*\)\s*\{\s*super\(\s*memberName\s*\+\s*" already has "\s*\+\s*limit\s*\+\s*" loans"\s*\)\s*;
+WorkloadLimitException\(\s*String\s+memberName\s*,\s*int\s+limit\s*\)\s*\{\s*super\(\s*memberName\s*\+\s*" already has "\s*\+\s*limit\s*\+\s*" open tasks"\s*\)\s*;
 Constructor with a clear message
 ---rule
 this\.limit\s*=\s*limit\s*;
@@ -185,11 +185,11 @@ Store the limit
 public\s+int\s+getLimit\(\s*\)\s*\{\s*return\s+(this\.)?limit\s*;
 `getLimit()`
 ---solution
-public class LoanLimitException extends LibraryException {
+public class WorkloadLimitException extends TaskboardException {
     private final int limit;
 
-    public LoanLimitException(String memberName, int limit) {
-        super(memberName + " already has " + limit + " loans");
+    public WorkloadLimitException(String memberName, int limit) {
+        super(memberName + " already has " + limit + " open tasks");
         this.limit = limit;
     }
 
@@ -205,9 +205,9 @@ level: 3
 title: Read a file safely
 mode: code
 lang: java
-file: CatalogLoader.java
+file: BoardLoader.java
 ---
-Write `static List<String> loadTitles(Path file)` that reads every line with a `BufferedReader` from `Files.newBufferedReader(file)` in a **try-with-resources**, adds each line to a list, and on `IOException` throws `new CatalogLoadException("Couldn't read " + file, e)`.
+Write `static List<String> loadTitles(Path file)` that reads every line with a `BufferedReader` from `Files.newBufferedReader(file)` in a **try-with-resources**, adds each line to a list, and on `IOException` throws `new BoardLoadException("Couldn't read " + file, e)`.
 ---starter
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -216,7 +216,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-public class CatalogLoader {
+public class BoardLoader {
 }
 ---rule
 static\s+List<String>\s+loadTitles\(\s*Path\s+file\s*\)
@@ -228,7 +228,7 @@ try-with-resources
 while\s*\(\s*\(\s*(\w+)\s*=\s*\w+\.readLine\(\s*\)\s*\)\s*!=\s*null\s*\)
 Read line by line
 ---rule
-catch\s*\(\s*IOException\s+e\s*\)\s*\{\s*throw\s+new\s+CatalogLoadException\(\s*"Couldn't read "\s*\+\s*file\s*,\s*e\s*\)
+catch\s*\(\s*IOException\s+e\s*\)\s*\{\s*throw\s+new\s+BoardLoadException\(\s*"Couldn't read "\s*\+\s*file\s*,\s*e\s*\)
 Wrap with the cause
 ---rule
 return\s+\w+\s*;
@@ -241,7 +241,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-public class CatalogLoader {
+public class BoardLoader {
     static List<String> loadTitles(Path file) {
         List<String> titles = new ArrayList<>();
         try (BufferedReader in = Files.newBufferedReader(file)) {
@@ -250,7 +250,7 @@ public class CatalogLoader {
                 titles.add(line);
             }
         } catch (IOException e) {
-            throw new CatalogLoadException("Couldn't read " + file, e);
+            throw new BoardLoadException("Couldn't read " + file, e);
         }
         return titles;
     }
@@ -293,15 +293,15 @@ level: 2
 title: Predict: which catch?
 mode: answer
 ---
-`ItemUnavailableException extends LibraryException extends RuntimeException`. What does this print?
+`TaskTakenException extends TaskboardException extends RuntimeException`. What does this print?
 
 ```java
 try {
-    throw new ItemUnavailableException("B-1", "Dune");
-} catch (ItemUnavailableException e) {
+    throw new TaskTakenException("B-1", "Write API");
+} catch (TaskTakenException e) {
     System.out.println("unavailable");
-} catch (LibraryException e) {
-    System.out.println("library");
+} catch (TaskboardException e) {
+    System.out.println("taskboard");
 }
 ```
 ---answer
@@ -313,60 +313,61 @@ unavailable
 :::exercise
 id: proj-java-08-lend
 level: 4
-title: "Project 8: the loan desk"
+title: "Project 8: the assignment planner"
 mode: code
 lang: java
-file: LoanDesk.java
+file: Planner.java
+path: java/src/main/java/taskboard/Planner.java
 ---
-Write `public Loan lend(Book book, Member member, LocalDate today)` in `LoanDesk` that checks, in this order: if `!book.isAvailable()` throw `new ItemUnavailableException(book.getIsbn(), book.getTitle())`; if `member.getLoans() >= maxLoans` throw `new LoanLimitException(member.getName(), maxLoans)`. Otherwise call `book.borrow()`, `member.addLoan()`, and return `new Loan(book, member, today.plusDays(book.loanDays()))`.
+Write `public Assignment assign(Task task, Member member, LocalDate today)` in `Planner` that checks, in this order: if `!task.isAvailable()` throw `new TaskTakenException(task.getKey(), task.getTitle())`; if `member.getOpenTasks() >= maxTasks` throw `new WorkloadLimitException(member.getName(), maxTasks)`. Otherwise call `task.pickUp()`, `member.addTask()`, and return `new Assignment(task, member, today.plusDays(task.targetDays()))`.
 ---starter
 import java.time.LocalDate;
 
-public class LoanDesk {
-    private final int maxLoans;
+public class Planner {
+    private final int maxTasks;
 
-    public LoanDesk(int maxLoans) {
-        this.maxLoans = maxLoans;
+    public Planner(int maxTasks) {
+        this.maxTasks = maxTasks;
     }
 }
 ---rule
-public\s+Loan\s+lend\(\s*Book\s+book\s*,\s*Member\s+member\s*,\s*LocalDate\s+today\s*\)
+public\s+Assignment\s+assign\(\s*Task\s+task\s*,\s*Member\s+member\s*,\s*LocalDate\s+today\s*\)
 The signature
 ---rule
-if\s*\(\s*!\s*book\.isAvailable\(\s*\)\s*\)\s*\{?\s*throw\s+new\s+ItemUnavailableException\(\s*book\.getIsbn\(\s*\)\s*,\s*book\.getTitle\(\s*\)\s*\)
-Unavailable → `ItemUnavailableException`
+if\s*\(\s*!\s*task\.isAvailable\(\s*\)\s*\)\s*\{?\s*throw\s+new\s+TaskTakenException\(\s*task\.getKey\(\s*\)\s*,\s*task\.getTitle\(\s*\)\s*\)
+Unavailable → `TaskTakenException`
 ---rule
-if\s*\(\s*member\.getLoans\(\s*\)\s*>=\s*maxLoans\s*\)\s*\{?\s*throw\s+new\s+LoanLimitException\(\s*member\.getName\(\s*\)\s*,\s*maxLoans\s*\)
-Too many loans → `LoanLimitException`
+if\s*\(\s*member\.getOpenTasks\(\s*\)\s*>=\s*maxTasks\s*\)\s*\{?\s*throw\s+new\s+WorkloadLimitException\(\s*member\.getName\(\s*\)\s*,\s*maxTasks\s*\)
+Too many open tasks → `WorkloadLimitException`
 ---rule
-ItemUnavailableException[\s\S]*LoanLimitException
+TaskTakenException[\s\S]*WorkloadLimitException
 Availability checked first
 ---rule
-book\.borrow\(\s*\)\s*;[\s\S]*member\.addLoan\(\s*\)\s*;
-Borrow, then count the loan
+task\.pickUp\(\s*\)\s*;[\s\S]*member\.addTask\(\s*\)\s*;
+Pick up, then count the assignment
 ---rule
-return\s+new\s+Loan\(\s*book\s*,\s*member\s*,\s*today\.plusDays\(\s*book\.loanDays\(\s*\)\s*\)\s*\)\s*;
-Return the loan
+return\s+new\s+Assignment\(\s*task\s*,\s*member\s*,\s*today\.plusDays\(\s*task\.targetDays\(\s*\)\s*\)\s*\)\s*;
+Return the assignment
 ---solution
 import java.time.LocalDate;
 
-public class LoanDesk {
-    private final int maxLoans;
+public class Planner {
+    private final int maxTasks;
 
-    public LoanDesk(int maxLoans) {
-        this.maxLoans = maxLoans;
+    public Planner(int maxTasks) {
+        this.maxTasks = maxTasks;
     }
 
-    public Loan lend(Book book, Member member, LocalDate today) {
-        if (!book.isAvailable()) {
-            throw new ItemUnavailableException(book.getIsbn(), book.getTitle());
+    public Assignment assign(Task task, Member member, LocalDate today) {
+        if (!task.isAvailable()) {
+            throw new TaskTakenException(task.getKey(), task.getTitle());
         }
-        if (member.getLoans() >= maxLoans) {
-            throw new LoanLimitException(member.getName(), maxLoans);
+        if (member.getOpenTasks() >= maxTasks) {
+            throw new WorkloadLimitException(member.getName(), maxTasks);
         }
-        book.borrow();
-        member.addLoan();
-        return new Loan(book, member, today.plusDays(book.loanDays()));
+        task.pickUp();
+        member.addTask();
+        return new Assignment(task, member, today.plusDays(task.targetDays()));
     }
 }
 :::
@@ -378,39 +379,40 @@ title: "Project 8b: handle the failures"
 mode: code
 lang: java
 file: Kiosk.java
+path: java/src/main/java/taskboard/Kiosk.java
 ---
-Write `static String tryLend(LoanDesk desk, Book book, Member member, LocalDate today)` that calls `desk.lend(...)` and returns `"Due " + loan.getDueOn()`; catches `ItemUnavailableException` returning `"Unavailable: " + e.getMessage()`; and catches `LibraryException` (any other rule) returning `"Refused: " + e.getMessage()`.
+Write `static String tryAssign(Planner planner, Task task, Member member, LocalDate today)` that calls `planner.assign(...)` and returns `"Due " + assignment.getDueOn()`; catches `TaskTakenException` returning `"Unavailable: " + e.getMessage()`; and catches `TaskboardException` (any other rule) returning `"Refused: " + e.getMessage()`.
 ---starter
 import java.time.LocalDate;
 
 public class Kiosk {
 }
 ---rule
-static\s+String\s+tryLend\(\s*LoanDesk\s+desk\s*,\s*Book\s+book\s*,\s*Member\s+member\s*,\s*LocalDate\s+today\s*\)
+static\s+String\s+tryAssign\(\s*Planner\s+planner\s*,\s*Task\s+task\s*,\s*Member\s+member\s*,\s*LocalDate\s+today\s*\)
 The signature
 ---rule
-try\s*\{\s*Loan\s+(\w+)\s*=\s*desk\.lend\(\s*book\s*,\s*member\s*,\s*today\s*\)\s*;\s*return\s+"Due "\s*\+\s*\1\.getDueOn\(\s*\)\s*;
-Lend and report the due date
+try\s*\{\s*Assignment\s+(\w+)\s*=\s*planner\.assign\(\s*task\s*,\s*member\s*,\s*today\s*\)\s*;\s*return\s+"Due "\s*\+\s*\1\.getDueOn\(\s*\)\s*;
+Assign and report the due date
 ---rule
-catch\s*\(\s*ItemUnavailableException\s+e\s*\)\s*\{\s*return\s+"Unavailable: "\s*\+\s*e\.getMessage\(\s*\)\s*;
+catch\s*\(\s*TaskTakenException\s+e\s*\)\s*\{\s*return\s+"Unavailable: "\s*\+\s*e\.getMessage\(\s*\)\s*;
 Specific catch first
 ---rule
-catch\s*\(\s*LibraryException\s+e\s*\)\s*\{\s*return\s+"Refused: "\s*\+\s*e\.getMessage\(\s*\)\s*;
-General library catch
+catch\s*\(\s*TaskboardException\s+e\s*\)\s*\{\s*return\s+"Refused: "\s*\+\s*e\.getMessage\(\s*\)\s*;
+General Taskboard catch
 ---rule
-ItemUnavailableException\s+e[\s\S]*LibraryException\s+e
+TaskTakenException\s+e[\s\S]*TaskboardException\s+e
 Specific before general
 ---solution
 import java.time.LocalDate;
 
 public class Kiosk {
-    static String tryLend(LoanDesk desk, Book book, Member member, LocalDate today) {
+    static String tryAssign(Planner planner, Task task, Member member, LocalDate today) {
         try {
-            Loan loan = desk.lend(book, member, today);
-            return "Due " + loan.getDueOn();
-        } catch (ItemUnavailableException e) {
+            Assignment assignment = planner.assign(task, member, today);
+            return "Due " + assignment.getDueOn();
+        } catch (TaskTakenException e) {
             return "Unavailable: " + e.getMessage();
-        } catch (LibraryException e) {
+        } catch (TaskboardException e) {
             return "Refused: " + e.getMessage();
         }
     }

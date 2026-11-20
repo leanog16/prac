@@ -145,6 +145,21 @@ Most teams template manifests with **Helm** or **Kustomize**. With **GitOps** (A
 ## Verify, then roll back fast
 
 - **Smoke tests** right after deploying: hit `/health`, log in, load a key page. A deploy that "succeeded" but serves 500s isn't a success.
+
+A smoke test is usually a short script whose **exit status** decides whether the pipeline continues (a step fails when its command exits non-zero):
+
+```bash title=scripts/smoke-test.sh
+#!/bin/bash
+set -euo pipefail
+curl --fail --silent --show-error --retry 5 --retry-connrefused "$1/health"
+```
+
+| curl option | Effect |
+|---|---|
+| `--fail` | exit non-zero on an HTTP error status (4xx/5xx); without it, curl "succeeds" on a 500 page |
+| `--silent --show-error` | no progress meter, but still print errors |
+| `--retry 5` | retry up to 5 times on temporary failures, waiting longer each time |
+| `--retry-connrefused` | also retry when the connection is refused (the new version is still starting) |
 - Watch error rates and latency for the first minutes; canary tools (Argo Rollouts, Flagger, AWS CodeDeploy) automate the decision.
 - **Rollback** should be one action: redeploy the previous immutable tag, `kubectl rollout undo`, switch blue/green back, or turn off the flag. Practice it before you need it.
 - Prefer rolling **forward** with a fix only when the fix is quick and certain; otherwise roll back first and debug calmly.
@@ -444,7 +459,7 @@ mode: code
 lang: bash
 file: smoke-test.sh
 ---
-Write a smoke test that requests `$1/health` with `curl` using `--fail` (so HTTP errors give a non-zero exit), `--silent --show-error`, and retries **5** times with `--retry-connrefused`.
+Write a smoke test that requests `$1/health` with `curl` using `--fail` (so HTTP errors give a non-zero exit), `--silent --show-error`, and retries **5** times (`--retry 5`) including refused connections (`--retry-connrefused`).
 ---starter
 #!/bin/sh
 set -e
@@ -514,6 +529,7 @@ title: "Project 6: staging → production"
 mode: code
 lang: yaml
 file: .github/workflows/deploy.yml
+path: .github/workflows/deploy.yml
 ---
 Write two jobs. `staging` (needs `image`, environment `staging`) runs `./scripts/deploy.sh staging ghcr.io/acme/taskboard:${{ github.sha }}` then `./scripts/smoke-test.sh https://staging.taskboard.dev`. `production` (needs `staging`, environment `production` with url `https://taskboard.dev`) runs the same deploy script with `production` and smoke-tests `https://taskboard.dev`. Add a top-level concurrency group `deploy` that **doesn't** cancel in-progress runs.
 ---starter
@@ -596,6 +612,7 @@ title: "Project 6b: Taskboard's smoke test"
 mode: code
 lang: bash
 file: scripts/smoke-test.sh
+path: scripts/smoke-test.sh
 ---
 Write `scripts/smoke-test.sh`: `set -euo pipefail`; take the base URL as `$1` into a variable `BASE`; request `$BASE/health` with `curl --fail --silent --show-error --retry 5 --retry-connrefused`; then check `$BASE/tasks` returns HTTP **401** without credentials, by comparing `curl -s -o /dev/null -w '%{http_code}' "$BASE/tasks"` to `401` and exiting 1 if it differs.
 ---starter

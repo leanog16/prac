@@ -4,19 +4,19 @@ title: Interfaces & abstract classes
 summary: Abstract classes and abstract methods, interfaces as contracts, implementing several interfaces, default and static methods, Comparable and Comparator, choosing between an interface and an abstract class, and programming to an interface.
 minutes: 40
 ---
-> [!project] Bookshelf, step 5: contracts
-> Not every item can be borrowed (magazines can't), and the library wants different fee rules for different members. Instead of special cases everywhere, this step defines **contracts**: a `Borrowable` interface for things that can be lent, and a `FeePolicy` interface for "how much does a late return cost?".
+> [!project] Taskboard, step 5: contracts
+> Not every item can be picked up (milestones can't), and Taskboard's client agencies get different credits when work is late: paying clients get money back, internal boards get nothing. Instead of special cases everywhere, this step defines **contracts**: an `Assignable` interface for things someone can pick up, and a `CreditPolicy` interface for "how much credit does a late task earn the client?".
 
 ## Abstract classes
 
-Should anyone ever write `new LibraryItem(...)`? No: every real item is a book, a DVD or a magazine. Mark the class **abstract**, and declare methods every subclass **must** provide without a body:
+Should anyone ever write `new WorkItem(...)`? No: every real item is a task, a bug or a milestone. Mark the class **abstract**, and declare methods every subclass **must** provide without a body:
 
 ```java
-public abstract class LibraryItem {
+public abstract class WorkItem {
     private final String id;
     private final String title;
 
-    protected LibraryItem(String id, String title) {
+    protected WorkItem(String id, String title) {
         this.id = id;
         this.title = title;
     }
@@ -27,7 +27,7 @@ public abstract class LibraryItem {
 }
 ```
 
-- `new LibraryItem(...)` is now a compile error.
+- `new WorkItem(...)` is now a compile error.
 - A concrete subclass that forgets `describe()` doesn't compile either.
 - Abstract classes can still have fields, constructors and normal methods: they share **state and code**.
 
@@ -36,31 +36,31 @@ public abstract class LibraryItem {
 An **interface** is a pure contract: method signatures without state.
 
 ```java
-public interface Borrowable {
-    int loanDays();
+public interface Assignable {
+    int targetDays();
     boolean isAvailable();
-    void borrow();
-    void giveBack();
+    void pickUp();
+    void putBack();
 }
 ```
 
 ```java
-public class Book extends LibraryItem implements Borrowable {
+public class Task extends WorkItem implements Assignable {
     private boolean available = true;
     // ...
-    @Override public int loanDays() { return 21; }
+    @Override public int targetDays() { return 21; }
     @Override public boolean isAvailable() { return available; }
-    @Override public void borrow() { /* check and set */ }
-    @Override public void giveBack() { available = true; }
+    @Override public void pickUp() { /* check and set */ }
+    @Override public void putBack() { available = true; }
     @Override public String describe() { return getTitle(); }
 }
 
-public class Magazine extends LibraryItem {         // NOT Borrowable
-    @Override public String describe() { return getTitle() + " (reference)"; }
+public class Milestone extends WorkItem {         // NOT Assignable
+    @Override public String describe() { return getTitle() + " (milestone)"; }
 }
 ```
 
-Now the type system itself says magazines can't be borrowed. A method `void lend(Borrowable item, Member m)` **can't even be called** with a magazine: the mistake is caught at compile time instead of throwing at runtime (compare lesson 4's `UnsupportedOperationException`).
+Now the type system itself says milestones can't be taken. A method `void assign(Assignable item, Member m)` **can't even be called** with a milestone: the mistake is caught at compile time instead of throwing at runtime (compare lesson 4's `UnsupportedOperationException`).
 
 > [!plain] In plain English
 > An interface is a promise: "anything that implements me has these methods". Code that only needs the promise doesn't care which class keeps it.
@@ -70,28 +70,28 @@ Now the type system itself says magazines can't be borrowed. A method `void lend
 A class can **extend one** class but **implement many** interfaces:
 
 ```java
-public class Dvd extends LibraryItem implements Borrowable, Comparable<Dvd>, Rateable { ... }
+public class Bug extends WorkItem implements Assignable, Comparable<Bug>, Rateable { ... }
 ```
 
-That's why capabilities ("can be borrowed", "can be compared", "can be rated") are interfaces: they combine freely.
+That's why capabilities ("can be taken", "can be compared", "can be rated") are interfaces: they combine freely.
 
 ## Default and static methods
 
 Interfaces can include **default** methods (with a body) that implementers inherit, and **static** helpers:
 
 ```java
-public interface Borrowable {
-    int loanDays();
+public interface Assignable {
+    int targetDays();
     boolean isAvailable();
-    void borrow();
-    void giveBack();
+    void pickUp();
+    void putBack();
 
     default LocalDate dueDateFrom(LocalDate start) {      // shared behaviour, overridable
-        return start.plusDays(loanDays());
+        return start.plusDays(targetDays());
     }
 
-    static boolean anyAvailable(List<? extends Borrowable> items) {
-        return items.stream().anyMatch(Borrowable::isAvailable);
+    static boolean anyAvailable(List<? extends Assignable> items) {
+        return items.stream().anyMatch(Assignable::isAvailable);
     }
 }
 ```
@@ -100,27 +100,27 @@ Default methods let interfaces grow without breaking existing implementations. T
 
 ## Comparable and Comparator
 
-How should books be sorted? Give the class a **natural order** with `Comparable`, and supply other orders with `Comparator`:
+How should tasks be sorted? Give the class a **natural order** with `Comparable`, and supply other orders with `Comparator`:
 
 ```java
-public class Book extends LibraryItem implements Comparable<Book> {
+public class Task extends WorkItem implements Comparable<Task> {
     @Override
-    public int compareTo(Book other) {
+    public int compareTo(Task other) {
         return getTitle().compareTo(other.getTitle());     // negative, zero or positive
     }
 }
 
-books.sort(null);                                            // natural order: by title
-books.sort(Comparator.comparing(Book::getYear));             // by year
-books.sort(Comparator.comparing(Book::getAuthor)
-                     .thenComparing(Book::getYear).reversed());
+tasks.sort(null);                                            // natural order: by title
+tasks.sort(Comparator.comparing(Task::getPoints));             // by points
+tasks.sort(Comparator.comparing(Task::getAssignee)
+                     .thenComparing(Task::getPoints).reversed());
 ```
 
 ## Interface or abstract class?
 
 | | Interface | Abstract class |
 |---|---|---|
-| models | a **capability** ("can be borrowed") | a **family** sharing code and state ("is a library item") |
+| models | a **capability** ("can be taken") | a **family** sharing code and state ("is a work item") |
 | state (fields) | no (only constants) | yes |
 | constructors | no | yes |
 | a class can have | many | one |
@@ -131,16 +131,16 @@ Common combination: an interface for the contract, plus an optional abstract cla
 ## Program to an interface
 
 ```java
-List<Book> books = new ArrayList<>();         // declare the interface type
-Map<String, Book> byIsbn = new HashMap<>();
-FeePolicy fees = new StandardFeePolicy();
+List<Task> tasks = new ArrayList<>();         // declare the interface type
+Map<String, Task> byKey = new HashMap<>();
+CreditPolicy credits = new StandardCreditPolicy();
 ```
 
 Code that depends on `List` works with **any** list; code that depends on `ArrayList` is stuck with it. The same idea drives Spring's dependency injection: depend on the interface, receive an implementation.
 
 :::quiz
-q: What does marking `LibraryItem` as `abstract` prevent?
-+ creating `LibraryItem` objects directly with `new`
+q: What does marking `WorkItem` as `abstract` prevent?
++ creating `WorkItem` objects directly with `new`
 - subclassing it
 - calling its methods
 - giving it fields
@@ -166,7 +166,7 @@ why: Negative means less-than, zero equal, positive greater-than.
 :::
 
 :::quiz
-q: Why is `List<Book> books = new ArrayList<>()` preferred over `ArrayList<Book> books = …`?
+q: Why is `List<Task> tasks = new ArrayList<>()` preferred over `ArrayList<Task> tasks = …`?
 + the rest of the code depends only on the List contract, so the implementation can change
 - ArrayList is deprecated
 - it's faster
@@ -177,43 +177,43 @@ why: Programming to an interface keeps code flexible.
 :::exercise
 id: jif-borrowable
 level: 2
-title: The Borrowable contract
+title: The Assignable contract
 mode: code
 lang: java
-file: Borrowable.java
+file: Assignable.java
 ---
-Write `public interface Borrowable` with abstract methods `int loanDays()`, `boolean isAvailable()`, `void borrow()` and `void giveBack()`, plus a **default** method `LocalDate dueDateFrom(LocalDate start)` returning `start.plusDays(loanDays())`.
+Write `public interface Assignable` with abstract methods `int targetDays()`, `boolean isAvailable()`, `void pickUp()` and `void putBack()`, plus a **default** method `LocalDate dueDateFrom(LocalDate start)` returning `start.plusDays(targetDays())`.
 ---starter
 import java.time.LocalDate;
 ---rule
-public\s+interface\s+Borrowable
-`public interface Borrowable`
+public\s+interface\s+Assignable
+`public interface Assignable`
 ---rule
-int\s+loanDays\(\s*\)\s*;
-`int loanDays();`
+int\s+targetDays\(\s*\)\s*;
+`int targetDays();`
 ---rule
 boolean\s+isAvailable\(\s*\)\s*;
 `boolean isAvailable();`
 ---rule
-void\s+borrow\(\s*\)\s*;
-`void borrow();`
+void\s+pickUp\(\s*\)\s*;
+`void pickUp();`
 ---rule
-void\s+giveBack\(\s*\)\s*;
-`void giveBack();`
+void\s+putBack\(\s*\)\s*;
+`void putBack();`
 ---rule
-default\s+LocalDate\s+dueDateFrom\(\s*LocalDate\s+start\s*\)\s*\{\s*return\s+start\.plusDays\(\s*loanDays\(\s*\)\s*\)\s*;
+default\s+LocalDate\s+dueDateFrom\(\s*LocalDate\s+start\s*\)\s*\{\s*return\s+start\.plusDays\(\s*targetDays\(\s*\)\s*\)\s*;
 The default method
 ---solution
 import java.time.LocalDate;
 
-public interface Borrowable {
-    int loanDays();
+public interface Assignable {
+    int targetDays();
     boolean isAvailable();
-    void borrow();
-    void giveBack();
+    void pickUp();
+    void putBack();
 
     default LocalDate dueDateFrom(LocalDate start) {
-        return start.plusDays(loanDays());
+        return start.plusDays(targetDays());
     }
 }
 :::
@@ -224,15 +224,15 @@ level: 2
 title: An abstract base
 mode: code
 lang: java
-file: LibraryItem.java
+file: WorkItem.java
 ---
-Make `LibraryItem` **abstract**, make its constructor `protected`, and add an abstract method `public abstract String describe();`.
+Make `WorkItem` **abstract**, make its constructor `protected`, and add an abstract method `public abstract String describe();`.
 ---starter
-public class LibraryItem {
+public class WorkItem {
     private final String id;
     private final String title;
 
-    public LibraryItem(String id, String title) {
+    public WorkItem(String id, String title) {
         this.id = id;
         this.title = title;
     }
@@ -240,20 +240,20 @@ public class LibraryItem {
     public String getTitle() { return title; }
 }
 ---rule
-public\s+abstract\s+class\s+LibraryItem
-`public abstract class LibraryItem`
+public\s+abstract\s+class\s+WorkItem
+`public abstract class WorkItem`
 ---rule
-protected\s+LibraryItem\(\s*String\s+id\s*,\s*String\s+title\s*\)
+protected\s+WorkItem\(\s*String\s+id\s*,\s*String\s+title\s*\)
 Protected constructor
 ---rule
 public\s+abstract\s+String\s+describe\(\s*\)\s*;
 Abstract `describe()`
 ---solution
-public abstract class LibraryItem {
+public abstract class WorkItem {
     private final String id;
     private final String title;
 
-    protected LibraryItem(String id, String title) {
+    protected WorkItem(String id, String title) {
         this.id = id;
         this.title = title;
     }
@@ -267,31 +267,31 @@ public abstract class LibraryItem {
 :::exercise
 id: jif-comparator
 level: 3
-title: Sort the catalog
+title: Sort the board
 mode: code
 lang: java
-file: Catalog.java
+file: Board.java
 ---
-Write `static void sortForDisplay(List<Book> books)` that sorts by author, then by year **newest first**, using `Comparator.comparing(Book::getAuthor).thenComparing(Book::getYear, Comparator.reverseOrder())`.
+Write `static void sortForDisplay(List<Task> tasks)` that sorts by assignee, then by points **highest first**, using `Comparator.comparing(Task::getAssignee).thenComparing(Task::getPoints, Comparator.reverseOrder())`.
 ---starter
 import java.util.Comparator;
 import java.util.List;
 
-public class Catalog {
+public class Board {
 }
 ---rule
-static\s+void\s+sortForDisplay\(\s*List<Book>\s+books\s*\)
+static\s+void\s+sortForDisplay\(\s*List<Task>\s+tasks\s*\)
 The signature
 ---rule
-books\.sort\(\s*Comparator\.comparing\(\s*Book::getAuthor\s*\)\s*\.thenComparing\(\s*Book::getYear\s*,\s*Comparator\.reverseOrder\(\s*\)\s*\)\s*\)
-Author, then newest year first
+tasks\.sort\(\s*Comparator\.comparing\(\s*Task::getAssignee\s*\)\s*\.thenComparing\(\s*Task::getPoints\s*,\s*Comparator\.reverseOrder\(\s*\)\s*\)\s*\)
+Assignee, then highest points first
 ---solution
 import java.util.Comparator;
 import java.util.List;
 
-public class Catalog {
-    static void sortForDisplay(List<Book> books) {
-        books.sort(Comparator.comparing(Book::getAuthor).thenComparing(Book::getYear, Comparator.reverseOrder()));
+public class Board {
+    static void sortForDisplay(List<Task> tasks) {
+        tasks.sort(Comparator.comparing(Task::getAssignee).thenComparing(Task::getPoints, Comparator.reverseOrder()));
     }
 }
 :::
@@ -302,7 +302,7 @@ level: 2
 title: Predict: a default method
 mode: answer
 ---
-A `Dvd` implements `Borrowable` with `loanDays()` returning `7` and doesn't override `dueDateFrom`. What does `dvd.dueDateFrom(LocalDate.of(2026, 3, 1))` return (ISO format)?
+A `Bug` implements `Assignable` with `targetDays()` returning `7` and doesn't override `dueDateFrom`. What does `bug.dueDateFrom(LocalDate.of(2026, 3, 1))` return (ISO format)?
 ---answer
 2026-03-08
 ---solution
@@ -312,49 +312,50 @@ A `Dvd` implements `Borrowable` with `loanDays()` returning `7` and doesn't over
 :::exercise
 id: proj-java-05-fees
 level: 3
-title: "Project 5: fee policies"
+title: "Project 5: credit policies"
 mode: code
 lang: java
-file: FeePolicy.java
+file: CreditPolicy.java
+path: java/src/main/java/taskboard/CreditPolicy.java
 ---
-Write `public interface FeePolicy` with `BigDecimal feeFor(long daysLate)`, and two implementations: `StandardFeePolicy` returning `new BigDecimal("0.25").multiply(BigDecimal.valueOf(daysLate))`, and `StudentFeePolicy` returning `BigDecimal.ZERO` (students pay no fees). Both with `@Override`.
+Write `public interface CreditPolicy` with `BigDecimal creditFor(long daysLate)`, and two implementations: `StandardCreditPolicy` returning `new BigDecimal("0.25").multiply(BigDecimal.valueOf(daysLate))`, and `InternalCreditPolicy` returning `BigDecimal.ZERO` (students pay no credits). Both with `@Override`.
 ---starter
 import java.math.BigDecimal;
 ---rule
-public\s+interface\s+FeePolicy\s*\{\s*BigDecimal\s+feeFor\(\s*long\s+daysLate\s*\)\s*;
+public\s+interface\s+CreditPolicy\s*\{\s*BigDecimal\s+creditFor\(\s*long\s+daysLate\s*\)\s*;
 The interface
 ---rule
-class\s+StandardFeePolicy\s+implements\s+FeePolicy
-`StandardFeePolicy implements FeePolicy`
+class\s+StandardCreditPolicy\s+implements\s+CreditPolicy
+`StandardCreditPolicy implements CreditPolicy`
 ---rule
 new\s+BigDecimal\(\s*"0\.25"\s*\)\.multiply\(\s*BigDecimal\.valueOf\(\s*daysLate\s*\)\s*\)
 25 cents per day
 ---rule
-class\s+StudentFeePolicy\s+implements\s+FeePolicy
-`StudentFeePolicy implements FeePolicy`
+class\s+InternalCreditPolicy\s+implements\s+CreditPolicy
+`InternalCreditPolicy implements CreditPolicy`
 ---rule
-StudentFeePolicy[\s\S]*return\s+BigDecimal\.ZERO\s*;
+InternalCreditPolicy[\s\S]*return\s+BigDecimal\.ZERO\s*;
 Students pay nothing
 ---rule
-(@Override\s*\n\s*public\s+BigDecimal\s+feeFor[\s\S]*){2}
-Both override `feeFor`
+(@Override\s*\n\s*public\s+BigDecimal\s+creditFor[\s\S]*){2}
+Both override `creditFor`
 ---solution
 import java.math.BigDecimal;
 
-public interface FeePolicy {
-    BigDecimal feeFor(long daysLate);
+public interface CreditPolicy {
+    BigDecimal creditFor(long daysLate);
 }
 
-class StandardFeePolicy implements FeePolicy {
+class StandardCreditPolicy implements CreditPolicy {
     @Override
-    public BigDecimal feeFor(long daysLate) {
+    public BigDecimal creditFor(long daysLate) {
         return new BigDecimal("0.25").multiply(BigDecimal.valueOf(daysLate));
     }
 }
 
-class StudentFeePolicy implements FeePolicy {
+class InternalCreditPolicy implements CreditPolicy {
     @Override
-    public BigDecimal feeFor(long daysLate) {
+    public BigDecimal creditFor(long daysLate) {
         return BigDecimal.ZERO;
     }
 }
@@ -363,74 +364,75 @@ class StudentFeePolicy implements FeePolicy {
 :::exercise
 id: proj-java-05-book-borrowable
 level: 3
-title: "Project 5b: Book implements Borrowable"
+title: "Project 5b: Task implements Assignable"
 mode: code
 lang: java
-file: Book.java
+file: Task.java
+path: java/src/main/java/taskboard/Task.java
 ---
-Make `Book` extend the abstract `LibraryItem` **and** implement `Borrowable` and `Comparable<Book>`: implement `loanDays()` (21), `isAvailable()`, `borrow()` (throw `IllegalStateException` if not available), `giveBack()`, `describe()` (returns `getTitle() + " by " + author`), and `compareTo(Book other)` comparing titles.
+Make `Task` extend the abstract `WorkItem` **and** implement `Assignable` and `Comparable<Task>`: implement `targetDays()` (21), `isAvailable()`, `pickUp()` (throw `IllegalStateException` if not available), `putBack()`, `describe()` (returns `getTitle() + " by " + assignee`), and `compareTo(Task other)` comparing titles.
 ---starter
-public class Book extends LibraryItem {
-    private final String author;
+public class Task extends WorkItem {
+    private final String assignee;
     private boolean available = true;
 
-    public Book(String isbn, String title, String author) {
-        super(isbn, title);
-        this.author = author;
+    public Task(String key, String title, String assignee) {
+        super(key, title);
+        this.assignee = assignee;
     }
 }
 ---rule
-public\s+class\s+Book\s+extends\s+LibraryItem\s+implements\s+(Borrowable\s*,\s*Comparable<Book>|Comparable<Book>\s*,\s*Borrowable)
+public\s+class\s+Task\s+extends\s+WorkItem\s+implements\s+(Assignable\s*,\s*Comparable<Task>|Comparable<Task>\s*,\s*Assignable)
 Extends one, implements two
 ---rule
-public\s+int\s+loanDays\(\s*\)\s*\{\s*return\s+21\s*;
-`loanDays()` → 21
+public\s+int\s+targetDays\(\s*\)\s*\{\s*return\s+21\s*;
+`targetDays()` → 21
 ---rule
 public\s+boolean\s+isAvailable\(\s*\)\s*\{\s*return\s+(this\.)?available\s*;
 `isAvailable()`
 ---rule
-public\s+void\s+borrow\(\s*\)\s*\{\s*if\s*\(\s*!\s*(this\.)?available\s*\)\s*\{?\s*throw\s+new\s+IllegalStateException\(
-`borrow()` guards its state
+public\s+void\s+pickUp\(\s*\)\s*\{\s*if\s*\(\s*!\s*(this\.)?available\s*\)\s*\{?\s*throw\s+new\s+IllegalStateException\(
+`pickUp()` guards its state
 ---rule
-public\s+void\s+giveBack\(\s*\)\s*\{\s*(this\.)?available\s*=\s*true\s*;
-`giveBack()`
+public\s+void\s+putBack\(\s*\)\s*\{\s*(this\.)?available\s*=\s*true\s*;
+`putBack()`
 ---rule
-public\s+String\s+describe\(\s*\)\s*\{\s*return\s+getTitle\(\s*\)\s*\+\s*" by "\s*\+\s*author\s*;
+public\s+String\s+describe\(\s*\)\s*\{\s*return\s+getTitle\(\s*\)\s*\+\s*" by "\s*\+\s*assignee\s*;
 `describe()`
 ---rule
-public\s+int\s+compareTo\(\s*Book\s+other\s*\)\s*\{\s*return\s+getTitle\(\s*\)\.compareTo\(\s*other\.getTitle\(\s*\)\s*\)\s*;
+public\s+int\s+compareTo\(\s*Task\s+other\s*\)\s*\{\s*return\s+getTitle\(\s*\)\.compareTo\(\s*other\.getTitle\(\s*\)\s*\)\s*;
 `compareTo` by title
 ---solution
-public class Book extends LibraryItem implements Borrowable, Comparable<Book> {
-    private final String author;
+public class Task extends WorkItem implements Assignable, Comparable<Task> {
+    private final String assignee;
     private boolean available = true;
 
-    public Book(String isbn, String title, String author) {
-        super(isbn, title);
-        this.author = author;
+    public Task(String key, String title, String assignee) {
+        super(key, title);
+        this.assignee = assignee;
     }
 
     @Override
-    public int loanDays() { return 21; }
+    public int targetDays() { return 21; }
 
     @Override
     public boolean isAvailable() { return available; }
 
     @Override
-    public void borrow() {
+    public void pickUp() {
         if (!available) {
-            throw new IllegalStateException(getTitle() + " is already borrowed");
+            throw new IllegalStateException(getTitle() + " is already taken");
         }
         available = false;
     }
 
     @Override
-    public void giveBack() { available = true; }
+    public void putBack() { available = true; }
 
     @Override
-    public String describe() { return getTitle() + " by " + author; }
+    public String describe() { return getTitle() + " by " + assignee; }
 
     @Override
-    public int compareTo(Book other) { return getTitle().compareTo(other.getTitle()); }
+    public int compareTo(Task other) { return getTitle().compareTo(other.getTitle()); }
 }
 :::

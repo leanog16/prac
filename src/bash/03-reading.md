@@ -64,7 +64,7 @@ wc data/grades.txt
 wc -l logs/*.log
 ```
 
-`wc` prints lines, words, bytes, then the filename. Use `-l`, `-w`, `-c` for just one count. Feed it with `<` (or a pipe) to get the bare number without a filename, which is what you want inside scripts:
+`wc` prints lines, words, bytes, then the filename. Use `-l`, `-w`, `-c` for just one count. Feed it the file with `<` instead of naming it (`wc -l < file`: the shell hands the file's contents to `wc`, so `wc` never learns the name) to get the bare number without a filename, which is what you want inside scripts:
 
 ```bash run
 wc -l < data/grades.txt
@@ -72,6 +72,27 @@ wc -l < data/grades.txt
 
 > [!exam] Lines = newline characters
 > `wc -l` counts newline characters. A file whose last line has no trailing newline reports one fewer line than you'd expect.
+
+## Connecting commands: `|`
+
+The `|` symbol (a **pipe**) sends the output of the command on its left into the command on its right, instead of to the screen. Combining small commands this way is how most shell work gets done:
+
+```bash run
+head -n 20 data/words.txt | tail -n 5
+```
+
+`head -n 20` produces the first 20 lines; `tail -n 5` receives them and keeps the last 5, so you see lines 16–20. Lesson 5 covers pipes and redirection in depth.
+
+## Finding lines: grep
+
+`grep WORD file` prints only the lines of `file` that contain `WORD`. Add `-c` to print how many lines matched instead of the lines themselves:
+
+```bash run
+grep ERROR logs/app.log
+grep -c ERROR logs/app.log
+```
+
+That's enough to start sampling logs. Lesson 7 is all about grep and its patterns.
 
 ## Other viewers
 
@@ -302,6 +323,7 @@ tail -n +3 data/grades.txt | head -n -2
 id: proj-bash-03-sizes
 level: 1
 title: "Project 3: how big is each log?"
+path: ops/commands/03-sizes.sh
 ---
 Print the line count of each `.log` file in `~/logs` (one command).
 ---solution
@@ -312,6 +334,7 @@ wc -l logs/*.log
 id: proj-bash-03-latest
 level: 2
 title: "Project 3b: the latest app messages"
+path: ops/commands/03-latest.sh
 ---
 Show the **last 5** lines of `logs/app.log`, numbered with line numbers **from the start of the file** (so the numbers are 41–45).
 ---hint

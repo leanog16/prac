@@ -4,8 +4,8 @@ title: Relationships & transactions
 summary: @ManyToOne and @OneToMany with mappedBy, owning sides and join columns, cascade and orphan removal, lazy vs eager loading, the N+1 query problem and fixes (fetch joins, @EntityGraph), @Transactional semantics, propagation, rollback rules, the self-invocation trap, dirty checking and optimistic locking with @Version.
 minutes: 45
 ---
-> [!project] Bookshelf, step 6: borrowing books
-> The heart of a library: a **member** borrows a **book**, creating a **loan** with a due date. This step maps the relationships and writes `borrow` as a single transaction that can't leave the data half-updated.
+> [!project] Taskboard, step 6: picking up tasks
+> The heart of a team: a **member** picks up a **task**, creating a **assignment** with a due date. This step maps the relationships and writes `pick up` as a single transaction that can't leave the data half-updated.
 
 ## Mapping relationships
 
@@ -131,6 +131,13 @@ public class TransferService {
 | `MANDATORY` | fail if there's no current transaction |
 | `NOT_SUPPORTED` | run without a transaction |
 
+Choose one with the annotation's `propagation` attribute:
+
+```java
+@Transactional(propagation = Propagation.REQUIRES_NEW)
+public void writeAudit(String event) { ... }
+```
+
 ### The self-invocation trap
 
 `@Transactional` works through a **proxy** that wraps your bean. A call from one method to another **in the same class** doesn't go through the proxy, so the annotation on the called method is ignored:
@@ -160,18 +167,18 @@ private long version;
 
 Every UPDATE now includes `where id = ? and version = ?` and increments the version. If someone else updated the row in between, zero rows match and JPA throws `OptimisticLockException` (Spring: `ObjectOptimisticLockingFailureException`). Map it to **409 Conflict** and let the client reload and retry.
 
-## Worked example: modeling Member, Book and Loan
+## Worked example: modeling Member, Task and Assignment
 
 ```
-Member 1 ───< Loan >─── 1 Book
- (id, name, email)   (id, member_id, book_id, borrowed_on, due_on, returned_on)
+Member 1 ───< Assignment >─── 1 Task
+ (id, name, email)   (id, member_id, task_id, assigned_on, due_on, completed_on)
 ```
 
-A member has many loans over time; a book has many loans over time; each loan has exactly one member and one book. `Loan` holds both foreign keys, so it owns both relationships:
+A member has many assignments over time; a task has many assignments over time; each assignment has exactly one member and one task. `Assignment` holds both foreign keys, so it owns both relationships:
 
 ```java
 @Entity
-public class Loan {
+public class Assignment {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -179,35 +186,35 @@ public class Loan {
     private Member member;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "book_id")
-    private Book book;
+    @JoinColumn(name = "task_id")
+    private Task task;
 
-    private LocalDate borrowedOn;
+    private LocalDate assignedOn;
     private LocalDate dueOn;
-    private LocalDate returnedOn;      // null while the book is out
+    private LocalDate completedOn;      // null while the task is still open
 
-    protected Loan() {}
-    public Loan(Member member, Book book, LocalDate borrowedOn, LocalDate dueOn) { ... }
+    protected Assignment() {}
+    public Assignment(Member member, Task task, LocalDate assignedOn, LocalDate dueOn) { ... }
 }
 ```
 
-## Worked example: borrow as one transaction
+## Worked example: pick up as one transaction
 
-Borrowing must check rules and change two things (create a loan, mark the book unavailable). If the second write failed after the first, you'd have a loan for a book that still shows as available.
+Picking up must check rules and change two things (create an assignment, mark the task unavailable). If the second write failed after the first, you'd have an assignment for a task that still shows as available.
 
 ```java
 @Transactional
-public LoanResponse borrow(long memberId, long bookId) {
+public AssignmentResponse pickUp(long memberId, long taskId) {
     Member member = members.findById(memberId).orElseThrow(() -> new MemberNotFoundException(memberId));
-    Book book = books.findById(bookId).orElseThrow(() -> new BookNotFoundException("Book " + bookId + " not found"));
+    Task task = tasks.findById(taskId).orElseThrow(() -> new TaskNotFoundException("Task " + taskId + " not found"));
 
-    if (!book.isAvailable()) throw new BookUnavailableException(bookId);
-    if (loans.countByMemberIdAndReturnedOnIsNull(memberId) >= policy.maxLoans()) throw new LoanLimitException(memberId);
+    if (!task.isAvailable()) throw new TaskTakenException(taskId);
+    if (assignments.countByMemberIdAndReturnedOnIsNull(memberId) >= policy.maxTasks()) throw new WorkloadLimitException(memberId);
 
     LocalDate today = LocalDate.now(clock);
-    Loan loan = loans.save(new Loan(member, book, today, today.plusDays(policy.loanDays())));
-    book.setAvailable(false);            // dirty checking writes this UPDATE at commit
-    return LoanResponse.from(loan);
+    Assignment assignment = assignments.save(new Assignment(member, task, today, today.plusDays(policy.targetDays())));
+    task.setAvailable(false);            // dirty checking writes this UPDATE at commit
+    return AssignmentResponse.from(assignment);
 }
 ```
 
@@ -218,8 +225,8 @@ Every rule violation throws an unchecked exception, so the whole transaction rol
 
 ## Common mistakes
 
-> [!mistake] Two people borrowing the last copy at the same moment
-> Both transactions read `available = true` and both succeed. Add `@Version` to `Book` (optimistic locking): the second commit fails with a conflict you can turn into a 409 "just borrowed by someone else".
+> [!mistake] Two people picking up the last copy at the same moment
+> Both transactions read `available = true` and both succeed. Add `@Version` to `Task` (optimistic locking): the second commit fails with a conflict you can turn into a 409 "just taken by someone else".
 
 :::quiz
 q: In a bidirectional Order ↔ OrderLine mapping, which side is the owning side?
@@ -645,22 +652,23 @@ LazyInitializationException
 :::exercise
 id: proj-sp-06-loan
 level: 3
-title: "Project 6: the Loan entity"
+title: "Project 6: the Assignment entity"
 mode: code
 lang: java
-file: Loan.java
+file: Assignment.java
+path: spring/src/main/java/dev/taskboard/Assignment.java
 ---
-Map `Loan`: an `@Entity` with an identity-generated `Long id`; **lazy, required** `@ManyToOne` associations to `Member member` (column `member_id`) and `Book book` (column `book_id`); and `LocalDate` fields `borrowedOn`, `dueOn` and `returnedOn`. Add a protected no-args constructor.
+Map `Assignment`: an `@Entity` with an identity-generated `Long id`; **lazy, required** `@ManyToOne` associations to `Member member` (column `member_id`) and `Task task` (column `task_id`); and `LocalDate` fields `assignedOn`, `dueOn` and `completedOn`. Add a protected no-args constructor.
 ---starter
-package org.library.bookshelf;
+package dev.taskboard;
 
 import jakarta.persistence.*;
 import java.time.LocalDate;
 
-public class Loan {
+public class Assignment {
 }
 ---rule
-@Entity\s*\n\s*public\s+class\s+Loan
+@Entity\s*\n\s*public\s+class\s+Assignment
 `@Entity`
 ---rule
 @Id\s*\n?\s*@GeneratedValue\(\s*strategy\s*=\s*GenerationType\.IDENTITY\s*\)\s*\n?\s*private\s+Long\s+id
@@ -669,22 +677,22 @@ Identity id
 @ManyToOne\((?=[^)]*fetch\s*=\s*FetchType\.LAZY)(?=[^)]*optional\s*=\s*false)[^)]*\)\s*\n\s*@JoinColumn\(\s*name\s*=\s*"member_id"\s*\)\s*\n\s*private\s+Member\s+member
 Lazy, required `member` (`member_id`)
 ---rule
-@ManyToOne\((?=[^)]*fetch\s*=\s*FetchType\.LAZY)(?=[^)]*optional\s*=\s*false)[^)]*\)\s*\n\s*@JoinColumn\(\s*name\s*=\s*"book_id"\s*\)\s*\n\s*private\s+Book\s+book
-Lazy, required `book` (`book_id`)
+@ManyToOne\((?=[^)]*fetch\s*=\s*FetchType\.LAZY)(?=[^)]*optional\s*=\s*false)[^)]*\)\s*\n\s*@JoinColumn\(\s*name\s*=\s*"task_id"\s*\)\s*\n\s*private\s+Task\s+task
+Lazy, required `task` (`task_id`)
 ---rule
-private\s+LocalDate\s+borrowedOn[\s\S]*private\s+LocalDate\s+dueOn[\s\S]*private\s+LocalDate\s+returnedOn
+private\s+LocalDate\s+assignedOn[\s\S]*private\s+LocalDate\s+dueOn[\s\S]*private\s+LocalDate\s+completedOn
 The three dates
 ---rule
-protected\s+Loan\(\s*\)\s*\{\s*\}
-`protected Loan() {}`
+protected\s+Assignment\(\s*\)\s*\{\s*\}
+`protected Assignment() {}`
 ---solution
-package org.library.bookshelf;
+package dev.taskboard;
 
 import jakarta.persistence.*;
 import java.time.LocalDate;
 
 @Entity
-public class Loan {
+public class Assignment {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -695,28 +703,29 @@ public class Loan {
     private Member member;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "book_id")
-    private Book book;
+    @JoinColumn(name = "task_id")
+    private Task task;
 
-    private LocalDate borrowedOn;
+    private LocalDate assignedOn;
     private LocalDate dueOn;
-    private LocalDate returnedOn;
+    private LocalDate completedOn;
 
-    protected Loan() {}
+    protected Assignment() {}
 }
 :::
 
 :::exercise
 id: proj-sp-06-borrow
 level: 4
-title: "Project 6b: borrow a book"
+title: "Project 6b: pick up a task"
 mode: code
 lang: java
-file: LoanService.java
+file: AssignmentService.java
+path: spring/src/main/java/dev/taskboard/AssignmentService.java
 ---
-Implement `borrow(long memberId, long bookId)` as a **transaction**: load the member (`members.findById(memberId).orElseThrow(() -> new MemberNotFoundException(memberId))`) and the book (same pattern with `BookNotFoundException("Book " + bookId + " not found")`); throw `BookUnavailableException(bookId)` if `!book.isAvailable()`; compute `today = LocalDate.now(clock)`; save `new Loan(member, book, today, today.plusDays(policy.loanDays()))`; call `book.setAvailable(false)`; return `LoanResponse.from(loan)`.
+Implement `pickUp(long memberId, long taskId)` as a **transaction**: load the member (`members.findById(memberId).orElseThrow(() -> new MemberNotFoundException(memberId))`) and the task (same pattern with `TaskNotFoundException("Task " + taskId + " not found")`); throw `TaskTakenException(taskId)` if `!task.isAvailable()`; compute `today = LocalDate.now(clock)`; save `new Assignment(member, task, today, today.plusDays(policy.targetDays()))`; call `task.setAvailable(false)`; return `AssignmentResponse.from(assignment)`.
 ---starter
-package org.library.bookshelf;
+package dev.taskboard;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -724,48 +733,48 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class LoanService {
+public class AssignmentService {
 
     private final MemberRepository members;
-    private final BookRepository books;
-    private final LoanRepository loans;
-    private final LoanPolicy policy;
+    private final TaskRepository tasks;
+    private final AssignmentRepository assignments;
+    private final AssignmentPolicy policy;
     private final Clock clock;
 
-    public LoanService(MemberRepository members, BookRepository books, LoanRepository loans, LoanPolicy policy, Clock clock) {
+    public AssignmentService(MemberRepository members, TaskRepository tasks, AssignmentRepository assignments, AssignmentPolicy policy, Clock clock) {
         this.members = members;
-        this.books = books;
-        this.loans = loans;
+        this.tasks = tasks;
+        this.assignments = assignments;
         this.policy = policy;
         this.clock = clock;
     }
 }
 ---rule
-@Transactional\s*\n\s*public\s+LoanResponse\s+borrow\(\s*long\s+memberId\s*,\s*long\s+bookId\s*\)
-`@Transactional` `borrow(long memberId, long bookId)`
+@Transactional\s*\n\s*public\s+AssignmentResponse\s+pickUp\(\s*long\s+memberId\s*,\s*long\s+taskId\s*\)
+`@Transactional` `pickUp(long memberId, long taskId)`
 ---rule
 members\.findById\(\s*memberId\s*\)\.orElseThrow\(\s*\(\)\s*->\s*new\s+MemberNotFoundException\(\s*memberId\s*\)\s*\)
 Load the member or 404
 ---rule
-books\.findById\(\s*bookId\s*\)\.orElseThrow\(\s*\(\)\s*->\s*new\s+BookNotFoundException\(
-Load the book or 404
+tasks\.findById\(\s*taskId\s*\)\.orElseThrow\(\s*\(\)\s*->\s*new\s+TaskNotFoundException\(
+Load the task or 404
 ---rule
-if\s*\(\s*!\s*book\.isAvailable\(\s*\)\s*\)\s*(\{\s*)?throw\s+new\s+BookUnavailableException\(\s*bookId\s*\)
-Refuse unavailable books
+if\s*\(\s*!\s*task\.isAvailable\(\s*\)\s*\)\s*(\{\s*)?throw\s+new\s+TaskTakenException\(\s*taskId\s*\)
+Refuse unavailable tasks
 ---rule
 LocalDate\s+today\s*=\s*LocalDate\.now\(\s*clock\s*\)
 Today from the clock
 ---rule
-loans\.save\(\s*new\s+Loan\(\s*member\s*,\s*book\s*,\s*today\s*,\s*today\.plusDays\(\s*policy\.loanDays\(\s*\)\s*\)\s*\)\s*\)
-Save the loan with its due date
+assignments\.save\(\s*new\s+Assignment\(\s*member\s*,\s*task\s*,\s*today\s*,\s*today\.plusDays\(\s*policy\.targetDays\(\s*\)\s*\)\s*\)\s*\)
+Save the assignment with its due date
 ---rule
-book\.setAvailable\(\s*false\s*\)
-Mark the book as out
+task\.setAvailable\(\s*false\s*\)
+Mark the task as out
 ---rule
-return\s+LoanResponse\.from\(\s*\w+\s*\)
+return\s+AssignmentResponse\.from\(\s*\w+\s*\)
 Return the response
 ---solution
-package org.library.bookshelf;
+package dev.taskboard;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -773,33 +782,33 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class LoanService {
+public class AssignmentService {
 
     private final MemberRepository members;
-    private final BookRepository books;
-    private final LoanRepository loans;
-    private final LoanPolicy policy;
+    private final TaskRepository tasks;
+    private final AssignmentRepository assignments;
+    private final AssignmentPolicy policy;
     private final Clock clock;
 
-    public LoanService(MemberRepository members, BookRepository books, LoanRepository loans, LoanPolicy policy, Clock clock) {
+    public AssignmentService(MemberRepository members, TaskRepository tasks, AssignmentRepository assignments, AssignmentPolicy policy, Clock clock) {
         this.members = members;
-        this.books = books;
-        this.loans = loans;
+        this.tasks = tasks;
+        this.assignments = assignments;
         this.policy = policy;
         this.clock = clock;
     }
 
     @Transactional
-    public LoanResponse borrow(long memberId, long bookId) {
+    public AssignmentResponse pickUp(long memberId, long taskId) {
         Member member = members.findById(memberId).orElseThrow(() -> new MemberNotFoundException(memberId));
-        Book book = books.findById(bookId).orElseThrow(() -> new BookNotFoundException("Book " + bookId + " not found"));
-        if (!book.isAvailable()) {
-            throw new BookUnavailableException(bookId);
+        Task task = tasks.findById(taskId).orElseThrow(() -> new TaskNotFoundException("Task " + taskId + " not found"));
+        if (!task.isAvailable()) {
+            throw new TaskTakenException(taskId);
         }
         LocalDate today = LocalDate.now(clock);
-        Loan loan = loans.save(new Loan(member, book, today, today.plusDays(policy.loanDays())));
-        book.setAvailable(false);
-        return LoanResponse.from(loan);
+        Assignment assignment = assignments.save(new Assignment(member, task, today, today.plusDays(policy.targetDays())));
+        task.setAvailable(false);
+        return AssignmentResponse.from(assignment);
     }
 }
 :::
@@ -807,14 +816,15 @@ public class LoanService {
 :::exercise
 id: proj-sp-06-overdue
 level: 3
-title: "Project 6c: overdue loans without N+1"
+title: "Project 6c: overdue assignments without N+1"
 mode: code
 lang: java
-file: LoanRepository.java
+file: AssignmentRepository.java
+path: spring/src/main/java/dev/taskboard/AssignmentRepository.java
 ---
-The overdue report shows each loan's member name and book title, and it's issuing one query per loan. Add `List<Loan> findOverdue(@Param("today") LocalDate today)` with the JPQL `select l from Loan l join fetch l.member join fetch l.book where l.returnedOn is null and l.dueOn < :today`.
+The overdue report shows each assignment's member name and task title, and it's issuing one query per assignment. Add `List<Assignment> findOverdue(@Param("today") LocalDate today)` with the JPQL `select l from Assignment l join fetch l.member join fetch l.task where l.completedOn is null and l.dueOn < :today`.
 ---starter
-package org.library.bookshelf;
+package dev.taskboard;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -822,17 +832,17 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface LoanRepository extends JpaRepository<Loan, Long> {
+public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
     long countByMemberIdAndReturnedOnIsNull(long memberId);
 }
 ---rule
-@Query\(\s*"select l from Loan l join fetch l\.member join fetch l\.book where l\.returnedOn is null and l\.dueOn < :today"\s*\)
+@Query\(\s*"select l from Assignment l join fetch l\.member join fetch l\.task where l\.completedOn is null and l\.dueOn < :today"\s*\)
 The fetch-join query
 ---rule
-List<Loan>\s+findOverdue\(\s*@Param\(\s*"today"\s*\)\s+LocalDate\s+today\s*\)\s*;
+List<Assignment>\s+findOverdue\(\s*@Param\(\s*"today"\s*\)\s+LocalDate\s+today\s*\)\s*;
 `findOverdue(@Param("today") LocalDate today)`
 ---solution
-package org.library.bookshelf;
+package dev.taskboard;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -840,10 +850,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface LoanRepository extends JpaRepository<Loan, Long> {
+public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
     long countByMemberIdAndReturnedOnIsNull(long memberId);
 
-    @Query("select l from Loan l join fetch l.member join fetch l.book where l.returnedOn is null and l.dueOn < :today")
-    List<Loan> findOverdue(@Param("today") LocalDate today);
+    @Query("select l from Assignment l join fetch l.member join fetch l.task where l.completedOn is null and l.dueOn < :today")
+    List<Assignment> findOverdue(@Param("today") LocalDate today);
 }
 :::

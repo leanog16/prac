@@ -501,6 +501,7 @@ title: "Project 2: the API task role policy"
 mode: code
 lang: json
 file: taskboard-api-policy.json
+path: infra/aws/taskboard-api-policy.json
 ---
 Write the API task role's policy from the table: `s3:PutObject`, `s3:GetObject` and `s3:DeleteObject` on `arn:aws:s3:::taskboard-attachments-prod/tasks/*`; `sqs:SendMessage` on `arn:aws:sqs:eu-west-1:222222222222:task-events`; `secretsmanager:GetSecretValue` on `arn:aws:secretsmanager:eu-west-1:222222222222:secret:taskboard/prod/*`. No wildcard actions.
 ---starter
@@ -562,6 +563,7 @@ title: "Project 2b: trust ECS tasks"
 mode: code
 lang: json
 file: taskboard-api-trust.json
+path: infra/aws/taskboard-api-trust.json
 ---
 Write the trust policy for the API task role so that **ECS tasks** (`ecs-tasks.amazonaws.com`) can assume it.
 ---starter

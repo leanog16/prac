@@ -385,6 +385,7 @@ grep -o 'user=[a-z]*' logs/app.log | cut -d= -f2 | sort | uniq -c
 id: proj-bash-07-failures
 level: 2
 title: "Project 7: count failed requests"
+path: ops/commands/07-failures.sh
 ---
 Count the requests in `logs/access.log` whose status code is 4xx or 5xx, using one `grep` with an extended regex anchored to the status field.
 ---solution
@@ -395,6 +396,7 @@ grep -cE '" [45][0-9]{2} ' logs/access.log
 id: proj-bash-07-errors-context
 level: 3
 title: "Project 7b: errors by component"
+path: ops/commands/07-errors-context.sh
 ---
 Print, sorted and de-duplicated, the **component names** (the word inside square brackets, e.g. `api`) of every `ERROR` line in `logs/app.log`, without the brackets.
 ---hint

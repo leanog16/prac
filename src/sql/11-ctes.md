@@ -4,8 +4,8 @@ title: CTEs & recursive queries
 summary: Naming intermediate results with WITH, chaining steps into readable pipelines, and walking hierarchies and sequences with recursive CTEs.
 minutes: 30
 ---
-> [!project] Desk & Co, step 11: monthly revenue, readably
-> Remember the triple-nested subquery from step 9? CTEs turn it into a sequence of named steps. You'll also build Maya's monthly revenue table, the backbone of the final report.
+> [!project] Taskboard, step 11: throughput and blockers
+> CTEs turn nested queries into named steps. You'll build the "completed per month" table, the backbone of the final report, and follow a chain of blocked tasks with a recursive query.
 
 ## WITH: name your subqueries
 
@@ -323,21 +323,27 @@ GROUP BY t.root, l.first_name;
 :::exercise
 id: proj-sql-11-monthly
 level: 3
-title: "Project 11: monthly revenue"
+title: "Project 11: completed per month"
 ordered: true
+path: db/reports/11-completed-per-month.sql
 ---
-With a CTE named `lines` that joins `orders` to `order_items` (non-cancelled orders only) and exposes `month` (`YYYY-MM`) and `amount` (quantity × unit price), return each `month` and its `revenue` (rounded to 2 decimals), in month order.
+With a CTE named `finished` that exposes `month` (`YYYY-MM`, from `done_on`) for every task with status `done`, return each `month` and the number of tasks finished that month as `completed`, in month order.
 ---solution
-WITH lines AS (SELECT strftime('%Y-%m', o.order_date) AS month, oi.quantity * oi.unit_price AS amount FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status <> 'cancelled') SELECT month, ROUND(SUM(amount), 2) AS revenue FROM lines GROUP BY month ORDER BY month;
+WITH finished AS (SELECT STRFTIME('%Y-%m', done_on) AS month FROM tasks WHERE status = 'done') SELECT month, COUNT(*) AS completed FROM finished GROUP BY month ORDER BY month;
 :::
 
 :::exercise
 id: proj-sql-11-top-customers
-level: 3
-title: "Project 11b: top 3 customers by name"
+level: 4
+title: "Project 11b: the blocker chain"
 ordered: true
+path: db/reports/11-blocker-chain.sql
 ---
-Using a CTE `spend` (total non-cancelled spend per `customer_id`), return the `name` and `spent` (rounded to 2 decimals) of the **3** biggest spenders, biggest first.
+`tasks.blocked_by` holds the id of the task a task is waiting on. Task **12** (`Write load tests`) waits on another task, which waits on another, and so on. With a recursive CTE, return the whole chain starting at task 12: `task_id`, `title` and `depth` (0 for task 12, 1 for the task it waits on, …), ordered by depth.
+---hint
+It's the lesson's "walking upward" pattern: anchor on task 12, then join `tasks t ON t.task_id = chain.blocked_by`.
+---hint
+The recursion stops by itself when a task's `blocked_by` is NULL, because the join finds nothing.
 ---solution
-WITH spend AS (SELECT o.customer_id, SUM(oi.quantity * oi.unit_price) AS spent FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status <> 'cancelled' GROUP BY o.customer_id) SELECT c.name, ROUND(s.spent, 2) AS spent FROM spend s JOIN customers c ON c.customer_id = s.customer_id ORDER BY s.spent DESC LIMIT 3;
+WITH RECURSIVE chain(task_id, title, blocked_by, depth) AS (SELECT task_id, title, blocked_by, 0 FROM tasks WHERE task_id = 12 UNION ALL SELECT t.task_id, t.title, t.blocked_by, c.depth + 1 FROM tasks t JOIN chain c ON t.task_id = c.blocked_by) SELECT task_id, title, depth FROM chain ORDER BY depth;
 :::

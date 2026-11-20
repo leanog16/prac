@@ -4,8 +4,8 @@ title: Set operations
 summary: Stacking result sets with UNION and UNION ALL, and comparing them with INTERSECT and EXCEPT.
 minutes: 15
 ---
-> [!project] Desk & Co, step 10: one contact list
-> Maya's newsletter goes to customers **and** to her staff, and she wants to know which products are stocked but never sold. Set operations stack and compare whole result sets.
+> [!project] Taskboard, step 10: who's involved?
+> People take part in two ways: they're assigned tasks, or they comment on them. Set operations stack and compare those two lists.
 
 ## Combining results vertically
 
@@ -242,19 +242,23 @@ SELECT city FROM (SELECT city FROM employees WHERE city IS NOT NULL EXCEPT SELEC
 :::exercise
 id: proj-sql-10-contacts
 level: 2
-title: "Project 10: the newsletter list"
+title: "Project 10: everyone involved"
+path: db/reports/10-involved.sql
 ---
-Produce one list with columns `name` and `email`: customers (their `name`) and employees (`first_name || ' ' || last_name`), only where the email isn't NULL. Remove duplicates.
+Return one column `member_id` listing, without duplicates, every member who is **either** assigned to at least one task **or** has written at least one comment.
+---hint
+`tasks.assignee_id` can be NULL; leave those rows out of the first query.
 ---solution
-SELECT name, email FROM customers WHERE email IS NOT NULL UNION SELECT first_name || ' ' || last_name, email FROM employees WHERE email IS NOT NULL;
+SELECT assignee_id AS member_id FROM tasks WHERE assignee_id IS NOT NULL UNION SELECT author_id FROM comments;
 :::
 
 :::exercise
 id: proj-sql-10-never-sold
 level: 2
-title: "Project 10b: never sold, with EXCEPT"
+title: "Project 10b: never assigned, with EXCEPT"
+path: db/reports/10-never-assigned.sql
 ---
-Using `EXCEPT`, return the `product_id`s of products that have never been ordered.
+Using `EXCEPT`, return the `member_id` of members who have **never** been assigned a task.
 ---solution
-SELECT product_id FROM products EXCEPT SELECT product_id FROM order_items;
+SELECT member_id FROM members EXCEPT SELECT assignee_id FROM tasks;
 :::

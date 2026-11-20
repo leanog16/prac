@@ -81,6 +81,21 @@ awk -F, 'NR > 1 { if ($4 > max) { max = $4; who = $2 } } END { print who, max }'
 awk 'BEGIN { print "Squares:"; for (i = 1; i <= 5; i++) print i, i * i }'
 ```
 
+Inside an action, awk has the control flow you'd expect: `if (cond) { … } else { … }`, `for` loops, and a few more tools:
+
+| Statement | Effect |
+|---|---|
+| `next` | stop processing this line and move on to the next one |
+| `exit` | stop reading input altogether (the `END` block still runs) |
+| `cond ? a : b` | an expression: `a` when cond is true, else `b` |
+
+```bash run
+awk '{ result = ($2 >= 70) ? "pass" : "fail"; print $1, result }' data/grades.txt | head -3
+awk '/^#/ { next } { print }' data/config.ini | head -3
+```
+
+A comparison like `($2 >= 70)` is itself a value, 1 for true and 0 for false, so `inside = ($1 == "x")` stores a true/false flag.
+
 ## Associative arrays: group by in awk
 
 awk arrays are keyed by strings. `count[$3]++` counts occurrences of each value of field 3, and `for (k in arr)` loops over keys. This is GROUP BY in a few characters:
@@ -377,6 +392,7 @@ awk -F'\t' 'NR > 1 { if ($3 == 0) print "OUT: " $2; v += $3 * $4 } END { printf 
 id: proj-bash-09-status-bytes
 level: 3
 title: "Project 9: requests and bytes per status"
+path: ops/commands/09-status-bytes.sh
 ---
 For each status code in `logs/access.log`, print a line `STATUS COUNT BYTES` (single spaces), sorted by status code.
 ---solution
@@ -387,6 +403,7 @@ awk '{ c[$9]++; b[$9] += $10 } END { for (s in c) print s, c[s], b[s] }' logs/ac
 id: proj-bash-09-levels
 level: 3
 title: "Project 9b: messages per level"
+path: ops/commands/09-levels.sh
 ---
 From `logs/app.log`, print each log level (field 3) with how many lines have it, as `LEVEL: N`, sorted by count **descending** (ties alphabetical).
 ---solution

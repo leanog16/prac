@@ -4,8 +4,8 @@ title: Boss round: build & debug
 summary: Interview- and production-grade problems that combine everything: a full feature slice, startup failures to diagnose, transaction and lazy-loading bugs, a security misconfiguration, a slow endpoint, and a containerized build.
 minutes: 60
 ---
-> [!project] Bookshelf, final step: returns and fines
-> The last feature closes the loop: returning a book, computing an overdue fine, and a nightly job that emails reminders. It touches every layer you've built.
+> [!project] Taskboard, final step: returns and credits
+> The last feature closes the loop: returning a task, computing the client credit for late work, and a nightly job that emails reminders. It touches every layer you've built.
 
 ## A debugging playbook
 
@@ -23,16 +23,16 @@ minutes: 60
 
 Each exercise below combines several lessons. Read the requirements carefully: the checker grades each one.
 
-## Worked example: putting the fine rule where it belongs
+## Worked example: putting the credit rule where it belongs
 
-"A fine of `finePerDay` for every day a book is returned late" is a pure calculation. It needs no database, no Spring, no clock of its own. Make it a small, separately testable method on the domain object:
+"A credit of `creditPerDay` for every day a task is finished late" is a pure calculation. It needs no database, no Spring, no clock of its own. Make it a small, separately testable method on the domain object:
 
 ```java
-public class Loan {
+public class Assignment {
     // ...
-    public BigDecimal fineOn(LocalDate returnDate, BigDecimal finePerDay) {
+    public BigDecimal creditOn(LocalDate returnDate, BigDecimal creditPerDay) {
         long lateDays = ChronoUnit.DAYS.between(dueOn, returnDate);
-        return lateDays > 0 ? finePerDay.multiply(BigDecimal.valueOf(lateDays)) : BigDecimal.ZERO;
+        return lateDays > 0 ? creditPerDay.multiply(BigDecimal.valueOf(lateDays)) : BigDecimal.ZERO;
     }
 }
 ```
@@ -41,19 +41,19 @@ The service orchestrates; the entity calculates:
 
 ```java
 @Transactional
-public ReturnResponse giveBack(long loanId, long memberId) {
-    Loan loan = loans.findById(loanId).orElseThrow(() -> new LoanNotFoundException(loanId));
-    if (!loan.getMember().getId().equals(memberId)) throw new AccessDeniedException("Not your loan");
-    if (loan.getReturnedOn() != null) throw new AlreadyReturnedException(loanId);
+public ReturnResponse putBack(long assignmentId, long memberId) {
+    Assignment assignment = assignments.findById(assignmentId).orElseThrow(() -> new LoanNotFoundException(assignmentId));
+    if (!assignment.getMember().getId().equals(memberId)) throw new AccessDeniedException("Not your assignment");
+    if (assignment.getCompletedOn() != null) throw new AlreadyCompletedException(assignmentId);
 
     LocalDate today = LocalDate.now(clock);
-    loan.setReturnedOn(today);
-    loan.getBook().setAvailable(true);
-    return new ReturnResponse(loan.getId(), loan.fineOn(today, props.finePerDay()));
+    assignment.setCompletedOn(today);
+    assignment.getTask().setAvailable(true);
+    return new ReturnResponse(assignment.getId(), assignment.creditOn(today, props.creditPerDay()));
 }
 ```
 
-`BigDecimal` for money, never `double`: `0.1 + 0.2` in floating point is `0.30000000000000004`, and fines must add up to the cent.
+`BigDecimal` for money, never `double`: `0.1 + 0.2` in floating point is `0.30000000000000004`, and credits must add up to the cent.
 
 :::exercise
 id: sb-feature
@@ -530,31 +530,32 @@ Checked exceptions don't trigger a rollback by default, so the transaction commi
 :::exercise
 id: proj-sp-10-fine
 level: 3
-title: "Project 10: the fine calculation"
+title: "Project 10: the credit calculation"
 mode: code
 lang: java
-file: Loan.java
+file: Assignment.java
+path: spring/src/main/java/dev/taskboard/Assignment.java
 ---
-Add `public BigDecimal fineOn(LocalDate returnDate, BigDecimal finePerDay)` to `Loan`: compute `long lateDays = ChronoUnit.DAYS.between(dueOn, returnDate)` and return `finePerDay.multiply(BigDecimal.valueOf(lateDays))` when `lateDays > 0`, otherwise `BigDecimal.ZERO`.
+Add `public BigDecimal creditOn(LocalDate returnDate, BigDecimal creditPerDay)` to `Assignment`: compute `long lateDays = ChronoUnit.DAYS.between(dueOn, returnDate)` and return `creditPerDay.multiply(BigDecimal.valueOf(lateDays))` when `lateDays > 0`, otherwise `BigDecimal.ZERO`.
 ---starter
-package org.library.bookshelf;
+package dev.taskboard;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 
-public class Loan {
+public class Assignment {
 
     private LocalDate dueOn;
 }
 ---rule
-public\s+BigDecimal\s+fineOn\(\s*LocalDate\s+returnDate\s*,\s*BigDecimal\s+finePerDay\s*\)
+public\s+BigDecimal\s+creditOn\(\s*LocalDate\s+returnDate\s*,\s*BigDecimal\s+creditPerDay\s*\)
 The method signature
 ---rule
 long\s+lateDays\s*=\s*ChronoUnit\.DAYS\.between\(\s*dueOn\s*,\s*returnDate\s*\)
 Count the late days
 ---rule
-finePerDay\.multiply\(\s*BigDecimal\.valueOf\(\s*lateDays\s*\)\s*\)
+creditPerDay\.multiply\(\s*BigDecimal\.valueOf\(\s*lateDays\s*\)\s*\)
 Multiply with `BigDecimal`
 ---rule
 BigDecimal\.ZERO
@@ -566,19 +567,19 @@ Only when late
 !double
 No `double`
 ---solution
-package org.library.bookshelf;
+package dev.taskboard;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 
-public class Loan {
+public class Assignment {
 
     private LocalDate dueOn;
 
-    public BigDecimal fineOn(LocalDate returnDate, BigDecimal finePerDay) {
+    public BigDecimal creditOn(LocalDate returnDate, BigDecimal creditPerDay) {
         long lateDays = ChronoUnit.DAYS.between(dueOn, returnDate);
-        return lateDays > 0 ? finePerDay.multiply(BigDecimal.valueOf(lateDays)) : BigDecimal.ZERO;
+        return lateDays > 0 ? creditPerDay.multiply(BigDecimal.valueOf(lateDays)) : BigDecimal.ZERO;
     }
 }
 :::
@@ -590,10 +591,11 @@ title: "Project 10b: nightly reminders"
 mode: code
 lang: java
 file: ReminderJob.java
+path: spring/src/main/java/dev/taskboard/ReminderJob.java
 ---
-Write a `@Component` `ReminderJob` with constructor-injected `LoanRepository loans`, `Notifier notifier` and `Clock clock`, and a method `sendReminders()` scheduled with `@Scheduled(cron = "0 0 8 * * *")` that loops over `loans.findOverdue(LocalDate.now(clock))` and calls `notifier.remind(loan.getMember().getEmail(), loan.getBook().getTitle())` for each. Make it a **read-only** transaction.
+Write a `@Component` `ReminderJob` with constructor-injected `AssignmentRepository assignments`, `Notifier notifier` and `Clock clock`, and a method `sendReminders()` scheduled with `@Scheduled(cron = "0 0 8 * * *")` that loops over `assignments.findOverdue(LocalDate.now(clock))` and calls `notifier.remind(assignment.getMember().getEmail(), assignment.getTask().getTitle())` for each. Make it a **read-only** transaction.
 ---starter
-package org.library.bookshelf;
+package dev.taskboard;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -604,7 +606,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Component\s*\n\s*public\s+class\s+ReminderJob
 `@Component public class ReminderJob`
 ---rule
-public\s+ReminderJob\(\s*LoanRepository\s+loans\s*,\s*Notifier\s+notifier\s*,\s*Clock\s+clock\s*\)
+public\s+ReminderJob\(\s*AssignmentRepository\s+assignments\s*,\s*Notifier\s+notifier\s*,\s*Clock\s+clock\s*\)
 Constructor injection
 ---rule
 @Scheduled\(\s*cron\s*=\s*"0\s+0\s+8\s+\*\s+\*\s+\*"\s*\)
@@ -613,13 +615,13 @@ Every day at 08:00
 @Transactional\(\s*readOnly\s*=\s*true\s*\)
 Read-only transaction
 ---rule
-for\s*\(\s*Loan\s+(\w+)\s*:\s*loans\.findOverdue\(\s*LocalDate\.now\(\s*clock\s*\)\s*\)\s*\)
-Loop over overdue loans
+for\s*\(\s*Assignment\s+(\w+)\s*:\s*assignments\.findOverdue\(\s*LocalDate\.now\(\s*clock\s*\)\s*\)\s*\)
+Loop over overdue assignments
 ---rule
-notifier\.remind\(\s*\w+\.getMember\(\s*\)\.getEmail\(\s*\)\s*,\s*\w+\.getBook\(\s*\)\.getTitle\(\s*\)\s*\)
+notifier\.remind\(\s*\w+\.getMember\(\s*\)\.getEmail\(\s*\)\s*,\s*\w+\.getTask\(\s*\)\.getTitle\(\s*\)\s*\)
 Send each reminder
 ---solution
-package org.library.bookshelf;
+package dev.taskboard;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -630,12 +632,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 public class ReminderJob {
 
-    private final LoanRepository loans;
+    private final AssignmentRepository assignments;
     private final Notifier notifier;
     private final Clock clock;
 
-    public ReminderJob(LoanRepository loans, Notifier notifier, Clock clock) {
-        this.loans = loans;
+    public ReminderJob(AssignmentRepository assignments, Notifier notifier, Clock clock) {
+        this.assignments = assignments;
         this.notifier = notifier;
         this.clock = clock;
     }
@@ -643,8 +645,8 @@ public class ReminderJob {
     @Scheduled(cron = "0 0 8 * * *")
     @Transactional(readOnly = true)
     public void sendReminders() {
-        for (Loan loan : loans.findOverdue(LocalDate.now(clock))) {
-            notifier.remind(loan.getMember().getEmail(), loan.getBook().getTitle());
+        for (Assignment assignment : assignments.findOverdue(LocalDate.now(clock))) {
+            notifier.remind(assignment.getMember().getEmail(), assignment.getTask().getTitle());
         }
     }
 }

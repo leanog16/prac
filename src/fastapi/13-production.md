@@ -4,7 +4,7 @@ title: Security & production
 summary: Issuing and verifying JWTs with expiry, password hashing, OAuth2 scopes with Security, rate limiting, caching with ETag and Cache-Control, request IDs and structured logging, health and readiness checks, workers and proxy headers, and API versioning.
 minutes: 45
 ---
-> [!project] Taskboard, step 13: production-ready
+> [!project] Taskboard, step 14: production-ready
 > Taskboard replaces its demo API keys with a real login that issues JWTs, adds request IDs to every log line, and splits health into liveness and readiness. After this step it's ready for the Docker track to containerize.
 
 ## JWT access tokens, end to end
@@ -258,7 +258,7 @@ def login(form: Annotated[OAuth2PasswordRequestForm, Depends()], session: Sessio
     return {"access_token": create_access_token(user.username), "token_type": "bearer"}
 ```
 
-And the `get_current_user` dependency from step 7 changes from "look up an API key" to "decode a JWT". **No endpoint changes**, because they all depend on `CurrentUser`. That's the dependency system paying off.
+And the `get_current_user` dependency from step 8 changes from "look up an API key" to "decode a JWT". **No endpoint changes**, because they all depend on `CurrentUser`. That's the dependency system paying off.
 
 > [!plain] In plain English
 > At login, the server checks the password once and hands back a signed **token**. The client sends the token with every request; the server only has to check the signature, without looking up a session.
@@ -690,10 +690,11 @@ A client exceeds the rate limit. What HTTP status code should it get?
 :::exercise
 id: proj-fa-13-login
 level: 4
-title: "Project 13: the /token endpoint"
+title: "Project 14: the /token endpoint"
 mode: code
 lang: python
 file: routers/auth.py
+path: app/routers/auth.py
 ---
 Write `POST /token`: take `form: Annotated[OAuth2PasswordRequestForm, Depends()]` and `session: SessionDep`; load the user with `session.exec(select(User).where(User.username == form.username)).first()`; if it's `None` or `verify_password(form.password, user.password_hash)` is false, raise **401** `"Incorrect username or password"` with header `WWW-Authenticate: Bearer`; otherwise return `{"access_token": create_access_token(user.username), "token_type": "bearer"}`.
 ---starter
@@ -752,10 +753,11 @@ def login(form: Annotated[OAuth2PasswordRequestForm, Depends()], session: Sessio
 :::exercise
 id: proj-fa-13-settings
 level: 2
-title: "Project 13b: settings from the environment"
+title: "Project 14b: settings from the environment"
 mode: code
 lang: python
 file: config.py
+path: app/config.py
 ---
 Write `class Settings(BaseSettings)` with `database_url: str = "sqlite:///taskboard.db"`, a required `secret_key: str`, `access_token_minutes: int = 15`, and `model_config = SettingsConfigDict(env_file=".env")`. Create `settings = Settings()`.
 ---starter

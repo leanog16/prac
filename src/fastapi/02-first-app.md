@@ -4,7 +4,7 @@ title: Your first FastAPI app
 summary: What FastAPI is built on, creating the app object, path operations with decorators, returning JSON, running with uvicorn, the automatic /docs, and def vs async def.
 minutes: 25
 ---
-> [!project] Taskboard, step 2: the first endpoints
+> [!project] Taskboard, step 3: the first endpoints
 > Time to write code. Taskboard starts as a single `main.py` with two endpoints every service needs: a **root** that says what it is, and a **health check** that deployments and load balancers will call.
 
 ## What FastAPI is
@@ -130,10 +130,10 @@ You'll start with one file and split it as Taskboard grows:
 ```
 taskboard/
 ├── main.py            app creation, router includes
-├── routers/tasks.py   task endpoints (lesson 6)
-├── models.py          Pydantic/SQLModel models (lessons 4 and 8)
-├── db.py              database setup (lesson 8)
-├── tests/             pytest tests (lesson 9)
+├── routers/tasks.py   task endpoints (lesson 7)
+├── models.py          Pydantic/SQLModel models (lessons 5 and 9)
+├── db.py              database setup (lesson 9)
+├── tests/             pytest tests (lesson 10)
 └── requirements.txt
 ```
 
@@ -483,10 +483,11 @@ def clear_todos():
 :::exercise
 id: proj-fa-02-main
 level: 1
-title: "Project 2: Taskboard's main.py"
+title: "Project 3: Taskboard's main.py"
 mode: code
 lang: python
 file: main.py
+path: app/main.py
 ---
 Create the Taskboard app: `app = FastAPI(title="Taskboard", version="0.1.0")`, a `GET /` that returns `{"name": "Taskboard", "version": "0.1.0"}`, and a `GET /health` that returns `{"status": "ok"}`.
 ---starter
@@ -525,10 +526,11 @@ def health():
 :::exercise
 id: proj-fa-02-tasks-stub
 level: 2
-title: "Project 2b: a first list of tasks"
+title: "Project 3b: a first list of tasks"
 mode: code
 lang: python
 file: main.py
+path: app/main.py
 ---
 Add a module-level list `TASKS` with two dicts, `{"id": 1, "title": "Set up repo", "status": "done"}` and `{"id": 2, "title": "Write API", "status": "doing"}`, and a `GET /tasks` endpoint that returns it.
 ---starter

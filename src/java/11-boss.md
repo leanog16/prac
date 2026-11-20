@@ -4,19 +4,19 @@ title: Boss round: model it yourself
 summary: Interview-style object-oriented design problems: model a domain from a description, refactor procedural code into objects, spot design flaws, and predict tricky outputs involving references, overriding, equality and statics.
 minutes: 60
 ---
-> [!project] Bookshelf, final step: reservations
-> Apply the design process to Bookshelf's reservation and queue rules in the Project exercises. Each answer is checked independently; use the earlier lessons as references.
+> [!project] Taskboard, final step: claims
+> Apply the design process to Taskboard's claim and queue rules in the Project exercises. Each answer is checked independently; use the earlier lessons as references.
 
 ## How to approach an OO design question
 
 Interviewers rarely want "the" answer; they want to see a process:
 
-1. **Find the nouns** in the requirements: candidate classes and fields. ("A *member* *borrows* an *item*; a *loan* has a *due date*.")
-2. **Find the verbs**: candidate methods, and decide **which object owns each one**. (Who knows enough to compute a fee? The loan: it has the due date.)
+1. **Find the nouns** in the requirements: candidate classes and fields. ("A *member* *picks up* an *item*; an *assignment* has a *due date*.")
+2. **Find the verbs**: candidate methods, and decide **which object owns each one**. (Who knows enough to tell whether work is late? The assignment: it has the due date.)
 3. **Find the rules** (invariants): enforce them in constructors and methods, not in callers.
-4. **Find what varies**: put an interface around it (fee rules, notifications, storage).
+4. **Find what varies**: put an interface around it (credit rules, notifications, storage).
 5. **Check the relationships**: is-a (inheritance, rarely), has-a (composition, usually), uses (parameters).
-6. **Walk through a scenario** with your classes ("Ada borrows Dune…") and fix what's awkward.
+6. **Walk through a scenario** with your classes ("Ada picks up Write API…") and fix what's awkward.
 
 ## Worked example: a parking garage, in five minutes
 
@@ -32,20 +32,21 @@ Being able to talk through that structure clearly matters more than any particul
 :::exercise
 id: proj-java-11-reservation
 level: 4
-title: "Project 11: reservations"
+title: "Project 11: claims"
 mode: code
 lang: java
-file: Reservation.java
+file: Claim.java
+path: java/src/main/java/taskboard/Claim.java
 ---
-Members can reserve an item that's on loan. Write an immutable `Reservation` **record** with components `String itemId`, `String memberName` and `LocalDate placedOn`, and a compact constructor that throws `IllegalArgumentException("itemId is required")` when `itemId` is null or blank, and uses `Objects.requireNonNull(placedOn, "placedOn")`. Add a method `boolean isExpired(LocalDate today)` returning `today.isAfter(placedOn.plusDays(7))`.
+Members can claim an item that someone else is already working on, to pick it up next. Write an immutable `Claim` **record** with components `String itemId`, `String memberName` and `LocalDate placedOn`, and a compact constructor that throws `IllegalArgumentException("itemId is required")` when `itemId` is null or blank, and uses `Objects.requireNonNull(placedOn, "placedOn")`. Add a method `boolean isExpired(LocalDate today)` returning `today.isAfter(placedOn.plusDays(7))`.
 ---starter
 import java.time.LocalDate;
 import java.util.Objects;
 ---rule
-public\s+record\s+Reservation\(\s*String\s+itemId\s*,\s*String\s+memberName\s*,\s*LocalDate\s+placedOn\s*\)
+public\s+record\s+Claim\(\s*String\s+itemId\s*,\s*String\s+memberName\s*,\s*LocalDate\s+placedOn\s*\)
 The record
 ---rule
-public\s+Reservation\s*\{
+public\s+Claim\s*\{
 Compact constructor
 ---rule
 itemId\s*==\s*null\s*\|\|\s*itemId\.isBlank\(\s*\)[\s\S]*?throw\s+new\s+IllegalArgumentException\(\s*"itemId is required"\s*\)
@@ -60,8 +61,8 @@ boolean\s+isExpired\(\s*LocalDate\s+today\s*\)\s*\{\s*return\s+today\.isAfter\(\
 import java.time.LocalDate;
 import java.util.Objects;
 
-public record Reservation(String itemId, String memberName, LocalDate placedOn) {
-    public Reservation {
+public record Claim(String itemId, String memberName, LocalDate placedOn) {
+    public Claim {
         if (itemId == null || itemId.isBlank()) {
             throw new IllegalArgumentException("itemId is required");
         }
@@ -80,9 +81,10 @@ level: 4
 title: "Project 11b: a waiting list"
 mode: code
 lang: java
-file: WaitingList.java
+file: ClaimQueue.java
+path: java/src/main/java/taskboard/ClaimQueue.java
 ---
-Write `WaitingList` that keeps reservations per item in arrival order: a `private final Map<String, Deque<Reservation>> queues = new HashMap<>()`; `void add(Reservation r)` appending to `queues.computeIfAbsent(r.itemId(), k -> new ArrayDeque<>())`; and `Optional<Reservation> next(String itemId)` that removes and returns the first reservation (`pollFirst()`), or `Optional.empty()` if there's no queue.
+Write `ClaimQueue` that keeps claims per item in arrival order: a `private final Map<String, Deque<Claim>> queues = new HashMap<>()`; `void add(Claim r)` appending to `queues.computeIfAbsent(r.itemId(), k -> new ArrayDeque<>())`; and `Optional<Claim> next(String itemId)` that removes and returns the first claim (`pollFirst()`), or `Optional.empty()` if there's no queue.
 ---starter
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -90,16 +92,16 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 ---rule
-private\s+final\s+Map<String,\s*Deque<Reservation>>\s+queues\s*=\s*new\s+HashMap<>\(\s*\)
+private\s+final\s+Map<String,\s*Deque<Claim>>\s+queues\s*=\s*new\s+HashMap<>\(\s*\)
 A map of deques
 ---rule
-void\s+add\(\s*Reservation\s+r\s*\)
+void\s+add\(\s*Claim\s+r\s*\)
 `add`
 ---rule
 queues\.computeIfAbsent\(\s*r\.itemId\(\s*\)\s*,\s*\w+\s*->\s*new\s+ArrayDeque<>\(\s*\)\s*\)\.(addLast|add|offerLast|offer)\(\s*r\s*\)
 Append in arrival order
 ---rule
-Optional<Reservation>\s+next\(\s*String\s+itemId\s*\)
+Optional<Claim>\s+next\(\s*String\s+itemId\s*\)
 `next`
 ---rule
 \.pollFirst\(\s*\)
@@ -114,15 +116,15 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-public class WaitingList {
-    private final Map<String, Deque<Reservation>> queues = new HashMap<>();
+public class ClaimQueue {
+    private final Map<String, Deque<Claim>> queues = new HashMap<>();
 
-    public void add(Reservation r) {
+    public void add(Claim r) {
         queues.computeIfAbsent(r.itemId(), k -> new ArrayDeque<>()).addLast(r);
     }
 
-    public Optional<Reservation> next(String itemId) {
-        Deque<Reservation> q = queues.get(itemId);
+    public Optional<Claim> next(String itemId) {
+        Deque<Claim> q = queues.get(itemId);
         if (q == null) {
             return Optional.empty();
         }
@@ -237,12 +239,12 @@ mode: answer
 ---
 ```java
 static void rename(Member m) { m = new Member("Grace", "g@x"); }
-static void addOne(Member m) { m.addLoan(); }
+static void addOne(Member m) { m.addTask(); }
 
 Member ada = new Member("Ada", "a@x");
 rename(ada);
 addOne(ada);
-System.out.println(ada.getName() + " " + ada.getLoans());
+System.out.println(ada.getName() + " " + ada.getOpenTasks());
 ```
 
 What does it print?

@@ -4,8 +4,8 @@ title: INSERT, UPDATE, DELETE
 summary: Changing data safely — inserting rows (including from a SELECT), updating with conditions and subqueries, deleting, upserts, and transactions.
 minutes: 30
 ---
-> [!project] Desk & Co, step 13: running the shop, not just reading it
-> So far you've only read data. Now Maya needs changes: record a new order, adjust prices, update stock. Each change must leave the data consistent, which is what transactions are for.
+> [!project] Taskboard, step 13: changing the board
+> So far you've only read data. Now the board needs changes: a new task, a task finished, and a teammate's work handed over when they leave. Each change must leave the data consistent, which is what transactions are for.
 
 ## Data Manipulation Language
 
@@ -39,7 +39,7 @@ SELECT product_id, name, price FROM products ORDER BY product_id DESC LIMIT 3;
 
 ### INSERT … SELECT
 
-Insert the result of a query: perfect for archiving or copying.
+Insert the result of a query: perfect for archiving or copying. The example first makes an empty table to copy into with `CREATE TABLE name (column type, …)`: a name and a type for each column, such as `INTEGER`, `REAL` (decimal numbers) or `TEXT`. Lesson 14 covers creating tables and their rules in depth.
 
 ```sql run
 CREATE TABLE big_orders (order_id INTEGER, total REAL);
@@ -320,7 +320,7 @@ title: Archive old orders
 ---
 Create a table `orders_archive` with the same columns as `orders` (`order_id`, `customer_id`, `order_date`, `status`), copy every order from **before 2025-04-01** into it, then delete those orders from `orders`.
 ---hint
-`CREATE TABLE orders_archive AS SELECT …` creates and fills in one go. Or CREATE then INSERT … SELECT.
+Create the empty table with `CREATE TABLE orders_archive (order_id INTEGER, customer_id INTEGER, order_date TEXT, status TEXT);`, fill it with `INSERT INTO … SELECT …`, then `DELETE`.
 ---check
 SELECT 'archive' AS t, COUNT(*), MIN(order_date), MAX(order_date) FROM orders_archive
 UNION ALL
@@ -336,7 +336,7 @@ id: dml-correlated-update
 level: 3
 title: Store order counts on customers
 ---
-Add a column `orders_count INTEGER DEFAULT 0` to `customers`, then fill it with each customer's number of orders.
+Start your answer with `ALTER TABLE customers ADD COLUMN orders_count INTEGER DEFAULT 0;`, which adds an `orders_count` column to `customers` (lesson 14 covers `ALTER TABLE`). Then fill that column with each customer's number of orders.
 ---hint
 `ALTER TABLE customers ADD COLUMN …`, then a correlated UPDATE.
 ---check
@@ -405,40 +405,49 @@ DELETE FROM leads WHERE id NOT IN (SELECT MIN(id) FROM leads GROUP BY name, city
 
 :::exercise
 id: proj-sql-13-place-order
-level: 3
-title: "Project 13: place an order"
+level: 2
+title: "Project 13: add a task"
+path: db/changes/13-add-task.sql
 ---
-Record a new order in one transaction: order **41** for customer **3** on `2025-11-20` with status `pending`, containing **2 × product 2** at the unit price of `24.99`, and reduce product 2's stock by 2.
+Insert task **50** on board **6** (`Q1 planning`): title `Draft Q1 goals`, status `todo`, priority `2`, assigned to member `1`, created by member `1` on `2026-11-20`. Leave the other columns empty (NULL).
 ---check
-SELECT o.order_id, o.customer_id, o.status, oi.product_id, oi.quantity, oi.unit_price, p.stock FROM orders o JOIN order_items oi ON oi.order_id = o.order_id JOIN products p ON p.product_id = oi.product_id WHERE o.order_id = 41;
+SELECT task_id, board_id, title, status, priority, assignee_id, created_by, created_on, due_on FROM tasks WHERE board_id = 6
 ---solution
-BEGIN;
-INSERT INTO orders (order_id, customer_id, order_date, status) VALUES (41, 3, '2025-11-20', 'pending');
-INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (41, 2, 2, 24.99);
-UPDATE products SET stock = stock - 2 WHERE product_id = 2;
-COMMIT;
+INSERT INTO tasks (task_id, board_id, title, status, priority, assignee_id, created_by, created_on) VALUES (50, 6, 'Draft Q1 goals', 'todo', 2, 1, 1, '2026-11-20');
 :::
 
 :::exercise
 id: proj-sql-13-reprice
 level: 2
-title: "Project 13b: a price increase"
+title: "Project 13b: close it out"
+path: db/changes/13-close-task.sql
 ---
-Raise the price of every `Stationery` product by **5%**, rounded to 2 decimals. Leave other categories alone.
+Task **8** (`Rotate the signing keys`) is finished. Set its `status` to `done` and its `done_on` to `2026-11-20` in one `UPDATE`.
 ---check
-SELECT name, category, price FROM products ORDER BY product_id;
+SELECT task_id, status, done_on FROM tasks WHERE task_id IN (7, 8, 9) ORDER BY task_id
 ---solution
-UPDATE products SET price = ROUND(price * 1.05, 2) WHERE category = 'Stationery';
+UPDATE tasks SET status = 'done', done_on = '2026-11-20' WHERE task_id = 8;
 :::
 
 :::exercise
 id: proj-sql-13-ship
-level: 2
-title: "Project 13c: ship the backlog"
+level: 3
+title: "Project 13c: hand over the work"
+path: db/changes/13-hand-over.sql
 ---
-Every `pending` order placed **before** `2025-10-01` has now shipped. Update their status to `shipped`.
+Hugo (member **8**) is leaving the team. In **one transaction**: reassign every task of his that is not `done` to Dev (member **4**), and change Hugo's `role` to `guest`. His finished tasks stay credited to him.
+---hint
+`BEGIN;`, the two `UPDATE`s, then `COMMIT;`.
+---hint
+Only open tasks move: add `AND status <> 'done'` to the first update.
 ---check
-SELECT order_id, order_date, status FROM orders WHERE status IN ('pending', 'shipped') ORDER BY order_id;
+SELECT 'task' AS kind, task_id AS id, status AS detail, assignee_id FROM tasks WHERE assignee_id IN (4, 8)
+UNION ALL
+SELECT 'member', member_id, role, NULL FROM members WHERE member_id = 8
+ORDER BY kind, id
 ---solution
-UPDATE orders SET status = 'shipped' WHERE status = 'pending' AND order_date < '2025-10-01';
+BEGIN;
+UPDATE tasks SET assignee_id = 4 WHERE assignee_id = 8 AND status <> 'done';
+UPDATE members SET role = 'guest' WHERE member_id = 8;
+COMMIT;
 :::

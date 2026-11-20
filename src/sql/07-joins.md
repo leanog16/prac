@@ -4,8 +4,8 @@ title: Inner joins
 summary: Combining tables through keys — join conditions, aliases, multi-table joins, join-then-aggregate, and the row-multiplication effect.
 minutes: 35
 ---
-> [!project] Desk & Co, step 7: revenue by category
-> Product IDs mean nothing to Maya; she thinks in categories. Revenue lives in `order_items`, categories live in `products`, and cancelled orders live in `orders`. Joins put them together.
+> [!project] Taskboard, step 7: names, not numbers
+> `assignee_id 8` means nothing in a report; "Hugo Silva" does. Names live in `members`, board names in `boards`, and the work in `tasks`. Joins put them together.
 
 ## Why join?
 
@@ -358,18 +358,20 @@ level: 4
 title: Strong classrooms
 ordered: true
 ---
-For each course `code`, compute the average GPA (2 decimals) of the **distinct students** who ever enrolled, ignoring students with NULL GPA. Show only courses where that average is **at least 3.3**, highest average first. Return `code` and `avg_gpa`.
+For each course `code`, compute the average GPA (2 decimals) of the students enrolled in it, ignoring students with a NULL GPA. (No student is enrolled in the same course twice in this data, so each enrollment is one student.) Show only courses where that average is **at least 3.3**, highest average first, ties by `code`. Return `code` and `avg_gpa`.
 ---hint
-A student who took a course twice would be counted twice. Deduplicate (course, student) pairs first, e.g. with a subquery `SELECT DISTINCT course_id, student_id FROM enrollments`.
+Join `enrollments` to both `courses` and `students`, then `GROUP BY` the course.
+---hint
+A condition on the average is a `HAVING` condition.
 ---solution
 SELECT c.code, ROUND(AVG(s.gpa), 2) AS avg_gpa
-FROM (SELECT DISTINCT course_id, student_id FROM enrollments) e
+FROM enrollments e
 JOIN courses c ON c.course_id = e.course_id
 JOIN students s ON s.student_id = e.student_id
 WHERE s.gpa IS NOT NULL
 GROUP BY c.course_id, c.code
 HAVING AVG(s.gpa) >= 3.3
-ORDER BY avg_gpa DESC;
+ORDER BY avg_gpa DESC, c.code;
 :::
 
 :::exercise
@@ -387,22 +389,24 @@ FROM customers c JOIN employees e ON e.city = c.city;
 
 :::exercise
 id: proj-sql-07-category
-level: 3
-title: "Project 7: revenue by category"
+level: 2
+title: "Project 7: the API board"
 ordered: true
+path: db/reports/07-api-board.sql
 ---
-Show each product `category` with its `revenue` (sum of quantity × unit price, rounded to 2 decimals) from orders that are **not cancelled**, highest revenue first.
+For tasks on the board named `API platform` that have an assignee, return the task `title` and the assignee's name as `assignee`, sorted by title. Filter by the board's **name**, not its id.
 ---solution
-SELECT p.category, ROUND(SUM(oi.quantity * oi.unit_price), 2) AS revenue FROM order_items oi JOIN products p ON p.product_id = oi.product_id JOIN orders o ON o.order_id = oi.order_id WHERE o.status <> 'cancelled' GROUP BY p.category ORDER BY revenue DESC;
+SELECT t.title, m.name AS assignee FROM tasks t JOIN boards b ON b.board_id = t.board_id JOIN members m ON m.member_id = t.assignee_id WHERE b.name = 'API platform' ORDER BY t.title;
 :::
 
 :::exercise
 id: proj-sql-07-order-detail
-level: 2
-title: "Project 7b: an order's packing slip"
+level: 3
+title: "Project 7b: open tasks per person"
 ordered: true
+path: db/reports/07-open-per-person.sql
 ---
-For order **7**, list the customer's `name`, each product `name` as `product`, and the `quantity`, sorted by product name.
+For each member with at least one open (not `done`) task, return their `name` and `open_tasks`, most first, ties by name.
 ---solution
-SELECT c.name, p.name AS product, oi.quantity FROM orders o JOIN customers c ON c.customer_id = o.customer_id JOIN order_items oi ON oi.order_id = o.order_id JOIN products p ON p.product_id = oi.product_id WHERE o.order_id = 7 ORDER BY p.name;
+SELECT m.name, COUNT(*) AS open_tasks FROM tasks t JOIN members m ON m.member_id = t.assignee_id WHERE t.status <> 'done' GROUP BY m.member_id, m.name ORDER BY open_tasks DESC, m.name;
 :::

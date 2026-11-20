@@ -4,7 +4,7 @@ title: Pydantic in depth
 summary: Field validators and model validators, before/after modes, computed fields, aliases and camelCase APIs, model_config (strict, extra='forbid', from_attributes, frozen), discriminated unions, and reusable Annotated types.
 minutes: 35
 ---
-> [!project] Taskboard, step 11: business rules in the models
+> [!project] Taskboard, step 12: business rules in the models
 > Taskboard gains due dates and tags, and with them, rules: a due date can't be in the past, tags are normalized, and a task can't be `done` without a completion note. Validators enforce them before any endpoint code runs.
 
 ## When Field() isn't enough
@@ -635,10 +635,11 @@ A FastAPI route takes `body: UserUpdate` where `UserUpdate` has `model_config = 
 :::exercise
 id: proj-fa-11-tags
 level: 2
-title: "Project 11: normalize tags"
+title: "Project 12: normalize tags"
 mode: code
 lang: python
 file: models.py
+path: app/models.py
 ---
 Add a field validator for `tags` that returns the tags **trimmed, lowercased, de-duplicated and sorted**, dropping empty strings: `sorted({t.strip().lower() for t in v if t.strip()})`.
 ---starter
@@ -677,10 +678,11 @@ class TaskCreate(BaseModel):
 :::exercise
 id: proj-fa-11-done-note
 level: 3
-title: "Project 11b: done needs a note"
+title: "Project 12b: done needs a note"
 mode: code
 lang: python
 file: models.py
+path: app/models.py
 ---
 Add an after-mode model validator to `TaskUpdate` that raises `ValueError("completion_note is required when status is done")` when `self.status == "done"` and `self.completion_note` is falsy. Return `self`.
 ---starter

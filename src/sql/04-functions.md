@@ -4,8 +4,8 @@ title: Functions, CASE & types
 summary: String, number and date functions, CASE expressions for conditional logic, COALESCE/NULLIF, and type conversion with CAST.
 minutes: 30
 ---
-> [!project] Desk & Co, step 4: price bands and months
-> Maya thinks in **price bands** (budget, mid-range, premium) and **months**, not raw numbers and dates. `CASE` and the date functions turn raw columns into the labels she uses.
+> [!project] Taskboard, step 4: labels people understand
+> Priorities are stored as numbers 1–3 and dates as raw text. `CASE` and the date functions turn them into what Ana actually wants to read: words, and how many days work took.
 
 ## Scalar functions
 
@@ -17,7 +17,7 @@ A **scalar function** takes values from one row and returns one value. (Contrast
 |---|---|---|
 | `UPPER(s)`, `LOWER(s)` | change case | |
 | `LENGTH(s)` | number of characters | `LEN` in SQL Server |
-| `SUBSTR(s, start, len)` | substring, **1-based** | `SUBSTRING` elsewhere |
+| `SUBSTR(s, start, len)` | substring, **1-based**; leave out `len` to take everything to the end; a **negative** `start` counts from the end (`SUBSTR('report', -2)` is `'rt'`) | `SUBSTRING` elsewhere |
 | `INSTR(s, find)` | position of `find` (1-based), 0 if absent | `POSITION`/`CHARINDEX` elsewhere |
 | `REPLACE(s, from, to)` | replace all occurrences | |
 | `TRIM(s)`, `LTRIM`, `RTRIM` | strip whitespace | |
@@ -32,6 +32,8 @@ SELECT name,
        REPLACE(name, ' ', '_')  AS slug
 FROM products LIMIT 5;
 ```
+
+`SUBSTR` works on numbers too: SQLite converts the number to text first, so `SUBSTR(1007, -2)` is `'07'`.
 
 Combining `SUBSTR` and `INSTR` splits strings. Everything before the first space:
 
@@ -402,21 +404,25 @@ WHERE STRFTIME('%w', order_date) IN ('0', '6');
 :::exercise
 id: proj-sql-04-bands
 level: 2
-title: "Project 4: price bands"
+title: "Project 4: priority labels"
+path: db/reports/04-priority-labels.sql
 ---
-Show each product's `name`, `price`, and a column `band`: `budget` when the price is under 30, `mid-range` under 100, otherwise `premium`.
+Show each task's `title`, `priority`, and a column `label`: `high` when the priority is 1, `normal` when it's 2, and `low` when it's 3.
+---hint
+A simple CASE compares one column to values: `CASE priority WHEN 1 THEN 'high' … END`.
 ---solution
-SELECT name, price, CASE WHEN price < 30 THEN 'budget' WHEN price < 100 THEN 'mid-range' ELSE 'premium' END AS band FROM products;
+SELECT title, priority, CASE priority WHEN 1 THEN 'high' WHEN 2 THEN 'normal' ELSE 'low' END AS label FROM tasks;
 :::
 
 :::exercise
 id: proj-sql-04-month
-level: 2
-title: "Project 4b: tag orders by month"
+level: 3
+title: "Project 4b: days to done"
+path: db/reports/04-days-to-done.sql
 ---
-List every order's `order_id`, `status`, and its month as `month` in `YYYY-MM` form (for example `2025-03`).
+For every task with status `done`, return `title`, `created_on`, `done_on` and `days_to_done`: the number of whole days between `created_on` and `done_on`, as an integer.
 ---hint
-`strftime('%Y-%m', order_date)`
+`JULIANDAY(b) - JULIANDAY(a)` is the number of days between two dates; `CAST(… AS INTEGER)` drops the fraction.
 ---solution
-SELECT order_id, status, strftime('%Y-%m', order_date) AS month FROM orders;
+SELECT title, created_on, done_on, CAST(JULIANDAY(done_on) - JULIANDAY(created_on) AS INTEGER) AS days_to_done FROM tasks WHERE status = 'done';
 :::

@@ -4,67 +4,67 @@ title: Classes & objects
 summary: What a class and an object are, fields and constructors, instance methods and `this`, creating objects with `new`, references and `null`, static vs instance members, and toString for readable output.
 minutes: 35
 ---
-> [!project] Bookshelf, step 2: the Book class
-> So far a book is just a `String`. A real book has an ISBN, a title, an author, a year and an availability status, and it can *do* things: be borrowed, be returned, describe itself. In this lesson those facts and behaviours come together in a `Book` class.
+> [!project] Taskboard, step 2: the Task class
+> So far a task is just a `String`. A real task has a key (like `TB-101`), a title, an assignee, a size in story **points** and an availability status, and it can *do* things: be picked up, be put back, describe itself. In this lesson those facts and behaviours come together in a `Task` class.
 
 ## A class is a blueprint
 
 A **class** describes a kind of thing: what data each one holds (**fields**) and what it can do (**methods**). An **object** is one concrete thing built from that blueprint.
 
-```java title=Book.java
-public class Book {
-    // fields: the state each Book object carries
-    String isbn;
+```java title=Task.java
+public class Task {
+    // fields: the state each Task object carries
+    String key;
     String title;
-    String author;
-    int year;
+    String assignee;
+    int points;
     boolean available = true;
 
     // constructor: runs once, when the object is created
-    Book(String isbn, String title, String author, int year) {
-        this.isbn = isbn;
+    Task(String key, String title, String assignee, int points) {
+        this.key = key;
         this.title = title;
-        this.author = author;
-        this.year = year;
+        this.assignee = assignee;
+        this.points = points;
     }
 
     // instance methods: behaviour that uses this object's fields
-    void borrow() {
+    void pickUp() {
         available = false;
     }
 
-    void giveBack() {
+    void putBack() {
         available = true;
     }
 
     String describe() {
-        return title + " by " + author + " (" + year + ")";
+        return title + " by " + assignee + " (" + points + " pts)";
     }
 }
 ```
 
 ```java title=Main.java
-Book dune = new Book("9780441013593", "Dune", "Frank Herbert", 1965);
-Book emma = new Book("9780141439587", "Emma", "Jane Austen", 1815);
+Task api = new Task("TB-101", "Write API", "Ana", 3);
+Task login = new Task("TB-102", "Fix login", "Ben", 5);
 
-dune.borrow();
-System.out.println(dune.describe());     // Dune by Frank Herbert (1965)
-System.out.println(dune.available);      // false
-System.out.println(emma.available);      // true: each object has its own fields
+api.pickUp();
+System.out.println(api.describe());     // Write API by Ana (3 pts)
+System.out.println(api.available);      // false
+System.out.println(login.available);      // true: each object has its own fields
 ```
 
 > [!plain] In plain English
-> The class `Book` is the cookie cutter; `dune` and `emma` are the cookies. Every cookie has its own copy of the fields, and methods act on the cookie you call them on.
+> The class `Task` is the cookie cutter; `api` and `login` are the cookies. Every cookie has its own copy of the fields, and methods act on the cookie you call them on.
 
 ## Constructors and `this`
 
-`new Book(...)` allocates a new object and runs the **constructor**. Inside it, `this` means "the object being built". `this.title = title` copies the **parameter** `title` into the **field** `title`. Without `this.`, the parameter would shadow the field and the field would stay `null`.
+`new Task(...)` allocates a new object and runs the **constructor**. Inside it, `this` means "the object being built". `this.title = title` copies the **parameter** `title` into the **field** `title`. Without `this.`, the parameter would shadow the field and the field would stay `null`.
 
 A class can have several constructors (**overloading**), and one can call another with `this(...)`:
 
 ```java
-Book(String isbn, String title, String author) {
-    this(isbn, title, author, 0);        // delegate to the 4-argument constructor
+Task(String key, String title, String assignee) {
+    this(key, title, assignee, 0);        // delegate to the 4-argument constructor
 }
 ```
 
@@ -73,18 +73,18 @@ If you write **no** constructor, Java provides an empty no-argument one. Once yo
 ## Objects live behind references
 
 ```java
-Book a = new Book("1", "Dune", "Herbert", 1965);
-Book b = a;              // b points at the SAME object
-b.borrow();
-System.out.println(a.available);    // false: there's only one book
+Task a = new Task("1", "Write API", "Ana", 3);
+Task b = a;              // b points at the SAME object
+b.pickUp();
+System.out.println(a.available);    // false: there's only one task
 
-Book c = null;           // c points at nothing
-c.borrow();              // NullPointerException at runtime
+Task c = null;           // c points at nothing
+c.pickUp();              // NullPointerException at runtime
 ```
 
 ```
 a ──┐
-    ├──► [ Book: Dune, available=false ]
+    ├──► [ Task: Write API, available=false ]
 b ──┘
 c ──► null
 ```
@@ -96,16 +96,16 @@ c ──► null
 | | Instance member | `static` member |
 |---|---|---|
 | belongs to | each object | the class itself (one copy, shared) |
-| call it with | `dune.describe()` | `Book.count()` |
+| call it with | `api.describe()` | `Task.count()` |
 | can use `this`? | yes | no: there's no object |
 | typical use | the object's state and behaviour | constants, counters, factory and utility methods |
 
 ```java
-public class Book {
-    static int created = 0;                       // one counter shared by all books
+public class Task {
+    static int created = 0;                       // one counter shared by all tasks
     static final int MAX_TITLE = 200;             // a constant
 
-    Book(String isbn, String title, String author, int year) {
+    Task(String key, String title, String assignee, int points) {
         // ...
         created++;
     }
@@ -114,23 +114,23 @@ public class Book {
 
 ## toString: readable objects
 
-Printing an object calls its `toString()` method. The default is useless (`Book@1b6d3586`). Override it:
+Printing an object calls its `toString()` method. The default is useless (`Task@1b6d3586`). Override it:
 
 ```java
 @Override
 public String toString() {
-    return "Book[" + isbn + ", " + title + "]";
+    return "Task[" + key + ", " + title + "]";
 }
 
-System.out.println(dune);     // Book[9780441013593, Dune]
+System.out.println(api);     // Task[TB-101, Write API]
 ```
 
 `@Override` asks the compiler to check you really are replacing an inherited method (lesson 4 explains inheritance). A typo like `tostring` would then be a compile error instead of a silent bug.
 
 :::quiz
-q: What does `new Book(...)` do?
+q: What does `new Task(...)` do?
 + creates a new object in memory, runs the constructor, and returns a reference to it
-- copies the Book class
+- copies the Task class
 - declares a variable
 - calls a static method
 why: new allocates an object and runs its constructor.
@@ -146,8 +146,8 @@ why: `this.title` is the field; plain `title` is the (shadowing) parameter.
 :::
 
 :::quiz
-q: `Book b = a; b.borrow();` — what happens to `a`?
-+ it's borrowed too: both variables reference the same object
+q: `Task b = a; b.pickUp();` — what happens to `a`?
++ it's taken too: both variables reference the same object
 - nothing; b is a copy
 - compile error
 - a becomes null
@@ -171,7 +171,7 @@ mode: code
 lang: java
 file: Member.java
 ---
-Write `Member` with fields `String name`, `String email` and `int loans` (starting at 0), a constructor taking `name` and `email` (use `this.`), and methods `void addLoan()` (adds 1 to `loans`) and `boolean canBorrow(int max)` (returns whether `loans < max`).
+Write `Member` with fields `String name`, `String email` and `int openTasks` (starting at 0), a constructor taking `name` and `email` (use `this.`), and methods `void addTask()` (adds 1 to `openTasks`) and `boolean canPickUp(int max)` (returns whether `openTasks < max`).
 ---starter
 public class Member {
 }
@@ -182,34 +182,34 @@ String\s+name\s*;
 String\s+email\s*;
 `String email;`
 ---rule
-int\s+loans(\s*=\s*0)?\s*;
-`int loans`
+int\s+openTasks(\s*=\s*0)?\s*;
+`int openTasks`
 ---rule
 Member\(\s*String\s+name\s*,\s*String\s+email\s*\)\s*\{\s*this\.name\s*=\s*name\s*;\s*this\.email\s*=\s*email\s*;
 Constructor with `this.`
 ---rule
-void\s+addLoan\(\s*\)\s*\{\s*(loans\+\+|loans\s*\+=\s*1|this\.loans\+\+|loans\s*=\s*loans\s*\+\s*1)\s*;
-`addLoan()` increments
+void\s+addTask\(\s*\)\s*\{\s*(openTasks\+\+|openTasks\s*\+=\s*1|this\.assignments\+\+|openTasks\s*=\s*openTasks\s*\+\s*1)\s*;
+`addTask()` increments
 ---rule
-boolean\s+canBorrow\(\s*int\s+max\s*\)\s*\{\s*return\s+(this\.)?loans\s*<\s*max\s*;
-`canBorrow(max)`
+boolean\s+canPickUp\(\s*int\s+max\s*\)\s*\{\s*return\s+(this\.)?openTasks\s*<\s*max\s*;
+`canPickUp(max)`
 ---solution
 public class Member {
     String name;
     String email;
-    int loans = 0;
+    int openTasks = 0;
 
     Member(String name, String email) {
         this.name = name;
         this.email = email;
     }
 
-    void addLoan() {
-        loans++;
+    void addTask() {
+        openTasks++;
     }
 
-    boolean canBorrow(int max) {
-        return loans < max;
+    boolean canPickUp(int max) {
+        return openTasks < max;
     }
 }
 :::
@@ -222,7 +222,7 @@ mode: code
 lang: java
 file: Member.java
 ---
-Override `toString()` in `Member` (with `@Override`, `public`, returning `String`) so a member prints as `Member[Ada, ada@lib.example]`.
+Override `toString()` in `Member` (with `@Override`, `public`, returning `String`) so a member prints as `Member[Ada, ada@taskboard.dev]`.
 ---starter
 public class Member {
     String name;
@@ -263,9 +263,9 @@ title: Predict: two objects
 mode: answer
 ---
 ```java
-Book a = new Book("1", "Dune", "Herbert", 1965);
-Book b = new Book("1", "Dune", "Herbert", 1965);
-a.borrow();
+Task a = new Task("1", "Write API", "Ana", 3);
+Task b = new Task("1", "Write API", "Ana", 3);
+a.pickUp();
 System.out.println(a.available + " " + b.available + " " + (a == b));
 ```
 
@@ -275,7 +275,7 @@ false true false
 ---solution
 false true false
 ---explain
-Two `new` calls make two separate objects. Borrowing one doesn't affect the other, and `==` compares references.
+Two `new` calls make two separate objects. Picking up one doesn't affect the other, and `==` compares references.
 :::
 
 :::exercise
@@ -307,64 +307,65 @@ What does it print?
 :::exercise
 id: proj-java-02-book
 level: 2
-title: "Project 2: the Book class"
+title: "Project 2: the Task class"
 mode: code
 lang: java
-file: Book.java
+file: Task.java
+path: java/src/main/java/taskboard/Task.java
 ---
-Write `Book` with fields `isbn`, `title`, `author` (Strings), `year` (int) and `available` (boolean, initially `true`); a constructor setting the first four with `this.`; `borrow()` and `giveBack()` that set `available`; and `describe()` returning `title + " by " + author + " (" + year + ")"`.
+Write `Task` with fields `key`, `title`, `assignee` (Strings), `points` (int) and `available` (boolean, initially `true`); a constructor setting the first four with `this.`; `pickUp()` and `putBack()` that set `available`; and `describe()` returning `title + " by " + assignee + " (" + points + " pts)"`.
 ---starter
-public class Book {
+public class Task {
 }
 ---rule
-String\s+isbn\s*;[\s\S]*String\s+title\s*;[\s\S]*String\s+author\s*;
+String\s+key\s*;[\s\S]*String\s+title\s*;[\s\S]*String\s+assignee\s*;
 String fields
 ---rule
-int\s+year\s*;
-`int year;`
+int\s+points\s*;
+`int points;`
 ---rule
 boolean\s+available\s*=\s*true\s*;
 `available` starts true
 ---rule
-Book\(\s*String\s+isbn\s*,\s*String\s+title\s*,\s*String\s+author\s*,\s*int\s+year\s*\)
+Task\(\s*String\s+key\s*,\s*String\s+title\s*,\s*String\s+assignee\s*,\s*int\s+points\s*\)
 The constructor
 ---rule
-this\.isbn\s*=\s*isbn\s*;[\s\S]*this\.title\s*=\s*title\s*;[\s\S]*this\.author\s*=\s*author\s*;[\s\S]*this\.year\s*=\s*year\s*;
+this\.key\s*=\s*key\s*;[\s\S]*this\.title\s*=\s*title\s*;[\s\S]*this\.assignee\s*=\s*assignee\s*;[\s\S]*this\.points\s*=\s*points\s*;
 Assign with `this.`
 ---rule
-void\s+borrow\(\s*\)\s*\{\s*(this\.)?available\s*=\s*false\s*;
-`borrow()`
+void\s+pickUp\(\s*\)\s*\{\s*(this\.)?available\s*=\s*false\s*;
+`pickUp()`
 ---rule
-void\s+giveBack\(\s*\)\s*\{\s*(this\.)?available\s*=\s*true\s*;
-`giveBack()`
+void\s+putBack\(\s*\)\s*\{\s*(this\.)?available\s*=\s*true\s*;
+`putBack()`
 ---rule
-String\s+describe\(\s*\)\s*\{\s*return\s+title\s*\+\s*" by "\s*\+\s*author\s*\+\s*" \("\s*\+\s*year\s*\+\s*"\)"\s*;
+String\s+describe\(\s*\)\s*\{\s*return\s+title\s*\+\s*" by "\s*\+\s*assignee\s*\+\s*" \("\s*\+\s*points\s*\+\s*" pts\)"\s*;
 `describe()`
 ---solution
-public class Book {
-    String isbn;
+public class Task {
+    String key;
     String title;
-    String author;
-    int year;
+    String assignee;
+    int points;
     boolean available = true;
 
-    Book(String isbn, String title, String author, int year) {
-        this.isbn = isbn;
+    Task(String key, String title, String assignee, int points) {
+        this.key = key;
         this.title = title;
-        this.author = author;
-        this.year = year;
+        this.assignee = assignee;
+        this.points = points;
     }
 
-    void borrow() {
+    void pickUp() {
         available = false;
     }
 
-    void giveBack() {
+    void putBack() {
         available = true;
     }
 
     String describe() {
-        return title + " by " + author + " (" + year + ")";
+        return title + " by " + assignee + " (" + points + " pts)";
     }
 }
 :::
@@ -372,41 +373,42 @@ public class Book {
 :::exercise
 id: proj-java-02-use
 level: 2
-title: "Project 2b: use the Book class"
+title: "Project 2b: use the Task class"
 mode: code
 lang: java
 file: Main.java
+path: java/src/main/java/taskboard/Main.java
 ---
-In `main`, create two books (`dune`: `"9780441013593"`, `"Dune"`, `"Frank Herbert"`, `1965`; `emma`: `"9780141439587"`, `"Emma"`, `"Jane Austen"`, `1815`), borrow `dune`, and print both books' `describe()` and then `dune.available`.
+In `main`, create two tasks (`api`: `"TB-101"`, `"Write API"`, `"Ana"`, `3`; `login`: `"TB-102"`, `"Fix login"`, `"Ben"`, `5`), pick up `api`, and print both tasks' `describe()` and then `api.available`.
 ---starter
 public class Main {
     public static void main(String[] args) {
     }
 }
 ---rule
-Book\s+dune\s*=\s*new\s+Book\(\s*"9780441013593"\s*,\s*"Dune"\s*,\s*"Frank Herbert"\s*,\s*1965\s*\)
-Create `dune`
+Task\s+api\s*=\s*new\s+Task\(\s*"TB-101"\s*,\s*"Write API"\s*,\s*"Ana"\s*,\s*3\s*\)
+Create `api`
 ---rule
-Book\s+emma\s*=\s*new\s+Book\(\s*"9780141439587"\s*,\s*"Emma"\s*,\s*"Jane Austen"\s*,\s*1815\s*\)
-Create `emma`
+Task\s+login\s*=\s*new\s+Task\(\s*"TB-102"\s*,\s*"Fix login"\s*,\s*"Ben"\s*,\s*5\s*\)
+Create `login`
 ---rule
-dune\.borrow\(\s*\)
-Borrow `dune`
+api\.pickUp\(\s*\)
+Pick up `api`
 ---rule
-System\.out\.println\(\s*dune\.describe\(\s*\)\s*\)[\s\S]*System\.out\.println\(\s*emma\.describe\(\s*\)\s*\)
+System\.out\.println\(\s*api\.describe\(\s*\)\s*\)[\s\S]*System\.out\.println\(\s*login\.describe\(\s*\)\s*\)
 Print both descriptions
 ---rule
-System\.out\.println\(\s*dune\.available\s*\)
+System\.out\.println\(\s*api\.available\s*\)
 Print availability
 ---solution
 public class Main {
     public static void main(String[] args) {
-        Book dune = new Book("9780441013593", "Dune", "Frank Herbert", 1965);
-        Book emma = new Book("9780141439587", "Emma", "Jane Austen", 1815);
-        dune.borrow();
-        System.out.println(dune.describe());
-        System.out.println(emma.describe());
-        System.out.println(dune.available);
+        Task api = new Task("TB-101", "Write API", "Ana", 3);
+        Task login = new Task("TB-102", "Fix login", "Ben", 5);
+        api.pickUp();
+        System.out.println(api.describe());
+        System.out.println(login.describe());
+        System.out.println(api.available);
     }
 }
 :::

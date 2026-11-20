@@ -4,8 +4,8 @@ title: Outer, self & cross joins
 summary: LEFT/RIGHT/FULL joins that keep unmatched rows, the anti-join pattern, ON-vs-WHERE with outer joins, self-joins for hierarchies, and CROSS joins.
 minutes: 35
 ---
-> [!project] Desk & Co, step 8: the things that *didn't* happen
-> Inner joins only show what exists. Maya also needs the gaps: products nobody has bought and customers who signed up but never ordered. Outer joins find them.
+> [!project] Taskboard, step 8: the gaps between tables
+> Inner joins only show what exists. Ana also needs what's missing: people with nothing assigned and boards with no open work. Outer joins find them.
 
 ## LEFT JOIN keeps every left row
 
@@ -107,6 +107,19 @@ WHERE e.salary > m.salary * 0.9;
 ```
 
 To list each unordered pair once, use `a.id < b.id` instead of `<>`, which would list every pair twice (A–B and B–A).
+
+## Joining to a query instead of a table
+
+Anywhere a table name can go in `FROM` or `JOIN`, you can also put a whole query in parentheses, followed by an alias. The database runs it and treats its result like a table:
+
+```sql run
+SELECT d.name, t.headcount
+FROM departments d
+JOIN (SELECT dept_id, COUNT(*) AS headcount FROM employees GROUP BY dept_id) t
+  ON t.dept_id = d.dept_id;
+```
+
+Here `t` is a little table with one row per department. This is handy when you need to summarize **before** joining. The next lesson covers these *subqueries* properly; for now, the shape `JOIN (SELECT …) alias ON …` is all you need.
 
 ## CROSS JOIN
 
@@ -380,22 +393,26 @@ GROUP BY g.category, g.status;
 :::exercise
 id: proj-sql-08-dead-stock
 level: 2
-title: "Project 8: dead stock"
+title: "Project 8: who's free?"
+path: db/reports/08-free.sql
 ---
-List the `name` and `stock` of products that have **never** appeared in any order.
+Return the `name` of every member who has **no open tasks** assigned (either no tasks at all, or only `done` ones).
+---hint
+LEFT JOIN members to their **open** tasks (put `t.status <> 'done'` in the `ON`), then keep the rows with no match.
 ---solution
-SELECT p.name, p.stock FROM products p LEFT JOIN order_items oi ON oi.product_id = p.product_id WHERE oi.product_id IS NULL;
+SELECT m.name FROM members m LEFT JOIN tasks t ON t.assignee_id = m.member_id AND t.status <> 'done' WHERE t.task_id IS NULL;
 :::
 
 :::exercise
 id: proj-sql-08-delivered-count
 level: 3
-title: "Project 8b: delivered orders per customer, zeros included"
+title: "Project 8b: every board, zeros included"
 ordered: true
+path: db/reports/08-open-per-board.sql
 ---
-For **every** customer show `name` and `delivered`, the number of their orders with status `delivered` (0 if none). Sort by `delivered` descending, then `name`.
+For **every** board show `name` and `open_tasks`, its number of tasks that are not `done` (0 if none). Sort by `open_tasks` descending, then `name`.
 ---hint
-Put the status condition in the `ON` clause of a LEFT JOIN, and count a column from `orders`.
+Put the status condition in the `ON` clause of the LEFT JOIN, and count a column from `tasks`.
 ---solution
-SELECT c.name, COUNT(o.order_id) AS delivered FROM customers c LEFT JOIN orders o ON o.customer_id = c.customer_id AND o.status = 'delivered' GROUP BY c.customer_id, c.name ORDER BY delivered DESC, c.name;
+SELECT b.name, COUNT(t.task_id) AS open_tasks FROM boards b LEFT JOIN tasks t ON t.board_id = b.board_id AND t.status <> 'done' GROUP BY b.board_id, b.name ORDER BY open_tasks DESC, b.name;
 :::

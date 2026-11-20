@@ -143,7 +143,7 @@ head -5 data/employees.csv | column -t -s,
 |---|---|
 | `nl` | number lines |
 | `rev` | reverse each line's characters |
-| `comm a b` | compare two **sorted** files: lines only in a, only in b, in both |
+| `comm a b` | compare two **sorted** files, printing three columns: lines only in a, only in b, in both. `-1`, `-2`, `-3` hide a column, so `comm -23 a b` prints only the lines that are in a but not b |
 | `seq 1 10` | print a number sequence |
 | `shuf` | shuffle lines (not available in this simulator) |
 
@@ -366,7 +366,7 @@ Find the five most common words in `notes.txt`, case-insensitively (`The` and `t
 ---hint
 `tr -cs '[:alpha:]' '\n'` splits into words; `tr '[:upper:]' '[:lower:]'` normalizes case. Watch out for an empty line at the start.
 ---solution
-tr -cs '[:alpha:]' '\n' < notes.txt | tr '[:upper:]' '[:lower:]' | grep -v '^$' | sort | uniq -c | sort -k1,1nr -k2,2 | head -n 5
+tr -cs '[:alpha:]' '\n' < notes.txt | tr '[:upper:]' '[:lower:]' | sort | uniq -c | sort -k1,1nr -k2,2 | head -n 5
 :::
 
 :::exercise
@@ -397,6 +397,7 @@ comm -23 <(sort -u data/words.txt) <(printf '%s\n' apple fig kiwi zucchini | sor
 id: proj-bash-06-top-ips
 level: 2
 title: "Project 6: top 3 clients"
+path: ops/commands/06-top-ips.sh
 ---
 Print the 3 IP addresses that made the most requests in `logs/access.log`, with their counts (as `uniq -c` prints them), busiest first.
 ---solution
@@ -407,6 +408,7 @@ cut -d' ' -f1 logs/access.log | sort | uniq -c | sort -rn | head -3
 id: proj-bash-06-paths
 level: 3
 title: "Project 6b: most requested pages"
+path: ops/commands/06-paths.sh
 ---
 Print the 5 most requested **paths** (field 7 of `access.log`) with their counts, most requested first. Several paths have the same count, so make the order deterministic: sort ties alphabetically by path (`sort -k1,1rn -k2`).
 ---hint

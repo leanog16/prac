@@ -38,13 +38,22 @@
   // --------------------------------------------------------------- storage
   const store = {
     get(k, d) { try { const v = localStorage.getItem(window.pracStoragePrefix + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
-    set(k, v) { try { localStorage.setItem(window.pracStoragePrefix + k, JSON.stringify(v)); if (window.pracSave && (k === 'progress' || k === 'drafts')) window.pracSave(k, v); } catch (e) { /* storage unavailable */ } }
+    set(k, v) { try { localStorage.setItem(window.pracStoragePrefix + k, JSON.stringify(v)); if (window.pracSave && (k === 'progress' || k === 'drafts' || k === 'project')) window.pracSave(k, v); } catch (e) { /* storage unavailable */ } }
   };
   const progress = store.get('progress', { solved: {}, quiz: {} });
   progress.solved = progress.solved || {}; progress.quiz = progress.quiz || {};
   const drafts = store.get('drafts', {});
   const saveProgress = () => store.set('progress', progress);
   const saveDrafts = debounce(() => store.set('drafts', drafts), 400);
+  // The Taskboard project lives in the account: project steps need a signed-in user.
+  // work: the learner's file for each step; done: when each step was first passed.
+  const SIGNED_IN = !!window.pracUser;
+  const project = SIGNED_IN ? store.get('project', { work: {}, done: {} }) : { work: {}, done: {} };
+  project.work = project.work || {}; project.done = project.done || {};
+  const saveProject = debounce(() => store.set('project', project), 400);
+  const workGet = ex => ex.project ? project.work[ex.id] : drafts[ex.id];
+  const workSet = (ex, v) => { if (ex.project) { project.work[ex.id] = v; saveProject(); } else { drafts[ex.id] = v; saveDrafts(); } };
+  const workDel = ex => { if (ex.project) { delete project.work[ex.id]; saveProject(); } else { delete drafts[ex.id]; saveDrafts(); } };
 
   // --------------------------------------------------------------- indices
   const TRACKS = {};
@@ -246,6 +255,71 @@
     return grow;
   }
 
+  // A real code editor (CodeMirror 5, vendored) with syntax highlighting, line numbers,
+  // bracket matching, auto-indent and comment toggling. Falls back to the plain textarea
+  // above if the editor script failed to load, so exercises always stay usable.
+  const CM_MODES = {
+    sql: 'text/x-sqlite', bash: 'shell', sh: 'shell', shell: 'shell', python: 'python', py: 'python',
+    java: 'text/x-java', yaml: 'yaml', yml: 'yaml', dockerfile: 'dockerfile', Dockerfile: 'dockerfile',
+    properties: 'properties', xml: 'xml', json: { name: 'javascript', json: true }
+  };
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  function langOf(ex) {
+    if (ex.kind === 'sql' || ex.track === 'sql') return 'sql';
+    if (ex.lang) return ex.lang;
+    const f = (ex.file || '').toLowerCase();
+    if (f.endsWith('dockerfile')) return 'dockerfile';
+    if (/\.ya?ml$/.test(f)) return 'yaml';
+    if (/\.py$/.test(f)) return 'python';
+    if (/\.java$/.test(f)) return 'java';
+    if (/\.json$/.test(f)) return 'json';
+    if (/\.properties$/.test(f)) return 'properties';
+    if (/\.xml$/.test(f)) return 'xml';
+    return 'bash';
+  }
+  function makeEditor(ta, { lang, onRun, onCheck, onChange, label, minLines = 4, escTo } = {}) {
+    if (label) ta.setAttribute('aria-label', label);
+    if (!window.CodeMirror) {
+      const grow = wireEditor(ta, { onRun, onCheck, onChange });
+      return {
+        get value() { return ta.value; }, set value(v) { ta.value = v; grow(); },
+        focus() { ta.focus(); }, refresh: grow,
+        insert(text) { ta.setRangeText(text, ta.selectionStart, ta.selectionEnd, 'end'); ta.focus(); onChange && onChange(ta.value); },
+        el: ta
+      };
+    }
+    const indent = lang === 'python' || lang === 'java' ? 4 : 2;
+    const mod = isMac ? 'Cmd' : 'Ctrl';
+    const cm = window.CodeMirror.fromTextArea(ta, {
+      mode: CM_MODES[lang] || null, theme: 'prac', lineNumbers: true, indentUnit: indent, tabSize: indent,
+      indentWithTabs: false, smartIndent: true, matchBrackets: true, autoCloseBrackets: true,
+      styleActiveLine: { nonEmpty: true }, viewportMargin: Infinity, lineWiseCopyCut: true,
+      inputStyle: 'contenteditable', spellcheck: false, autocorrect: false, autocapitalize: false,
+      screenReaderLabel: ta.getAttribute('aria-label') || 'Code editor',
+      placeholder: ta.getAttribute('placeholder') || '',
+      extraKeys: {
+        Tab: c => c.somethingSelected() ? c.indentSelection('add') : c.replaceSelection(' '.repeat(indent - (c.getCursor().ch % indent)), 'end'),
+        'Shift-Tab': c => c.indentSelection('subtract'),
+        [`${mod}-Enter`]: () => { onRun && onRun(); },
+        [`Shift-${mod}-Enter`]: () => { (onCheck || onRun) && (onCheck || onRun)(); },
+        [`${mod}-/`]: c => c.toggleComment({ indent: true }),
+        // Esc releases keyboard focus so Tab can leave the editor (no keyboard trap).
+        Esc: c => { const t = typeof escTo === 'function' ? escTo() : escTo; c.getInputField().blur(); if (t) t.focus(); }
+      }
+    });
+    const wrap = cm.getWrapperElement();
+    wrap.style.setProperty('--min-lines', minLines);
+    cm.on('change', () => { onChange && onChange(cm.getValue()); });
+    return {
+      get value() { return cm.getValue(); },
+      set value(v) { cm.setValue(v); cm.clearHistory(); },
+      focus() { cm.focus(); },
+      refresh() { cm.refresh(); },
+      insert(text) { cm.replaceSelection(text, 'end'); cm.focus(); },
+      el: wrap, cm
+    };
+  }
+
   // ----------------------------------------------------- runnable snippets
   function wireCodeBlocks(root, trackId) {
     for (const blk of $$('.codeblock.runnable', root)) {
@@ -274,10 +348,11 @@
       $('.run', actions).addEventListener('click', run);
       $('.edit', actions).addEventListener('click', (e) => {
         if (editor) { editor.focus(); return; }
-        editor = el(`<textarea class="editor" spellcheck="false" aria-label="Edit example code"></textarea>`);
-        editor.value = src;
-        $('pre', blk).replaceWith(editor);
-        wireEditor(editor, { onRun: run });
+        const ta = el(`<textarea class="editor" spellcheck="false"></textarea>`);
+        ta.value = src;
+        $('pre', blk).replaceWith(ta);
+        const runBtn = $('.run', actions);
+        editor = makeEditor(ta, { lang, onRun: run, label: 'Edit example code', minLines: 2, escTo: runBtn });
         e.currentTarget.textContent = 'Editing';
         editor.focus();
       });
@@ -313,17 +388,44 @@
   }
 
   // ------------------------------------------------------------- exercises
+  function projectLine(ex) {
+    if (!ex.project) return '';
+    const where = ex.kind === 'answer' ? 'Your answer is saved to your Taskboard project.' : `Saved to your Taskboard repo as <code>${esc(ex.path)}</code>.`;
+    return `<p class="project-instruction"><span><strong>Taskboard step</strong> · ${where}</span> <a href="#project">Open the project</a></p>`;
+  }
+  const gateHTML = (headline) => `<div class="gate">
+      <div><h4>${headline}</h4><p>Taskboard is one project that runs through every track. Your steps and files are saved to your account, so they follow you across modules, tracks and devices.</p></div>
+      <div class="btns"><button type="button" class="btn primary g-in">Sign in</button><button type="button" class="btn g-up">Create an account</button></div>
+    </div>`;
+  function wireGate(node) {
+    $$('.g-in', node).forEach(b => b.addEventListener('click', () => window.pracSignIn && window.pracSignIn('signin')));
+    $$('.g-up', node).forEach(b => b.addEventListener('click', () => window.pracSignIn && window.pracSignIn('signup')));
+  }
+  function renderProjectGate(ex, opts) {
+    const node = el(`
+      <article class="ex" id="ex-${ex.id}" data-level="${ex.level}">
+        ${exHead(ex, opts)}
+        <div class="ex-body">
+          <div class="ex-prompt">${ex.prompt}</div>
+          ${gateHTML('Sign in to work on this Taskboard step')}
+        </div>
+      </article>`);
+    wireGate(node);
+    wireCodeBlocks($('.ex-prompt', node), ex.track);
+    return node;
+  }
+
   // Exercises graded without running code: requirement checklists and typed answers.
   function renderCheckExercise(ex, opts) {
     const solved = !!progress.solved[ex.id];
     const isCode = ex.kind === 'code';
     const starter = ex.starter || '';
-    const code0 = drafts[ex.id] !== undefined ? drafts[ex.id] : starter;
+    const code0 = workGet(ex) !== undefined ? workGet(ex) : starter;
     const node = el(`
       <article class="ex${solved ? ' solved' : ''}" id="ex-${ex.id}" data-level="${ex.level}">
         ${exHead(ex, opts)}
         <div class="ex-body">
-          ${ex.project ? '<p class="project-instruction"><strong>Project step</strong> · Complete this task in the editor below. Your answer is saved for this exercise; it does not update a shared project.</p>' : ''}
+          ${projectLine(ex)}
           <div class="ex-prompt">${ex.prompt}</div>
           <div>
             <div class="editor-label"><span>${isCode ? esc(ex.file || ex.lang) + ` · graded on ${ex.rules.length} requirement${ex.rules.length === 1 ? '' : 's'}` : 'Your answer · case and extra spaces are ignored'}</span>${isCode ? '<button type="button" class="btn quiet small b-reset">Reset</button>' : ''}</div>
@@ -332,7 +434,7 @@
             <div class="actions">
               <div class="btns">
                 <button type="button" class="btn primary b-check">${ico('check')}Check</button>
-                ${isCode ? '<span class="kbd-hint"><kbd>⌘/Ctrl</kbd> <kbd>Enter</kbd></span>' : '<span class="kbd-hint"><kbd>Enter</kbd></span>'}
+                ${isCode ? '<span class="kbd-hint"><kbd>⌘/Ctrl</kbd> <kbd>Enter</kbd> checks · <kbd>Esc</kbd> leaves the editor</span>' : '<span class="kbd-hint"><kbd>Enter</kbd></span>'}
               </div>
               <div class="stuck" role="group" aria-label="Help">
                 <span class="stuck-label">Stuck?</span>
@@ -347,16 +449,16 @@
           <div class="sol-slot"></div>
         </div>
       </article>`);
-    const ta = $('#ed-' + ex.id, node);
-    ta.value = code0;
+    const field = $('#ed-' + ex.id, node);
+    field.value = code0;
     const hintsEl = $('.hints', node), fb = $('.feedback-slot', node), solEl = $('.sol-slot', node);
     let hintN = 0;
-    const save = v => { drafts[ex.id] = v; saveDrafts(); };
-    let grow = () => {};
-    if (isCode) grow = wireEditor(ta, { onRun: () => check(), onCheck: () => check(), onChange: save });
+    const save = v => workSet(ex, v);
+    let ta = field;
+    if (isCode) { ta = makeEditor(field, { lang: langOf(ex), onRun: () => check(), onCheck: () => check(), onChange: save, escTo: () => $('.b-check', node) }); node._editor = ta; }
     else {
-      ta.addEventListener('input', () => save(ta.value));
-      ta.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); check(); } });
+      field.addEventListener('input', () => save(field.value));
+      field.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); check(); } });
     }
     const hintBtn = $('.b-hint', node);
     const updateHintBtn = () => { hintBtn.textContent = hintN >= ex.hints.length ? 'No more hints' : `Hint ${hintN + 1}/${ex.hints.length}`; hintBtn.disabled = hintN >= ex.hints.length; };
@@ -366,7 +468,7 @@
       hintsEl.appendChild(el(`<div class="hint"><b>Hint ${hintN + 1}.</b> ${ex.hints[hintN].replace(/^<p>|<\/p>\s*$/g, '')}</div>`));
       hintN++; updateHintBtn();
     });
-    const markSolved = () => solvedNow(ex, node);
+    const markSolved = () => solvedNow(ex, node, ta.value);
     const checklist = results => `<ul class="checklist">${results.map(r => `<li class="${r.ok ? 'ok' : 'no'}">${ico(r.ok ? 'check' : 'cross')}<span class="sr">${r.ok ? 'Met:' : 'Not met:'}</span> <span>${r.msg}</span></li>`).join('')}</ul>`;
     function check() {
       const v = ta.value;
@@ -390,13 +492,13 @@
     const reqBtn = $('.b-reqs', node);
     if (reqBtn) reqBtn.addEventListener('click', () => { fb.innerHTML = `<div class="feedback"><strong>What the grader looks for</strong></div><ul class="checklist">${ex.rules.map(r => `<li class="todo"><span>${r.msg}</span></li>`).join('')}</ul>`; });
     const resetBtn = $('.b-reset', node);
-    if (resetBtn) resetBtn.addEventListener('click', () => { ta.value = starter; delete drafts[ex.id]; saveDrafts(); grow(); fb.innerHTML = ''; });
+    if (resetBtn) resetBtn.addEventListener('click', () => { ta.value = starter; workDel(ex); fb.innerHTML = ''; });
     $('.b-sol', node).addEventListener('click', () => {
       if (solEl.firstChild) { solEl.innerHTML = ''; return; }
       const reveal = () => {
         if (isCode) {
           solEl.innerHTML = `<div class="solution"><div class="editor-label"><span>reference solution</span><span><button type="button" class="btn small s-load">Load into editor</button> <button type="button" class="btn small s-copy">Copy</button></span></div><pre><code>${ex.solutionHtml}</code></pre>${ex.explain ? `<div class="explain">${ex.explain}</div>` : ''}</div>`;
-          $('.s-load', solEl).addEventListener('click', () => { ta.value = ex.solution; save(ex.solution); grow(); ta.focus(); });
+          $('.s-load', solEl).addEventListener('click', () => { ta.value = ex.solution; save(ex.solution); ta.focus(); });
           $('.s-copy', solEl).addEventListener('click', () => copyText(ex.solution));
         } else solEl.innerHTML = `<div class="solution"><div class="editor-label"><span>answer</span></div><pre><code></code></pre>${ex.explain ? `<div class="explain">${ex.explain}</div>` : ''}</div>`;
         if (!isCode) $('code', solEl).textContent = ex.solution;
@@ -411,12 +513,13 @@
   }
 
   function renderExercise(ex, opts = {}) {
+    if (ex.project && !SIGNED_IN) return renderProjectGate(ex, opts);
     if (ex.kind === 'code' || ex.kind === 'answer') return renderCheckExercise(ex, opts);
     const isSql = ex.kind === 'sql' || ex.track === 'sql';
     const solved = !!progress.solved[ex.id];
     const starter = ex.starter || (ex.mode === 'script' ? '#!/bin/bash\n' : '');
     const isFile = ex.mode === 'file';
-    const code0 = drafts[ex.id] !== undefined ? drafts[ex.id] : starter;
+    const code0 = workGet(ex) !== undefined ? workGet(ex) : starter;
     const file = ex.file || 'script.sh';
     const testsHTML = ex.mode === 'script' ? `<div class="tests">${ex.tests.map((t, i) => `<div>test ${i + 1}: $ bash ${esc(file)} ${esc(t.args)}${t.stdin ? ' &lt; (input provided)' : ''}</div>`).join('')}</div>`
       : isFile ? `<div class="tests"><div>the grader saves this as ${esc(ex.file)}, then runs:</div>${ex.run.split('\n').map(l => `<div>$ ${esc(l)}</div>`).join('')}</div>` : '';
@@ -424,7 +527,7 @@
       <article class="ex${solved ? ' solved' : ''}" id="ex-${ex.id}" data-level="${ex.level}">
         ${exHead(ex, opts)}
         <div class="ex-body">
-          ${ex.project ? '<p class="project-instruction"><strong>Project step</strong> · Complete this task in the editor below. Each run starts from the exercise’s own practice data; changes do not carry over to other exercises.</p>' : ''}
+          ${projectLine(ex)}
           <div class="ex-prompt">${ex.prompt}</div>
           ${!isSql && (ex.cwd !== '/home/student' || ex.setup) ? `<div class="ex-meta">${ex.cwd !== '/home/student' ? `<span>starts in ${esc(ex.cwd)}</span>` : ''}${ex.setup ? '<span>some setup runs first</span>' : ''}</div>` : ''}
           <div>
@@ -435,7 +538,7 @@
               <div class="btns">
                 <button type="button" class="btn primary b-check">${ico('check')}Check</button>
                 <button type="button" class="btn b-run">${ico('play')}Run</button>
-                <span class="kbd-hint"><kbd>⌘/Ctrl</kbd> <kbd>Enter</kbd> runs, add <kbd>Shift</kbd> to check</span>
+                <span class="kbd-hint"><kbd>⌘/Ctrl</kbd> <kbd>Enter</kbd> runs, add <kbd>Shift</kbd> to check · <kbd>Esc</kbd> leaves the editor</span>
               </div>
               <div class="stuck" role="group" aria-label="Help">
                 <span class="stuck-label">Stuck?</span>
@@ -452,14 +555,15 @@
           <div class="sol-slot"></div>
         </div>
       </article>`);
-    const ta = $('textarea', node);
-    ta.value = code0;
+    const field = $('textarea', node);
+    field.value = code0;
     const hintsEl = $('.hints', node), fb = $('.feedback-slot', node), out = $('.out-slot', node), expEl = $('.exp-slot', node), solEl = $('.sol-slot', node);
     let hintN = 0;
-    const grow = wireEditor(ta, {
-      onRun: () => run(false), onCheck: () => run(true),
-      onChange: v => { drafts[ex.id] = v; saveDrafts(); }
+    const ta = makeEditor(field, {
+      lang: langOf(ex), onRun: () => run(false), onCheck: () => run(true), escTo: () => $('.b-check', node),
+      onChange: v => workSet(ex, v)
     });
+    node._editor = ta;
     const hintBtn = $('.b-hint', node);
     const updateHintBtn = () => { hintBtn.textContent = hintN >= ex.hints.length ? 'No more hints' : `Hint ${hintN + 1}/${ex.hints.length}`; hintBtn.disabled = hintN >= ex.hints.length; };
     if (ex.hints.length) updateHintBtn();
@@ -468,7 +572,7 @@
       hintsEl.appendChild(el(`<div class="hint"><b>Hint ${hintN + 1}.</b> ${ex.hints[hintN].replace(/^<p>|<\/p>\s*$/g, '')}</div>`));
       hintN++; updateHintBtn();
     });
-    const markSolved = () => solvedNow(ex, node);
+    const markSolved = () => solvedNow(ex, node, ta.value);
     async function run(check) {
       const code = ta.value;
       if (!code.trim() || (ex.mode === 'script' && !code.replace(/^#!.*$/m, '').trim())) { fb.innerHTML = `<div class="feedback bad">Write ${isSql ? 'a query' : ex.mode === 'script' ? 'your script' : isFile ? 'the file' : 'a command'} first.</div>`; return; }
@@ -525,7 +629,7 @@
     }
     $('.b-run', node).addEventListener('click', () => run(false));
     $('.b-check', node).addEventListener('click', () => run(true));
-    $('.b-reset', node).addEventListener('click', () => { ta.value = starter; delete drafts[ex.id]; saveDrafts(); grow(); fb.innerHTML = ''; out.innerHTML = ''; });
+    $('.b-reset', node).addEventListener('click', () => { ta.value = starter; workDel(ex); fb.innerHTML = ''; out.innerHTML = ''; });
     $('.b-exp', node).addEventListener('click', async (e) => {
       const b = e.currentTarget;
       if (!expEl.hidden) { expEl.hidden = true; b.textContent = 'Expected output'; b.setAttribute('aria-expanded', 'false'); return; }
@@ -549,7 +653,7 @@
       const reveal = () => {
         solEl.innerHTML = `<div class="solution"><div class="editor-label"><span>reference solution</span><span><button type="button" class="btn small s-load">Load into editor</button> <button type="button" class="btn small s-copy">Copy</button></span></div><pre><code></code></pre>${ex.explain ? `<div class="explain">${ex.explain}</div>` : ''}</div>`;
         $('code', solEl).textContent = ex.solution;
-        $('.s-load', solEl).addEventListener('click', () => { ta.value = ex.solution; drafts[ex.id] = ex.solution; saveDrafts(); grow(); ta.focus(); });
+        $('.s-load', solEl).addEventListener('click', () => { ta.value = ex.solution; workSet(ex, ex.solution); ta.focus(); });
         $('.s-copy', solEl).addEventListener('click', () => copyText(ex.solution));
       };
       if (progress.solved[ex.id]) { reveal(); return; }
@@ -599,7 +703,12 @@
       <span class="solved-tag">${ico('check')}Solved</span>
     </header>`;
   }
-  function solvedNow(ex, node) {
+  function solvedNow(ex, node, code) {
+    if (ex.project && SIGNED_IN) {
+      if (code !== undefined) project.work[ex.id] = code;
+      if (!project.done[ex.id]) project.done[ex.id] = Date.now();
+      saveProject();
+    }
     const first = !progress.solved[ex.id];
     if (first) { progress.solved[ex.id] = Date.now(); saveProgress(); toast('Solved', 'check'); }
     node.classList.add('solved');
@@ -654,7 +763,7 @@
       </nav>
       <nav class="rail-group" aria-label="${esc(t.title)} practice and reference">
         <div class="rail-label">Practice and reference</div>
-        <ul class="tools">${TRACK_META[currentTrack].pages.map(([k, label]) => `<li><a href="#${currentTrack}-${k}"${activeTok === `${currentTrack}-${k}` ? ' aria-current="page"' : ''}>${label}</a></li>`).join('')}</ul>
+        <ul class="tools"><li><a href="#project">Taskboard project</a></li>${TRACK_META[currentTrack].pages.map(([k, label]) => `<li><a href="#${currentTrack}-${k}"${activeTok === `${currentTrack}-${k}` ? ' aria-current="page"' : ''}>${label}</a></li>`).join('')}</ul>
       </nav>`;
   }
   function setRailOpen(open) {
@@ -693,7 +802,7 @@
       resume = `<section class="resume t-${m.track}" aria-labelledby="resume-h">
         <div>
           <h2 id="resume-h">Start with ${esc(m.trackObj.title)}: ${esc(m.title)}</h2>
-          <p>Every track starts with a short lesson. Or pick any track below; progress saves in this browser as you go.</p>
+          <p>Every track starts with a short lesson. Or pick any track below; progress saves in this browser, or to your account when you sign in.</p>
         </div>
         <a class="btn primary" href="#${m.id}">Start the first lesson ${ico('right')}</a>
       </section>`;
@@ -711,17 +820,141 @@
     main.innerHTML = `<div class="home">
       <section class="intro">
         <h1>Learn it by doing it.</h1>
-        <p class="lede">${PJ.tracks.length} tracks, ${total} graded exercises. Read a short lesson, check yourself, then solve problems from warm-up to boss level while building one project per track. Queries run on a real SQLite database, shell and Docker commands in simulators, and code, workflows and designs are checked against requirements, all in your browser.</p>
+        <p class="lede">${PJ.tracks.length} tracks, ${total} graded exercises. Read a short lesson, check yourself, then solve problems from warm-up to boss level while building one project, Taskboard, across every track. Queries run on a real SQLite database, shell and Docker commands in simulators, and code, workflows and designs are checked against requirements, all in your browser.</p>
       </section>
       ${resume}
+      ${projectPanel(true)}
       <div class="grid">${PJ.tracks.map(panel).join('')}</div>
       <section class="section" aria-labelledby="how-h">
         <div class="section-head"><h2 class="h2" id="how-h">How exercises work</h2><span class="aside">Each square on a map is one exercise. It fills when you solve it.</span></div>
-        <p class="howto"><b>Run</b> executes your answer and shows the real output, starting each time from a fresh database, filesystem or Docker engine. <b>Check</b> compares it with the reference solution, or a list of requirements, and says specifically what's off. If you're <b>stuck</b>, hints reveal one at a time, with expected output and the full solution behind them. Progress, quiz answers and drafts are <b>saved</b> in this browser, so you can stop anywhere.</p>
+        <p class="howto"><b>Run</b> executes your answer and shows the real output, starting each time from a fresh database, filesystem or Docker engine. <b>Check</b> compares it with the reference solution, or a list of requirements, and says specifically what's off. If you're <b>stuck</b>, hints reveal one at a time, with expected output and the full solution behind them. Progress, quiz answers and drafts are <b>saved</b> in this browser, or to your account when you're signed in, so you can stop anywhere. Taskboard project steps are saved to your account.</p>
         <div class="legend">${[1, 2, 3, 4].map(l => lvlTag(l)).join('')}<span><i class="px boss" style="display:inline-block;vertical-align:middle"></i> Boss problems are exam- and interview-grade and take a double square.</span></div>
       </section>
     </div>`;
+    wireGate(main);
   }
+
+  // --------------------------------------------------------------- project
+  // The story order: data first, then operations, the Python API and its delivery,
+  // the Java edition, and finally scaling the whole system.
+  const STORY = ['sql', 'bash', 'fastapi', 'docker', 'cicd', 'aws', 'java', 'spring', 'design'].filter(id => TRACKS[id]);
+  const projectSteps = () => STORY.flatMap(id => TRACKS[id].modules.flatMap(m => m.exercises.filter(e => e.project)));
+  const stepHref = ex => `#${ex.mod.id}/exercises/${ex.num}`;
+  // The learner's repo: for each path, the newest saved work in story order.
+  function projectRepo() {
+    const files = {};
+    for (const ex of projectSteps()) {
+      if (ex.kind === 'answer') continue;
+      const w = project.work[ex.id];
+      if (w === undefined || !w.trim()) continue;
+      files[ex.path] = { content: w, ex, done: !!project.done[ex.id] };
+    }
+    return files;
+  }
+  // A tiny stored (uncompressed) zip writer, so the repo can be downloaded and run locally.
+  const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc32 = b => { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  function zipBlob(entries) {
+    const enc = new TextEncoder(), parts = [], central = [];
+    let off = 0;
+    const u16 = n => [n & 255, (n >>> 8) & 255], u32 = n => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
+    for (const [name, text] of entries) {
+      const nb = enc.encode(name), data = enc.encode(text), crc = crc32(data);
+      const head = [...u32(0x04034b50), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(nb.length), ...u16(0)];
+      parts.push(new Uint8Array(head), nb, data);
+      central.push(new Uint8Array([...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(nb.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)]), nb);
+      off += head.length + nb.length + data.length;
+    }
+    const csize = central.reduce((a, c) => a + c.length, 0);
+    const end = new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(entries.length), ...u16(entries.length), ...u32(csize), ...u32(off), ...u16(0)]);
+    return new Blob([...parts, ...central, end], { type: 'application/zip' });
+  }
+  function projectPanel(compact) {
+    const steps = projectSteps();
+    const done = steps.filter(e => project.done[e.id]).length;
+    const next = steps.find(e => !project.done[e.id]);
+    return `<section class="proj-panel" aria-labelledby="proj-h">
+        <div>
+          <p class="kicker">One project, every track</p>
+          <h2 id="proj-h">Taskboard</h2>
+          <p>Build every layer of one task-tracking product: its database and reports, ops scripts, the Python API, its container, pipeline and AWS deployment, a Java edition, and the design that scales it. ${SIGNED_IN ? `<b>${done}</b> of ${steps.length} steps done.` : 'Sign in to start: your Taskboard repo is saved to your account.'}</p>
+          ${SIGNED_IN ? `<div class="bar-wide">${bar(done, steps.length)}</div>` : ''}
+        </div>
+        <div class="btns">${SIGNED_IN
+          ? (next ? `<a class="btn primary t-${next.track}" href="${stepHref(next)}">${done ? 'Next step' : 'Start the project'} ${ico('right')}</a>` : '') + `<a class="btn${compact ? ' quiet' : ''}" href="#project">Open the project</a>`
+          : `<button type="button" class="btn primary g-in">Sign in</button><button type="button" class="btn g-up">Create an account</button>${compact ? '<a class="btn quiet" href="#project">About the project</a>' : ''}`}</div>
+      </section>`;
+  }
+  function renderProject() {
+    const steps = projectSteps();
+    const repo = projectRepo();
+    const paths = Object.keys(repo).sort();
+    const next = steps.find(e => !project.done[e.id]);
+    const trackBlock = tid => {
+      const t = TRACKS[tid];
+      const ts = t.modules.flatMap(m => m.exercises.filter(e => e.project));
+      const d = ts.filter(e => project.done[e.id]).length;
+      const open = SIGNED_IN && next && next.track === tid;
+      return `<details class="jt t-${tid}"${open ? ' open' : ''}>
+        <summary><span class="jt-name">${esc(t.title)}</span><span class="jt-role">${esc(PROJECT_ROLE[tid] || '')}</span>${strip(ts)}<span class="jt-count"><b>${d}</b> / ${ts.length}</span></summary>
+        <ol class="jt-mods">${t.modules.filter(m => m.exercises.some(e => e.project)).map(m => `<li><span class="num">${pad(m.index + 1)}</span><div><a class="jt-mod" href="#${m.id}">${esc(m.title)}</a><ul>${m.exercises.filter(e => e.project).map(e => `<li class="${project.done[e.id] ? 'done' : ''}"><i class="px${project.done[e.id] ? ' on' : ''}" aria-hidden="true"></i><a href="${stepHref(e)}">${esc(e.title.replace(/^Project\s*\w*:\s*/i, ''))}</a>${e.kind !== 'answer' ? `<code>${esc(e.path)}</code>` : ''}${project.done[e.id] ? '<span class="sr">, done</span>' : ''}</li>`).join('')}</ul></div></li>`).join('')}</ol>
+      </details>`;
+    };
+    const tree = () => {
+      if (!paths.length) return '<div class="empty">No files yet. Each Taskboard step you work on saves its file here.</div>';
+      let html = '', lastDir = null;
+      for (const pth of paths) {
+        const dir = pth.includes('/') ? pth.slice(0, pth.lastIndexOf('/')) : '';
+        if (dir !== lastDir) { html += `<div class="repo-dir">${esc(dir ? dir + '/' : './')}</div>`; lastDir = dir; }
+        html += `<button type="button" class="repo-file${repo[pth].done ? ' done' : ''}" data-path="${esc(pth)}"><i class="px${repo[pth].done ? ' on' : ''}" aria-hidden="true"></i>${esc(pth.slice(dir ? dir.length + 1 : 0))}</button>`;
+      }
+      return html;
+    };
+    const p = page(`
+      <div class="mod-head">
+        <h1 class="page-title">Taskboard</h1>
+        <p class="lede">A task tracker for small teams: people create tasks, move them from <code>todo</code> to <code>doing</code> to <code>done</code>, assign and comment on them. Every track builds one part of it, so each new topic lands on a system you already know.</p>
+        <div class="meta"><span><b>${steps.filter(e => project.done[e.id]).length}</b> of ${steps.length} steps done</span><span>${paths.length} file${paths.length === 1 ? '' : 's'} in your repo</span><span>${STORY.length} tracks</span></div>
+      </div>
+      ${SIGNED_IN ? '' : gateHTML('Sign in to build Taskboard')}
+      ${SIGNED_IN && next ? `<section class="resume t-${next.track}" aria-labelledby="pn-h"><div><h2 id="pn-h">Next: ${esc(next.title.replace(/^Project\s*\w*:\s*/i, ''))}</h2><p>${esc(TRACKS[next.track].title)}, module ${next.mod.index + 1}: ${esc(next.mod.title)}${next.kind !== 'answer' ? ` · writes <code>${esc(next.path)}</code>` : ''}</p></div><a class="btn primary" href="${stepHref(next)}">Go to the step ${ico('right')}</a></section>` : ''}
+      ${SIGNED_IN ? `<section class="section" aria-labelledby="repo-h">
+        <div class="section-head"><h2 class="h2" id="repo-h">Your repo</h2><span class="aside">${paths.length ? `<button type="button" class="btn small" id="repo-zip">Download as .zip</button>` : ''}</span></div>
+        <div class="repo"><nav class="repo-tree" aria-label="Files">${tree()}</nav><div class="repo-view" id="repo-view"></div></div>
+      </section>` : ''}
+      <section class="section" aria-labelledby="jt-h">
+        <div class="section-head"><h2 class="h2" id="jt-h">The build</h2><span class="aside">Tracks are independent; this is the suggested order. Each square is one step.</span></div>
+        <div class="journey">${STORY.map(trackBlock).join('')}</div>
+      </section>
+    `, true);
+    wireGate(p);
+    if (!SIGNED_IN) return;
+    const view = $('#repo-view', p);
+    const showFile = pth => {
+      const f = repo[pth];
+      $$('.repo-file', p).forEach(b => b.setAttribute('aria-current', String(b.dataset.path === pth)));
+      view.innerHTML = `<div class="editor-label"><span>${esc(pth)}${f.done ? '' : ' · draft, not passed yet'}</span><span><a class="btn small" href="${stepHref(f.ex)}">Open the step</a> <button type="button" class="btn small rv-copy">Copy</button></span></div><textarea></textarea><p class="repo-note">From ${esc(TRACKS[f.ex.track].title)} · ${esc(f.ex.mod.title)} · ${esc(f.ex.title)}</p>`;
+      const ta = $('textarea', view); ta.value = f.content;
+      if (window.CodeMirror) window.CodeMirror.fromTextArea(ta, { mode: CM_MODES[langOf(f.ex)] || null, theme: 'prac', lineNumbers: true, readOnly: true, viewportMargin: Infinity, screenReaderLabel: pth });
+      else { ta.readOnly = true; ta.className = 'editor'; ta.rows = Math.min(30, f.content.split('\n').length + 1); }
+      $('.rv-copy', view).addEventListener('click', () => copyText(f.content));
+    };
+    $$('.repo-file', p).forEach(b => b.addEventListener('click', () => showFile(b.dataset.path)));
+    if (paths.length) showFile(paths[0]);
+    else view.innerHTML = '';
+    const zb = $('#repo-zip', p);
+    if (zb) zb.addEventListener('click', () => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(zipBlob(paths.map(pth => ['taskboard/' + pth, repo[pth].content.endsWith('\n') ? repo[pth].content : repo[pth].content + '\n'])));
+      a.download = 'taskboard.zip'; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+  }
+  const PROJECT_ROLE = {
+    sql: 'The database and team reports', bash: 'Operating the server: logs and scripts', fastapi: 'The Taskboard API in Python',
+    docker: 'Packaging the API in containers', cicd: 'The build-and-deploy pipeline', aws: 'Running it on AWS',
+    java: 'The domain model in plain Java', spring: 'The Java edition of the API', design: 'Scaling Taskboard to millions of users'
+  };
 
   function renderModule(m, stepKey, exN) {
     const t = m.trackObj;
@@ -750,7 +983,7 @@
       const practice = ['sql', 'bash', 'docker', 'spring'].includes(t.id)
         ? 'Examples with a Run button run here against fresh practice data. Other code blocks are examples to read or try in your own environment.'
         : 'Code and commands in the lesson are examples to read or try in your own environment; they do not run on this site.';
-      box.innerHTML = `<aside class="callout lesson-guide"><div class="callout-title">How to practice</div><p>${practice} In Exercises, look for <strong>Project</strong> steps to apply the lesson to the track project. Exercises are independent; the site saves your answers, not a shared project.</p></aside><article class="prose lesson">${m.lesson}</article>` +
+      box.innerHTML = `<aside class="callout lesson-guide"><div class="callout-title">How to practice</div><p>${practice} In Exercises, the <strong>Project</strong> steps apply the lesson to Taskboard, the project that runs through every track. Sign in to work on them: they are saved to your Taskboard repo in your account.</p></aside><article class="prose lesson">${m.lesson}</article>` +
         (hasQuiz ? nextLink('Quick check', `#${m.id}/quiz`, `Done reading? ${m.quiz.length} quick questions to check the ideas stuck.`)
           : nextLink('Exercises', `#${m.id}/exercises`, `Done reading? Try the ${m.exercises.length} exercises.`));
       wireCodeBlocks($('.lesson', box), t.id);
@@ -775,13 +1008,14 @@
       const show = (i, focus) => {
         cur = i;
         nodes.forEach((n, j) => { n.hidden = j !== i; });
+        if (nodes[i]._editor) nodes[i]._editor.refresh();
         btns.forEach((b, j) => { if (j === i) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current'); });
         prevB.disabled = i === 0;
         nextB.disabled = i === nodes.length - 1;
         const h = `${m.id}/exercises/${i + 1}`;
         history.replaceState(null, '', '#' + h);
         remember(h, t.id);
-        if (focus) { const ed = $('textarea, input', nodes[i]); nodes[i].scrollIntoView({ block: 'nearest' }); if (ed) ed.focus({ preventScroll: true }); }
+        if (focus) { nodes[i].scrollIntoView({ block: 'nearest' }); if (nodes[i]._editor) nodes[i]._editor.focus(); else { const ed = $('input.answer-input', nodes[i]); if (ed) ed.focus({ preventScroll: true }); } }
       };
       btns.forEach((b, i) => b.addEventListener('click', () => show(i, true)));
       prevB.addEventListener('click', () => show(cur - 1, true));
@@ -811,7 +1045,9 @@
     const focus = $('#pf-focus', p);
     const open = (ex) => {
       focus.innerHTML = '';
-      focus.appendChild(renderExercise(ex, { showModule: true }));
+      const node = renderExercise(ex, { showModule: true });
+      focus.appendChild(node);
+      if (node._editor) node._editor.refresh();
       focus.appendChild(el(`<div class="btns" style="margin:12px 0 32px"><a class="btn small" href="#${ex.mod.id}">Open the ${esc(ex.mod.title)} lesson</a><button type="button" class="btn small quiet pf-close">Close</button></div>`));
       $('.pf-close', focus).addEventListener('click', () => { focus.innerHTML = ''; draw(); });
       focus.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -897,12 +1133,14 @@
         <aside><div class="editor-label"><span>tables</span><span>click a column (or double-click a table) to insert it</span></div><div class="schema-list" id="pg-schema">Loading…</div></aside>
       </div>
     `, true);
-    const ed = $('#pg-ed', p);
-    ed.value = store.get('playground', sample);
+    const edTa = $('#pg-ed', p);
+    edTa.value = store.get('playground', sample);
+    let ed = null;
     const outEl = $('#pg-out', p);
     let db = null;
     try { await sqlReady; } catch (e) { outEl.innerHTML = `<div class="err-box">${esc(sqlErr.message)}</div>`; return; }
-    if (!$('#pg-ed')) return;
+    if (!document.body.contains(edTa)) return;
+    ed = makeEditor(edTa, { lang: 'sql', onRun: () => run(), onChange: debounce(v => store.set('playground', v), 300), label: 'SQL editor', minLines: 7, escTo: () => $('#pg-run', p) });
     db = window.__pgdb || (window.__pgdb = freshDb());
     const run = () => {
       const r = runSql(ed.value, db);
@@ -920,13 +1158,12 @@
     $('#pg-schema', p).addEventListener('click', e => {
       const t = e.target.closest('li[data-ins]');
       if (!t) return;
-      ed.setRangeText(t.dataset.ins, ed.selectionStart, ed.selectionEnd, 'end');
-      ed.focus();
+      ed.insert(t.dataset.ins);
     });
     $('#pg-schema', p).addEventListener('dblclick', e => {
       const t = e.target.closest('summary[data-ins]');
       if (!t) return;
-      ed.setRangeText(t.dataset.ins, ed.selectionStart, ed.selectionEnd, 'end');
+      ed.insert(t.dataset.ins);
     });
     const examples = [
       ['Headcount by department', sample],
@@ -938,8 +1175,7 @@
     ];
     const sel = $('#pg-ex', p);
     examples.forEach(([n], i) => sel.appendChild(el(`<option value="${i}">${esc(n)}</option>`)));
-    sel.addEventListener('change', () => { if (sel.value === '') return; ed.value = examples[+sel.value][1]; store.set('playground', ed.value); sel.value = ''; grow(); run(); });
-    const grow = wireEditor(ed, { onRun: run, onChange: debounce(v => store.set('playground', v), 300) });
+    sel.addEventListener('change', () => { if (sel.value === '') return; ed.value = examples[+sel.value][1]; store.set('playground', ed.value); sel.value = ''; run(); });
     $('#pg-run', p).addEventListener('click', run);
     $('#pg-reset', p).addEventListener('click', () => { db.close(); db = window.__pgdb = freshDb(); outEl.innerHTML = '<div class="ok-box">Database reset to the original practice data.</div>'; drawSchema(); });
     drawSchema();
@@ -956,12 +1192,18 @@
     customers: ['Store', 'Store customers. Two customers have never ordered.'],
     products: ['Store', 'Product catalog with price and stock. Two products have never been ordered; two are out of stock.'],
     orders: ['Store', 'One row per order with a status: pending, shipped, delivered or cancelled.'],
-    order_items: ['Store', 'Line items: which products, how many, at what unit price (sometimes discounted from list price).']
+    order_items: ['Store', 'Line items: which products, how many, at what unit price (sometimes discounted from list price).'],
+    members: ['Taskboard', 'The Taskboard team. Guests (outside contractors) have no team. Kenji is new and has no tasks yet.'],
+    boards: ['Taskboard', 'Boards group tasks. Office move is archived; Q1 planning was just created and has no tasks.'],
+    tasks: ['Taskboard', 'One row per task: status todo, doing or done; priority 1 (high) to 3 (low). Some tasks have no assignee, due date or estimate. blocked_by points at the task this one waits on. "Today" in this data is 2026-11-20.'],
+    comments: ['Taskboard', 'Comments on tasks, with author and timestamp.'],
+    labels: ['Taskboard', 'Label names such as bug, feature and docs.'],
+    task_labels: ['Taskboard', 'Junction table: which labels are on which task.']
   };
   async function renderSchema() {
     const p = page(`
       <h1 class="page-title">The practice database</h1>
-      <p class="lede">Ten tables in three little worlds. Keys are marked; arrows show foreign keys. The quirks noted under each table are deliberate: they're what the trickier exercises test.</p>
+      <p class="lede">Sixteen tables in four little worlds, including Taskboard, the project. Keys are marked; arrows show foreign keys. The quirks noted under each table are deliberate: they're what the trickier exercises test.</p>
       <div class="schema-cards" id="sc">Loading…</div>`);
     try { await sqlReady; } catch (e) { $('#sc', p).innerHTML = `<div class="err-box">${esc(sqlErr.message)}</div>`; return; }
     const db = freshDb();
@@ -1118,6 +1360,15 @@
       if (TRACKS[tid] && TRACK_META[tid].pages.some(p => p[0] === key)) { trackOf = tid; pageKey = key; }
     }
     closeRail();
+    $('#project-link').setAttribute('aria-current', tok === 'project' ? 'page' : 'false');
+    if (tok === 'project') {
+      activeTok = 'project';
+      setTrack(currentTrack, false);
+      showRail(false);
+      renderProject();
+      window.scrollTo(0, 0);
+      return;
+    }
     if (!m && !pageKey) {
       activeTok = 'home';
       setTrack(currentTrack, false);

@@ -13,28 +13,28 @@
 ## Classes
 
 ```java
-public class Book {
-    private final String isbn;                  // encapsulated, immutable
+public class Task {
+    private final String key;                  // encapsulated, immutable
     private boolean available = true;
 
-    public Book(String isbn) {
-        if (isbn == null || !isbn.matches("\\d{13}")) throw new IllegalArgumentException("bad ISBN");
-        this.isbn = isbn;
+    public Task(String key) {
+        if (key == null || !key.matches("TB-\\d+")) throw new IllegalArgumentException("bad key");
+        this.key = key;
     }
 
-    public String getIsbn() { return isbn; }
+    public String getKey() { return key; }
     public boolean isAvailable() { return available; }
 
-    public void borrow() {
-        if (!available) throw new IllegalStateException("already borrowed");
+    public void pickUp() {
+        if (!available) throw new IllegalStateException("already taken");
         available = false;
     }
 
-    @Override public String toString() { return "Book[" + isbn + "]"; }
+    @Override public String toString() { return "Task[" + key + "]"; }
 }
 
-public record Isbn(String value) {                    // immutable value with equals/hashCode/toString
-    public Isbn { Objects.requireNonNull(value); }
+public record Key(String value) {                    // immutable value with equals/hashCode/toString
+    public Key { Objects.requireNonNull(value); }
 }
 ```
 
@@ -43,21 +43,21 @@ Access: `private` < package < `protected` < `public`. Fields private; behaviour 
 ## Inheritance and interfaces
 
 ```java
-public abstract class LibraryItem {                    // can't be instantiated
-    protected LibraryItem(String id) { ... }
+public abstract class WorkItem {                    // can't be instantiated
+    protected WorkItem(String id) { ... }
     public abstract String describe();
 }
-public class Dvd extends LibraryItem implements Borrowable, Comparable<Dvd> {
-    public Dvd(String id) { super(id); }               // super(...) first
-    @Override public String describe() { return "DVD"; }
+public class Bug extends WorkItem implements Assignable, Comparable<Bug> {
+    public Bug(String id) { super(id); }               // super(...) first
+    @Override public String describe() { return "bug"; }
 }
-public interface Borrowable {
-    int loanDays();
-    default LocalDate dueFrom(LocalDate d) { return d.plusDays(loanDays()); }
+public interface Assignable {
+    int targetDays();
+    default LocalDate dueFrom(LocalDate d) { return d.plusDays(targetDays()); }
 }
-public sealed interface Item permits Book, Dvd {}
-String label = switch (item) { case Book b -> "B"; case Dvd d -> "D"; };
-if (item instanceof Dvd dvd) { dvd.getMinutes(); }
+public sealed interface Item permits Task, Bug {}
+String label = switch (item) { case Task b -> "B"; case Bug d -> "D"; };
+if (item instanceof Bug bug) { bug.getSeverity(); }
 ```
 
 - One superclass, many interfaces. Prefer composition ("has-a") to inheritance ("is-a").
@@ -85,7 +85,7 @@ try (var in = Files.newBufferedReader(path)) {           // auto-closed
 } catch (NoSuchFileException e) {                        // specific first
     ...
 } catch (IOException e) {
-    throw new CatalogLoadException("Couldn't read " + path, e);   // keep the cause
+    throw new BoardLoadException("Couldn't read " + path, e);   // keep the cause
 } finally {
     ...                                                   // always runs
 }
@@ -96,18 +96,18 @@ Checked (`Exception`) must be caught or declared; unchecked (`RuntimeException`)
 ## Streams and Optional
 
 ```java
-books.stream()
-     .filter(Book::isAvailable)
-     .sorted(Comparator.comparing(Book::getYear).reversed())
-     .map(Book::getTitle)
+tasks.stream()
+     .filter(Task::isAvailable)
+     .sorted(Comparator.comparing(Task::getPoints).reversed())
+     .map(Task::getTitle)
      .limit(10)
      .toList();
 
-Map<String, Long> perAuthor = books.stream().collect(Collectors.groupingBy(Book::getAuthor, Collectors.counting()));
+Map<String, Long> perAuthor = tasks.stream().collect(Collectors.groupingBy(Task::getAssignee, Collectors.counting()));
 String csv = titles.stream().collect(Collectors.joining(", "));
-BigDecimal total = fees.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
-Optional<Book> b = books.stream().filter(x -> x.getYear() < 1900).findFirst();
-b.map(Book::getTitle).orElse("none");
+BigDecimal total = credits.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+Optional<Task> b = tasks.stream().filter(x -> x.getPoints() < 1900).findFirst();
+b.map(Task::getTitle).orElse("none");
 ```
 
 ## SOLID and patterns

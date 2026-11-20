@@ -450,6 +450,7 @@ title: "Project 10: run Taskboard hardened"
 compare: verify
 cwd: /home/student/taskboard
 setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile && docker build -q -t taskboard:prod . >/dev/null 2>&1
+path: ops/docker/10-hardened.sh
 ---
 Run `taskboard:prod` in the background as `api` on port 8000 with: restart policy `unless-stopped`, memory **384m**, **1** CPU, a read-only root filesystem with a tmpfs at `/tmp`, and all capabilities dropped.
 ---verify

@@ -325,6 +325,7 @@ title: "Project 7: a private network"
 compare: verify
 cwd: /home/student/taskboard
 setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile && docker build -q -t taskboard:dev . >/dev/null 2>&1
+path: ops/docker/07-network.sh
 ---
 Create the network `taskboard-net`. On it, start `taskboard-db` (postgres:16, password `devpass`) **without** publishing any port, and `api` from `taskboard:dev` published on host port **8000**, with `DATABASE_URL=postgresql://postgres:devpass@taskboard-db:5432/postgres`.
 ---verify
@@ -343,6 +344,7 @@ level: 3
 title: "Project 7b: call the API from inside"
 cwd: /home/student/taskboard
 setup: printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > Dockerfile && docker build -q -t taskboard:dev . >/dev/null 2>&1 && docker network create taskboard-net >/dev/null && docker run -d --name api --network taskboard-net taskboard:dev >/dev/null
+path: ops/docker/07-internal-call.sh
 ---
 `api` runs on `taskboard-net` with **no** published port. Start an `nginx` container named `proxy` on the same network, then from inside `proxy` request `http://api:8000/tasks` silently with curl.
 ---solution

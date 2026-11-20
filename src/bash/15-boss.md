@@ -425,6 +425,7 @@ level: 4
 title: "Project 15: logwatch.sh, the complete tool"
 mode: script
 file: logwatch.sh
+path: ops/logwatch.sh
 ---
 Write the final `logwatch.sh` with subcommands:
 
@@ -464,6 +465,7 @@ id: proj-bash-15-hourly
 level: 4
 title: "Project 15b: requests per hour"
 mode: script
+path: ops/scripts/15-hourly.sh
 ---
 Write a script that prints, for the access log given as `$1`, the number of requests per **hour** as `HH COUNT` (e.g. `09 8`), in hour order. The hour is the two digits after the first `:` in the timestamp field (`[20/Oct/2026:09:07:13 -0400]`).
 ---test

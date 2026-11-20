@@ -23,7 +23,7 @@ The word list can come from any expansion:
 |---|---|
 | literal words | `for x in a b c` |
 | brace range | `for i in {1..5}` |
-| glob | `for f in data/*.csv` |
+| glob | `for f in data/*.csv` (a glob ending in `/`, like `*/`, matches only directories) |
 | command output | `for u in $(cut -d' ' -f1 data/grades.txt)` |
 | arguments | `for a in "$@"` (or just `for a`) |
 | array | `for x in "${arr[@]}"` |
@@ -111,6 +111,8 @@ echo "after redirect: $count"
 ## break and continue
 
 `break` leaves the loop; `continue` skips to the next iteration. Both take an optional number for nested loops (`break 2`).
+
+`echo -n` prints its text **without** the newline at the end, so several outputs share one line; a plain `echo` afterwards ends the line.
 
 ```bash run
 for i in {1..20}; do
@@ -450,6 +452,7 @@ id: proj-bash-13-table
 level: 3
 title: "Project 13: the multi-file table"
 mode: script
+path: ops/scripts/13-table.sh
 ---
 Write a script that loops over every `.log` file in the directory given as `$1` (in glob order) and prints one line per file: `NAME LINES ERRORS`, where NAME is the file name **without** the directory (e.g. `app.log`), LINES the line count and ERRORS the number of lines containing `ERROR`.
 ---test
@@ -470,6 +473,7 @@ id: proj-bash-13-first-error
 level: 3
 title: "Project 13b: stop at the first error"
 mode: script
+path: ops/scripts/13-first-error.sh
 ---
 Write a script that reads the file given as `$1` line by line, counting lines, and when it meets the **first** line containing `ERROR` prints `first error on line N: LINE` and stops. If there's no error, print `no errors in N lines`.
 ---test

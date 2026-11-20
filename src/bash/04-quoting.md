@@ -53,6 +53,15 @@ echo *.xyz
 > [!note] Globs are not regular expressions
 > In a glob, `*` means "anything". In a regex, `*` means "zero or more of the previous thing", and `.` means any character. Glob: `*.txt`. Regex: `.*\.txt$`. Different languages, similar symbols.
 
+## Variables in one minute
+
+The examples below use **variables**: named values. `name="World"` stores text (no spaces around `=`); `$name` inserts it. Some are set for you: `$USER` is your username and `$HOME` your home directory. Lesson 11 covers variables in depth; this lesson is about what quoting does to them.
+
+```bash run
+name="World"
+echo "Hello, $name. You are $USER and live in $HOME."
+```
+
 ## Quoting
 
 | Syntax | What's protected | Expansions inside |
@@ -60,6 +69,8 @@ echo *.xyz
 | `'single'` | everything, literally | **none** |
 | `"double"` | spaces, globs, most specials | `$var`, `$(cmd)`, `$((…))`, `` `cmd` ``, `\` before `$ ` ` " \` |
 | `\x` | the one next character | n/a |
+
+`~` is expanded only when it's **unquoted** at the start of a word: `echo ~/logs` prints `/home/student/logs`, but `echo "~/logs"` prints `~/logs` literally. (Use `"$HOME/logs"` when you need the path inside quotes.)
 
 ```bash run
 name="World"
@@ -341,6 +352,7 @@ echo "$art"
 id: proj-bash-04-header
 level: 2
 title: "Project 4: the header line"
+path: ops/commands/04-header.sh
 ---
 Print exactly this header, with the count computed by a command substitution (count the files in `logs` with `ls logs | wc -l`):
 
@@ -357,6 +369,7 @@ echo "== logwatch: $(ls logs | wc -l) log files in ~/logs =="
 id: proj-bash-04-glob
 level: 2
 title: "Project 4b: only the web logs"
+path: ops/commands/04-glob.sh
 ---
 List (with `ls`) only the files in `logs` whose names start with `a` or `c` and end in `.log`, using a single glob with a character class.
 ---solution

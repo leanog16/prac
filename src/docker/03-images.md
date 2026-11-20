@@ -68,6 +68,15 @@ docker images python --format 'table {{.Tag}}\t{{.Size}}'
 | `docker image prune -a` | delete every image not used by a container |
 | `docker system df` | disk usage summary |
 
+Useful options on those commands:
+
+| Option | Effect |
+|---|---|
+| `docker images -q` | print only image IDs, one per line (to feed into another command) |
+| `docker images -f dangling=true` | filter: only dangling images (combine with `-q` to count or remove them) |
+| `docker image prune -f` | don't ask "Are you sure?" before deleting (for scripts) |
+| `--format '{{.Repository}}:{{.Tag}}'` | choose the columns, as with `docker ps` |
+
 ```bash run
 docker pull alpine
 docker tag alpine:latest mybase:1.0
@@ -328,6 +337,7 @@ level: 2
 title: "Project 3: name the image"
 compare: verify
 setup: docker pull python:3.12-slim >/dev/null 2>&1
+path: ops/docker/03-tags.sh
 ---
 Give the `python:3.12-slim` image two extra names: `taskboard-base:latest` and `ghcr.io/acme/taskboard-base:3.12`.
 ---verify

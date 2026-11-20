@@ -4,8 +4,8 @@ title: Window functions
 summary: Aggregates that don't collapse rows — OVER, PARTITION BY, ranking, running totals, LAG/LEAD, frames, and top-N per group.
 minutes: 40
 ---
-> [!project] Desk & Co, step 12: rankings and running totals
-> Maya wants each product's rank inside its category and a running revenue total across the year. Both need numbers computed **across** rows without collapsing them: window functions.
+> [!project] Taskboard, step 12: next up, and the running count
+> Ana wants the single next task on each board and a running total of finished work. Both need numbers computed **across** rows without collapsing them: window functions.
 
 ## GROUP BY collapses; windows don't
 
@@ -415,21 +415,23 @@ SELECT MIN(course_id) AS start_id, MAX(course_id) AS end_id FROM g GROUP BY grp 
 :::exercise
 id: proj-sql-12-rank
 level: 3
-title: "Project 12: top product per category"
+title: "Project 12: next up on each board"
 ordered: true
+path: db/reports/12-next-up.sql
 ---
-For each category, return the product with the highest revenue (sum of quantity × unit price over all its order lines): columns `category`, `name`, `revenue` (rounded to 2 decimals), sorted by category. Use `ROW_NUMBER()` partitioned by category; break ties by product name.
+For each board, return the one open (not `done`) task that should be done next: lowest `priority` number first, then the oldest `created_on`, then the lowest `task_id`. Columns `board_id`, `title`, `priority`, sorted by `board_id`. Use `ROW_NUMBER()` partitioned by board.
 ---solution
-WITH rev AS (SELECT p.name, p.category, SUM(oi.quantity * oi.unit_price) AS revenue FROM products p JOIN order_items oi ON oi.product_id = p.product_id GROUP BY p.product_id, p.name, p.category), ranked AS (SELECT category, name, revenue, ROW_NUMBER() OVER (PARTITION BY category ORDER BY revenue DESC, name) AS rn FROM rev) SELECT category, name, ROUND(revenue, 2) AS revenue FROM ranked WHERE rn = 1 ORDER BY category;
+WITH ranked AS (SELECT board_id, title, priority, ROW_NUMBER() OVER (PARTITION BY board_id ORDER BY priority, created_on, task_id) AS rn FROM tasks WHERE status <> 'done') SELECT board_id, title, priority FROM ranked WHERE rn = 1 ORDER BY board_id;
 :::
 
 :::exercise
 id: proj-sql-12-running
 level: 3
-title: "Project 12b: running revenue"
+title: "Project 12b: running completions"
 ordered: true
+path: db/reports/12-running-completions.sql
 ---
-Using monthly revenue from non-cancelled orders, return `month` (`YYYY-MM`), `revenue` and `running_total`, both rounded to 2 decimals, in month order.
+Using the number of tasks completed per month (`done_on`, `YYYY-MM`), return `month`, `completed` and `running_total` (all tasks completed up to and including that month), in month order.
 ---solution
-WITH monthly AS (SELECT strftime('%Y-%m', o.order_date) AS month, SUM(oi.quantity * oi.unit_price) AS revenue FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status <> 'cancelled' GROUP BY month) SELECT month, ROUND(revenue, 2) AS revenue, ROUND(SUM(revenue) OVER (ORDER BY month), 2) AS running_total FROM monthly ORDER BY month;
+WITH monthly AS (SELECT STRFTIME('%Y-%m', done_on) AS month, COUNT(*) AS completed FROM tasks WHERE status = 'done' GROUP BY month) SELECT month, completed, SUM(completed) OVER (ORDER BY month) AS running_total FROM monthly ORDER BY month;
 :::

@@ -1,33 +1,35 @@
 ---
 id: design-boss
 title: Boss round: case studies
-summary: Full interview-style designs (a URL shortener end to end, a news feed, a chat system, a rate limiter service and a notification system), with the estimates, key decisions and trade-offs each one hinges on.
+summary: Taskboard's complete design end to end, then five more interview-style designs (a news feed, a chat system, a rate limiter service, a notification system and a URL shortener), with the estimates, key decisions and trade-offs each one hinges on.
 minutes: 60
 ---
-> [!project] Snip, final step: the complete design
-> Bring Snip's requirements, estimates and architecture together in the Project exercises. Explain each decision in its own answer, using the earlier lessons as references.
+> [!project] Taskboard, final step: the complete design
+> Bring Taskboard's requirements, estimates and architecture together. The Project exercises apply the case studies below to Taskboard and finish with a one-page design summary in `docs/design/`.
 
-## Snip, the whole design
+## Taskboard, the whole design
 
 Everything from the track, assembled:
 
 ```
-users ─► GeoDNS ─► CDN (caches popular redirects, 5 min)
-                    │
-             API gateway (TLS, auth, rate limits)
-             │                         │
-   redirect service (stateless, N×AZ)   links/accounts modular monolith
-      │        │                          │            │
-   Redis cache  read replica            primary DB    outbox ─► Kafka "links.*"
-   (LRU, TTL+jitter, negative caching)  (sharded by code when needed)
-      │
-   publish link.clicked (circuit breaker, best effort) ─► Kafka "clicks" ─► stream counters ─► dashboard
-                                                                       └─► S3 (by date) ─► nightly reports
+browsers/apps ─► GeoDNS ─► CDN (static assets only)
+                            │
+                     API gateway (TLS, auth, per-token rate limits)
+                     │                               │
+      app tier: modular monolith (stateless, N per AZ)      realtime service (WebSockets)
+      │          │              │                                  ▲
+   Redis cache   primary DBs    outbox ─► Kafka "task-events" ─────┤ (keyed by board_id)
+   (board:{id},  sharded by     (one transaction                   ├─► notifications (breaker around email)
+    TTL+jitter,  workspace_id,   with each change)                 ├─► search indexer
+    negative     + read replicas)                                  └─► stream counters + S3 ─► reports
+    caching)
 ```
 
-Numbers that justify it: 40 writes/s, 4k reads/s average, 10k+ peak; 6 B links ≈ 1.2 TB over 5 years; a 2–4 GB hot cache absorbs most reads; 99.99% for redirects.
+Numbers that justify it: 1,000 writes/s and 10,000 reads/s on average, 3k and 30k at peak; ~18 TB of tasks in 5 years (~55 TB with copies), hence sharding; a ~20 GB hot cache absorbs most board loads; 99.95% availability.
 
-## Five more designs in brief
+One more number worth checking is **realtime fan-out**: every change is pushed to everyone who has that board open, so pushes per second = changes per second × average viewers per board. At 3,000 changes/s and 8 viewers each, the realtime service sends 24,000 messages a second, which is why it scales on its own.
+
+## Six more designs in brief
 
 ### News feed (social timeline)
 
@@ -54,6 +56,12 @@ Numbers that justify it: 40 writes/s, 4k reads/s average, 10k+ peak; 6 B links �
 - Workers apply user preferences and quiet hours, deduplicate, render templates, and call channel providers (email, SMS, push), each behind a circuit breaker with retries.
 - Dead-letter queue + alarm for failures; per-provider rate limits.
 
+### URL shortener
+
+- Turn a long URL into `sho.rt/aZ3kQ9b` and redirect anyone who opens it.
+- Short codes: random base62 with a collision check, or a pre-generated pool (lesson 3). The hot query is code → URL by primary key, so the code is also the natural shard key.
+- Reads dwarf writes (often 100:1), so a cache and CDN do most of the work. Redirect with **302** (temporary) rather than **301** (permanent): browsers cache a 301 forever and never ask again, which would break click counting and link expiry.
+
 ### Web crawler
 
 - A URL frontier (priority queues per host for politeness), fetchers, a parser, dedup by URL and content hash (Bloom filter), storage for pages.
@@ -66,33 +74,33 @@ Clear requirements and estimates, a simple design first, then deliberate scaling
 :::exercise
 id: proj-design-10-celebrity
 level: 3
-title: "Project 10: the celebrity problem"
+title: "Project 10: the giant workspace"
 mode: answer
 ---
-In a fan-out-on-write news feed, one account with 50 million followers posts. How many feed-list writes does that single post cause?
+Taskboard adds a workspace announcement feed built with fan-out on write (see "News feed" above). A company workspace has 40,000 members. How many feed-list writes does a single announcement cause?
 ---answer
-50000000
+40000
 ---answer
-50,000,000
----answer
-50 million
+40,000
 ---solution
-50000000
+40000
 ---explain
-That's why large systems switch to fan-out-on-read for celebrity accounts.
+One write per member's feed. That's why very large audiences switch to fan-out on read.
 :::
 
 :::exercise
 id: proj-design-10-shard-chat
 level: 3
-title: "Project 10b: chat partition key"
+title: "Project 10b: comment partition key"
 mode: answer
 ---
-A chat system must return the messages of one conversation, in order, quickly. Which field should messages be partitioned by: `sender_id`, `conversation_id` or `timestamp`?
+A task's comment thread works like a chat conversation: it must return the comments of one task, in order, quickly. Which field should comments be partitioned by: `author_id`, `task_id` or `created_at`?
 ---answer
-conversation_id
+task_id
 ---solution
-conversation_id
+task_id
+---explain
+Like `conversation_id` for chat: everything one query needs lives in one partition, in order.
 :::
 
 :::exercise
@@ -101,7 +109,7 @@ level: 3
 title: "Project 10c: fail open or closed?"
 mode: answer
 ---
-Snip's rate limiter (in Redis) becomes unreachable. For the **redirect** endpoint, where availability matters most, should the limiter fail `open` (allow requests) or `closed` (deny them)?
+Taskboard's rate limiter (in Redis) becomes unreachable. For the **board-loading** endpoint, where availability matters most, should the limiter fail `open` (allow requests) or `closed` (deny them)?
 ---answer
 open
 ---answer
@@ -113,52 +121,70 @@ open
 :::exercise
 id: proj-design-10-qps
 level: 4
-title: "Project 10d: chat estimates"
+title: "Project 10d: realtime fan-out"
 mode: answer
 ---
-A chat app has 50 million daily active users who each send 40 messages a day. Roughly how many messages per second on **average**? (Use 10⁵ seconds per day.)
+At peak Taskboard makes 3,000 task changes per second, and each changed board is open in **8** browsers on average. How many WebSocket messages per second does the realtime service push?
 ---answer
-20000
+24000
 ---answer
-20,000
+24,000
 ---solution
-20000
+24000
 ---explain
-50 × 10⁶ × 40 = 2 × 10⁹ messages/day ÷ 10⁵ s = 2 × 10⁴.
+Every change goes to every viewer of its board: 3,000 × 8 = 24,000 pushes per second.
 :::
 
 :::exercise
 id: proj-design-10-final
 level: 4
-title: "Project 10e: Snip's final design doc"
+title: "Project 10e: Taskboard's design summary"
 mode: code
 lang: yaml
-file: snip-design.yaml
+file: design.yaml
+path: docs/design/design.yaml
 ---
-Summarize Snip's design as YAML with these top-level keys: `estimates` (with `writes_per_sec: 40`, `reads_per_sec_peak: 10000`, `storage_5y_tb: 1.2`), `components` (a list including `cdn`, `api gateway`, `redirect service`, `redis cache`, `primary database`, `read replica` and `kafka`), `short_codes: random base62, 7 chars`, `shard_key: code`, `redirect_status: 302`, and `analytics: async via kafka`.
+Summarize Taskboard's design as YAML with these top-level keys:
+
+- `estimates`, a map with `writes_per_sec: 1000`, `reads_per_sec_peak: 30000` and `storage_5y_tb: 18`;
+- `components`, a list including `cdn`, `api gateway`, `app tier`, `realtime service`, `redis cache`, `primary database`, `read replica` and `kafka`;
+- `shard_key: workspace_id`;
+- `task_ids: snowflake`;
+- `cache: cache-aside, delete on change`;
+- `events: outbox to kafka, keyed by board_id`.
 ---starter
-# Snip design summary
+# Taskboard design summary
+---hint
+`estimates:` and `components:` each go on their own line with their contents indented under them; the other four are single `key: value` lines at the left margin.
+---hint
+Values containing a comma are fine unquoted in YAML, as long as there's no `: ` inside them.
 ---rule
 ^estimates:\s*\n
 `estimates`
 ---rule
-writes_per_sec:\s*40\b
+^\s+writes_per_sec:\s*1000\b
 Writes per second
 ---rule
-reads_per_sec_peak:\s*10000\b
+^\s+reads_per_sec_peak:\s*30000\b
 Peak reads
 ---rule
-storage_5y_tb:\s*1\.2\b
+^\s+storage_5y_tb:\s*18\b
 Storage
 ---rule
 ^components:\s*\n
 `components`
 ---rule
--\s+cdn[\s\S]*-\s+api gateway|-\s+api gateway[\s\S]*-\s+cdn
-CDN and gateway
+-\s+cdn\s*$
+CDN
 ---rule
--\s+redirect service
-Redirect service
+-\s+api gateway
+Gateway
+---rule
+-\s+app tier
+App tier
+---rule
+-\s+realtime service
+Realtime service
 ---rule
 -\s+redis cache
 Cache
@@ -172,32 +198,33 @@ Replica
 -\s+kafka
 Kafka
 ---rule
-^short_codes:\s*["']?random base62, 7 chars["']?\s*$
-Short codes
----rule
-^shard_key:\s*["']?code["']?\s*$
+^shard_key:\s*["']?workspace_id["']?\s*$
 Shard key
 ---rule
-^redirect_status:\s*302\s*$
-302
+^task_ids:\s*["']?snowflake["']?\s*$
+Task ids
 ---rule
-^analytics:\s*["']?async via kafka["']?\s*$
-Analytics
+^cache:\s*["']?cache-aside, delete on change["']?\s*$
+Cache strategy
+---rule
+^events:\s*["']?outbox to kafka, keyed by board_id["']?\s*$
+Events
 ---solution
 estimates:
-  writes_per_sec: 40
-  reads_per_sec_peak: 10000
-  storage_5y_tb: 1.2
+  writes_per_sec: 1000
+  reads_per_sec_peak: 30000
+  storage_5y_tb: 18
 components:
   - cdn
   - api gateway
-  - redirect service
+  - app tier
+  - realtime service
   - redis cache
   - primary database
   - read replica
   - kafka
-short_codes: random base62, 7 chars
-shard_key: code
-redirect_status: 302
-analytics: async via kafka
+shard_key: workspace_id
+task_ids: snowflake
+cache: cache-aside, delete on change
+events: outbox to kafka, keyed by board_id
 :::

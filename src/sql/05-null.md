@@ -4,8 +4,8 @@ title: NULL & three-valued logic
 summary: Why NULL isn't a value, how TRUE/FALSE/UNKNOWN combine, and the classic traps with NOT IN, COUNT and DISTINCT.
 minutes: 20
 ---
-> [!project] Desk & Co, step 5: the mailing list
-> Two of Maya's customers never gave an email address. Her mailing tool chokes on blanks, and a naive query silently drops or miscounts those people. This lesson's project builds a mailing list that handles them.
+> [!project] Taskboard, step 5: the gaps
+> Some tasks have no assignee, no due date or no estimate, and guests aren't on any team. Those NULLs silently drop out of naive queries. This lesson's project finds them and labels them.
 
 ## NULL means "unknown"
 
@@ -292,19 +292,21 @@ SELECT NULL AND 0 AS a, NULL OR 1 AS b, NULL AND 1 AS c, NOT NULL AS d, NULL IS 
 :::exercise
 id: proj-sql-05-mailing
 level: 2
-title: "Project 5: the mailing list"
+title: "Project 5: nobody owns these"
+path: db/reports/05-unassigned.sql
 ---
-Build Maya's mailing list: every customer's `name`, `city`, and `contact`, which is their email, or the text `(no email)` when it's missing.
+List the `task_id`, `title` and `status` of tasks that have **no assignee** and are not `done`.
 ---solution
-SELECT name, city, COALESCE(email, '(no email)') AS contact FROM customers;
+SELECT task_id, title, status FROM tasks WHERE assignee_id IS NULL AND status <> 'done';
 :::
 
 :::exercise
 id: proj-sql-05-follow-up
 level: 2
-title: "Project 5b: who needs a follow-up call?"
+title: "Project 5b: the team directory"
+path: db/reports/05-directory.sql
 ---
-List the `name` and `city` of customers who have **no** email address, so Maya can phone them.
+Return every member's `name`, `role`, and `team`, showing the text `Guests` when the team is missing.
 ---solution
-SELECT name, city FROM customers WHERE email IS NULL;
+SELECT name, role, COALESCE(team, 'Guests') AS team FROM members;
 :::

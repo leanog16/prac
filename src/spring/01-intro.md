@@ -4,8 +4,11 @@ title: Spring Boot essentials
 summary: What Spring and Spring Boot are, starters and auto-configuration, the project layout, the Maven wrapper and the build lifecycle, @SpringBootApplication and component scanning, running the fat jar, and changing settings from the command line.
 minutes: 30
 ---
-> [!project] Track project: Bookshelf, a library API
-> In this track you'll build **Bookshelf**, the backend for a small public library: a catalog of books, members who borrow them, loans with due dates, and librarians who manage it all. (If you did the Java OOP track, you already modeled this domain in plain Java; here it becomes a production Spring Boot service.) Each lesson's **Project** exercises practice the next piece independently; the site does not carry code between exercises.
+> [!project] Track project: Taskboard's Java API
+> **Taskboard** is the task tracker that runs through every track on this site. In this track you build its API in Spring Boot: a board of tasks, members who pick them up, assignments with due dates, and team leads who manage it all. It's the same product the FastAPI track builds in Python, and the same domain the Java OOP track models in plain Java; here it becomes a production Spring Boot service. Each lesson's **Project** exercises add the next piece, saved to `spring/` in your Taskboard repo.
+
+> [!note] Before you start
+> Spring Boot is Java. This track assumes the Java OOP track's ground: classes and interfaces, annotations like `@Override`, generics (`List<Task>`), records, lambdas and exceptions. Commands such as `./mvnw package` run in a terminal; the Bash track's first lessons cover the basics.
 
 ## Spring and Spring Boot
 
@@ -92,7 +95,7 @@ public class DemoApplication {
 
 The **parent** manages versions: starters have no `<version>` because the Boot release picks a tested set of library versions for you. `<scope>test</scope>` keeps test libraries out of the production jar.
 
-Common starters: `-web` (REST), `-data-jpa` (databases), `-validation` (Bean Validation), `-security`, `-actuator` (health and metrics), `-test`, `-webflux` (reactive), `-data-redis`, `-amqp` (RabbitMQ).
+Common starters (each artifact is `spring-boot-starter-` plus the suffix, e.g. `spring-boot-starter-data-jpa`): `-web` (REST), `-data-jpa` (databases), `-validation` (Bean Validation), `-security`, `-actuator` (health and metrics), `-test`, `-webflux` (reactive), `-data-redis`, `-amqp` (RabbitMQ).
 
 ## Building with the Maven wrapper
 
@@ -144,11 +147,11 @@ management.endpoint.health.probes.enabled=true    # /actuator/health/liveness an
 
 Never expose `env`, `heapdump` or `beans` publicly: they leak configuration and secrets.
 
-## Worked example: generating Bookshelf
+## Worked example: generating Taskboard
 
-On [start.spring.io](https://start.spring.io) choose: **Maven**, **Java 21**, a Spring Boot version compatible with **Spring Framework 6.2 or later** (needed for `@MockitoBean` in the testing lesson), group `org.library`, artifact `bookshelf`, and the dependencies:
+On [start.spring.io](https://start.spring.io) choose: **Maven**, **Java 21**, a Spring Boot version compatible with **Spring Framework 6.2 or later** (needed for `@MockitoBean` in the testing lesson), group `dev`, artifact `taskboard`, and the dependencies:
 
-| Dependency | Why Bookshelf needs it |
+| Dependency | Why Taskboard needs it |
 |---|---|
 | Spring Web | REST controllers, embedded Tomcat, JSON |
 | Validation | `@NotBlank`, `@Valid` on requests |
@@ -156,23 +159,23 @@ On [start.spring.io](https://start.spring.io) choose: **Maven**, **Java 21**, a 
 | PostgreSQL Driver | production database |
 | H2 Database | in-memory database for tests and quick local runs |
 | Spring Boot Actuator | `/actuator/health` for Docker and load balancers |
-| Spring Security (lesson 8) | members vs librarians |
+| Spring Security (lesson 8) | members vs team leads |
 
 Unzip it, and the first build and run take three commands:
 
 ```bash
 ./mvnw package
-java -jar target/bookshelf-0.0.1-SNAPSHOT.jar
+java -jar target/taskboard-0.0.1-SNAPSHOT.jar
 curl -s localhost:8080/actuator/health
 ```
 
 ## What happens when the app starts
 
-1. `main` calls `SpringApplication.run(BookshelfApplication.class, args)`.
+1. `main` calls `SpringApplication.run(TaskboardApplication.class, args)`.
 2. Spring reads configuration: `application.properties`, then profile files, environment variables and command-line arguments.
-3. **Component scanning** finds your `@RestController`, `@Service` and `@Repository` classes under `org.library.bookshelf`.
+3. **Component scanning** finds your `@RestController`, `@Service` and `@Repository` classes under `dev.taskboard`.
 4. **Auto-configuration** looks at the classpath: Spring Web found → start Tomcat on 8080; JPA + a driver found → create a `DataSource` and an `EntityManagerFactory`.
-5. Beans are created and wired; the log ends with `Started BookshelfApplication in 2.1 seconds`.
+5. Beans are created and wired; the log ends with `Started TaskboardApplication in 2.1 seconds`.
 
 When startup fails, the answer is almost always in that log, in the `APPLICATION FAILED TO START` block, which says exactly which bean or property is missing.
 
@@ -358,12 +361,13 @@ Write the Maven wrapper command that deletes old build output and builds the jar
 :::exercise
 id: proj-sp-01-pom
 level: 2
-title: "Project 1: Bookshelf's dependencies"
+title: "Project 1: Taskboard's dependencies"
 mode: code
 lang: xml
 file: pom.xml
+path: spring/pom.xml
 ---
-Complete Bookshelf's `<dependencies>` with the starters for **web**, **validation**, **data-jpa** and **actuator** (all `org.springframework.boot`, no versions), the runtime driver `org.postgresql:postgresql` with `<scope>runtime</scope>`, and `spring-boot-starter-test` with `<scope>test</scope>`.
+Complete Taskboard's `<dependencies>` with the starters for **web**, **validation**, **data-jpa** and **actuator** (all `org.springframework.boot`, no versions), the runtime driver `org.postgresql:postgresql` with `<scope>runtime</scope>`, and `spring-boot-starter-test` with `<scope>test</scope>`.
 ---starter
 <dependencies>
 </dependencies>
@@ -425,18 +429,19 @@ level: 2
 title: "Project 1b: name it and move it"
 mode: file
 file: spring-app/src/main/resources/application.properties
+path: spring/src/main/resources/application.properties
 ---run
 cd spring-app && ./mvnw -q package && java -jar target/demo-0.0.1-SNAPSHOT.jar > /dev/null 2>&1
 curl -s localhost:8081/actuator/health; echo
-curl -s localhost:8081/hello?name=Bookshelf; echo
+curl -s localhost:8081/hello?name=Taskboard; echo
 ---
-The practice project stands in for Bookshelf. Rewrite its `application.properties` so the application is named `bookshelf`, listens on port **8081**, and exposes the actuator `health` and `info` endpoints.
+The practice project stands in for Taskboard. Rewrite its `application.properties` so the application is named `taskboard`, listens on port **8081**, and exposes the actuator `health` and `info` endpoints.
 ---starter
 spring.application.name=demo
 server.port=8080
 management.endpoints.web.exposure.include=health
 ---solution
-spring.application.name=bookshelf
+spring.application.name=taskboard
 server.port=8081
 management.endpoints.web.exposure.include=health,info
 :::

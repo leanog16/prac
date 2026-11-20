@@ -4,7 +4,7 @@ title: Building a CRUD API & routers
 summary: A complete create-read-update-delete resource with correct status codes, ID generation and 404 handling, then splitting an app into APIRouters with prefixes and tags.
 minutes: 35
 ---
-> [!project] Taskboard, step 6: complete CRUD, properly organized
+> [!project] Taskboard, step 7: complete CRUD, properly organized
 > Taskboard gets the rest of its task endpoints (update, partial update, delete) and moves them out of `main.py` into `routers/tasks.py`. This is the structure the app keeps for the rest of the track.
 
 ## A complete resource
@@ -169,7 +169,7 @@ app.include_router(tasks.router)
 ## Common mistakes
 
 > [!mistake] Using a list and its length as the id generator
-> `id = len(TASKS) + 1` breaks as soon as you delete something: delete task 2 of 3 and the next task gets id 3, a duplicate. Keep a separate counter (or let the database assign ids, lesson 8).
+> `id = len(TASKS) + 1` breaks as soon as you delete something: delete task 2 of 3 and the next task gets id 3, a duplicate. Keep a separate counter (or let the database assign ids, lesson 9).
 
 :::quiz
 q: Router created with `APIRouter(prefix="/orders")` has `@router.get("/{order_id}")`, included with `app.include_router(router, prefix="/api")`. What's the full path?
@@ -575,10 +575,11 @@ Using the `todos` app from the lesson (ids start at 1), a fresh server receives:
 :::exercise
 id: proj-fa-06-patch
 level: 3
-title: "Project 6: PATCH a task"
+title: "Project 7: PATCH a task"
 mode: code
 lang: python
 file: routers/tasks.py
+path: app/routers/tasks.py
 ---
 Write `@router.patch("/{task_id}", response_model=TaskOut)` `update_task(task_id: int, data: TaskUpdate)`: get the task with `find_task(task_id)` (it raises 404 itself), apply **only the fields the client sent** using `data.model_dump(exclude_unset=True)`, and return the task.
 ---starter
@@ -626,10 +627,11 @@ def update_task(task_id: int, data: TaskUpdate):
 :::exercise
 id: proj-fa-06-delete
 level: 2
-title: "Project 6b: DELETE with 204"
+title: "Project 7b: DELETE with 204"
 mode: code
 lang: python
 file: routers/tasks.py
+path: app/routers/tasks.py
 ---
 Add `@router.delete("/{task_id}", status_code=204)` `delete_task(task_id: int)` that calls `find_task(task_id)` (404 if missing) and then removes it from the `TASKS` dict with `del TASKS[task_id]`. Return nothing.
 ---starter
@@ -670,10 +672,11 @@ def delete_task(task_id: int):
 :::exercise
 id: proj-fa-06-include
 level: 1
-title: "Project 6c: wire the router in"
+title: "Project 7c: wire the router in"
 mode: code
 lang: python
 file: main.py
+path: app/main.py
 ---
 In `main.py`, import the `tasks` module from `routers` and include its `router` in the app.
 ---starter

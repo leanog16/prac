@@ -25,7 +25,14 @@ Production databases should be Multi-AZ. Read replicas are for offloading report
 ### Backups and restore
 
 - **Automated backups** (retention 1–35 days) enable **point-in-time restore** to any second within the window.
-- **Manual snapshots** persist until you delete them; copy them to another region or account for disaster recovery.
+- **Manual snapshots** persist until you delete them; copy them to another region or account for disaster recovery. Take one before a risky migration, and wait for it to finish before you start:
+
+```bash
+aws rds create-db-snapshot --db-instance-identifier shop-prod --db-snapshot-identifier shop-pre-migration
+aws rds wait db-snapshot-available --db-snapshot-identifier shop-pre-migration
+```
+
+`aws … wait …` commands poll until the resource reaches the named state, so a script can safely continue afterwards.
 - A restore always creates a **new** DB instance with a new endpoint. Practice it: an untested backup isn't a backup.
 - Turn on **deletion protection** for production.
 
@@ -122,7 +129,19 @@ table.update_item(
 )
 ```
 
-- **Conditional writes** give you uniqueness and optimistic locking; a failed condition raises `ConditionalCheckFailedException`.
+- **Conditional writes** give you uniqueness and optimistic locking; a failed condition raises `ConditionalCheckFailedException`. In Python (boto3), every AWS error arrives as a `ClientError`, and the error's code tells you which one it was:
+
+```python
+from botocore.exceptions import ClientError
+
+try:
+    table.put_item(Item=item, ConditionExpression="attribute_not_exists(customer_id)")
+except ClientError as e:
+    if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+        print("already exists")      # an expected outcome, not a failure
+    else:
+        raise                         # anything else is a real error: re-raise it
+```
 - `TransactWriteItems` makes up to 100 writes atomic.
 - **TTL**: set an attribute (e.g. `expires_at`, epoch seconds) and DynamoDB eventually deletes expired items for free, typically within days; check expiry in application logic when immediate expiration matters. Great for sessions and idempotency keys.
 - Reads are **eventually consistent** by default; `ConsistentRead=True` (base tables and local secondary indexes, not global secondary indexes) costs double.
@@ -477,6 +496,7 @@ title: "Project 6: create Taskboard's database"
 mode: code
 lang: bash
 file: create-db.sh
+path: infra/aws/create-db.sh
 ---
 Write the `aws rds create-db-instance` command for `taskboard-prod`: engine `postgres`, class `db.t4g.medium`, 50 GB gp3 storage, **Multi-AZ**, **encrypted**, subnet group `taskboard-isolated`, security group `sg-0db`, master user `taskboard` with the password **managed by RDS**, 14 days of backups, deletion protection, and **not** publicly accessible.
 ---starter
@@ -547,6 +567,7 @@ title: "Project 6b: the activity feed query"
 mode: code
 lang: python
 file: feed.py
+path: infra/aws/feed.py
 ---
 Write `latest_events(board_id: str, limit: int = 20)` that queries the DynamoDB table `TaskEvents` for `board_id` (partition key), **newest first**, at most `limit` items, returning `resp["Items"]`.
 ---starter

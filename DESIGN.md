@@ -296,6 +296,12 @@ A row of 34px square buttons, one per exercise in the module, numbered in Geist 
 ### Exercise Card
 A white sheet with a header row (mono number, 20px Geist title, level pips, a green "Solved" tag when done) over a body of prompt, editor, and an action row: Check (primary) and Run (default) on the left, the stuck-ladder of quiet buttons (hint, expected output, solution) on the right. Hints sit on Hint Amber wash; the revealed solution sits in a dashed box; feedback is a soft status block with an explanation under a hairline.
 
+### Code Editor
+CodeMirror 5 (vendored in `site/vendor/`) themed `prac`: Code paper, Geist Mono 14px, a hairline gutter with Slate line numbers, Pressed Grey active line, a 2px track-hue caret, track-hue selection wash and bracket outline, and the shared `--tk-*` syntax tokens. Square, 1px Strong Hairline border; focus is the 2px inset track-hue outline. It grows with its content (min height set per editor, max 560px). Esc releases keyboard focus to the Check/Run button, so Tab never traps. Falls back to the plain textarea if the script fails to load.
+
+### Taskboard Project
+One project spans every track. **Gate** (signed out, on a Project step): a Sheet White box with an Ink outline, a 18px Geist title, a Slate explanation and Sign in (primary) / Create an account. **Project line** (signed in): a Pressed Grey strip with a hairline naming the repo path, with "Open the project" at the far end. **Project page** (`#project`): page title, a Continue-style "Next" panel, **Your repo** (a 280px file tree beside a read-only editor, Download as .zip), then **The build**: one `<details>` row per track with its role, its step pixels and a count, opening to modules and their steps with paths. The home page carries a compact project panel under Continue.
+
 ## Do's and Don'ts
 
 ### Do:

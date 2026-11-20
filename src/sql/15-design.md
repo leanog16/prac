@@ -4,8 +4,8 @@ title: Keys & normalization
 summary: Candidate, primary, foreign, natural and surrogate keys; one-to-many and many-to-many relationships; functional dependencies; 1NF, 2NF, 3NF and BCNF; when to denormalize.
 minutes: 35
 ---
-> [!project] Desk & Co, step 15: why the tables look the way they do
-> Before Desk & Co had a database, Maya tracked orders in one big spreadsheet. In this lesson you'll take that spreadsheet apart and see why it became the four tables you've been querying all along.
+> [!project] Taskboard, step 15: why the tables look the way they do
+> Before Taskboard existed, its team tracked work in one shared spreadsheet: a row per task with the board name, the assignee's name and email, and the labels typed into one cell. In this lesson you'll see why that became six tables, and decide where new facts belong.
 
 ## Why design matters
 
@@ -269,11 +269,13 @@ level: 2
 title: "Project 15: where does it belong?"
 mode: answer
 ---
-Maya wants to start recording each customer's **phone number**. Which Desk & Co table should the new column go in?
+Taskboard wants to record each member's **time zone**, so due-date reminders arrive in the morning. Which Taskboard table should the new column go in?
 ---answer
-customers
+members
 ---solution
-customers
+members
+---explain
+A time zone describes one person, and `members` has exactly one row per person.
 :::
 
 :::exercise
@@ -282,13 +284,13 @@ level: 3
 title: "Project 15b: a fact about two things"
 mode: answer
 ---
-Customers can now ask for **gift wrap on individual items** within an order (one item wrapped, another not). Which table should a `gift_wrap` column go in?
+Labels can now be added automatically (by a rule) or by hand, and the team wants to record which. Whether a label was added automatically depends on the task **and** the label together. Which table should an `added_by_rule` column go in?
 ---answer
-order_items
+task_labels
 ---solution
-order_items
+task_labels
 ---explain
-Whether an item is wrapped depends on the order **and** the product together, which is exactly the grain of `order_items`.
+`task_labels` is the junction table with one row per task per label: exactly the grain of this fact, like `grade` in `enrollments`.
 :::
 
 :::exercise
@@ -297,7 +299,7 @@ level: 2
 title: "Project 15c: name the anomaly"
 mode: answer
 ---
-In the one-big-spreadsheet design, Maya can't add a newly arrived product to her catalog until someone orders it. What kind of anomaly is that: **insert**, **update** or **delete**?
+In the old one-big-spreadsheet design, the team couldn't record a new board until someone created a task on it. What kind of anomaly is that: **insert**, **update** or **delete**?
 ---answer
 insert
 ---answer

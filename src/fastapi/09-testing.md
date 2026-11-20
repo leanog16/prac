@@ -4,7 +4,7 @@ title: Testing, middleware & settings
 summary: Testing endpoints with TestClient and pytest, overriding dependencies in tests, middleware and CORS, background tasks, and typed configuration from environment variables.
 minutes: 35
 ---
-> [!project] Taskboard, step 9: a test suite
+> [!project] Taskboard, step 10: a test suite
 > Taskboard now has enough behaviour to break. This step adds `tests/test_tasks.py`: tests that run against a throwaway in-memory database, with the current user overridden, so they're fast and repeatable. The CI/CD track runs exactly these tests on every push.
 
 ## TestClient
@@ -589,10 +589,11 @@ The route returns 201, so `assert r.status_code == 200` fails.
 :::exercise
 id: proj-fa-09-test-create
 level: 2
-title: "Project 9: test task creation"
+title: "Project 10: test task creation"
 mode: code
 lang: python
 file: tests/test_tasks.py
+path: tests/test_tasks.py
 ---
 Write `test_create_task(client)`: POST `/tasks` with JSON `{"title": "Write docs", "priority": 2}`, assert the status code is **201**, and assert the response JSON's `status` is `"todo"` and its `owner` is `"ada"`.
 ---starter
@@ -629,10 +630,11 @@ def test_create_task(client):
 :::exercise
 id: proj-fa-09-test-errors
 level: 2
-title: "Project 9b: test the failures"
+title: "Project 10b: test the failures"
 mode: code
 lang: python
 file: tests/test_tasks.py
+path: tests/test_tasks.py
 ---
 Write two tests: `test_missing_task_is_404(client)` asserting that `GET /tasks/999` returns **404**, and `test_bad_priority_is_422(client)` asserting that POSTing `{"title": "x", "priority": 9}` to `/tasks` returns **422**.
 ---starter
@@ -661,10 +663,11 @@ def test_bad_priority_is_422(client):
 :::exercise
 id: proj-fa-09-override
 level: 3
-title: "Project 9c: fake the current user"
+title: "Project 10c: fake the current user"
 mode: code
 lang: python
 file: tests/conftest.py
+path: tests/conftest.py
 ---
 In the `client` fixture, override `get_current_user` so it returns `{"name": "ada"}`, create the `TestClient` with a `with` block and `yield` it, and clear the overrides afterwards.
 ---starter

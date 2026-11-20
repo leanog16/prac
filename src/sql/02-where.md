@@ -4,8 +4,8 @@ title: Filtering with WHERE
 summary: Comparison operators, AND/OR/NOT and their precedence, IN, BETWEEN, LIKE, and testing for NULL.
 minutes: 30
 ---
-> [!project] Desk & Co, step 2: the restock list
-> Maya's first real question: *which products are about to run out?* Filtering with `WHERE` answers it. At the end of this lesson you'll write the restock list she sends to her supplier.
+> [!project] Taskboard, step 2: what's overdue?
+> Ana's first question every Monday: *which tasks are late?* Filtering with `WHERE` answers it. Dates in Taskboard's tables are `'YYYY-MM-DD'` text, and "today" in this data is **2026-11-20**.
 
 ## WHERE keeps rows that are true
 
@@ -139,7 +139,7 @@ Notice we repeated `price * stock` rather than writing `WHERE value > 5000`. Tha
 
 ## Worked example: building a filter one condition at a time
 
-Write complex filters **incrementally** and run each step. Suppose Maya asks for "Electronics or Accessories that cost under $50 and have fewer than 50 in stock".
+Write complex filters **incrementally** and run each step. Suppose someone asks for "Electronics or Accessories that cost under $50 and have fewer than 50 in stock".
 
 Step 1, the category part:
 
@@ -386,21 +386,23 @@ WHERE ((year = 4 AND gpa > 3.5)
 :::exercise
 id: proj-sql-02-restock
 level: 2
-title: "Project 2: the restock list"
+title: "Project 2: the overdue list"
+path: db/reports/02-overdue.sql
 ---
-List the `name`, `category` and `stock` of every product with **fewer than 20** units in stock, **excluding** the `Stationery` category (Maya restocks that locally).
+List `task_id`, `title`, `due_on` and `status` for tasks that are **overdue**: the due date is before `2026-11-20` and the status is not `done`.
 ---hint
-Two conditions joined with `AND`; "excluding" is `<>` (or `!=`).
+Two conditions joined with `AND`; "not done" is `status <> 'done'`.
 ---solution
-SELECT name, category, stock FROM products WHERE stock < 20 AND category <> 'Stationery';
+SELECT task_id, title, due_on, status FROM tasks WHERE due_on < '2026-11-20' AND status <> 'done';
 :::
 
 :::exercise
 id: proj-sql-02-open-orders
 level: 2
-title: "Project 2b: orders still in flight"
+title: "Project 2b: urgent and unfinished"
+path: db/reports/02-urgent.sql
 ---
-Maya wants to see every order that hasn't reached the customer yet: show `order_id`, `customer_id`, `order_date` and `status` for orders whose status is `pending` or `shipped` and that were placed **on or after** `2025-09-01`.
+Show `task_id`, `title`, `priority` and `status` for every **high-priority** task (`priority = 1`) whose status is `todo` or `doing`.
 ---solution
-SELECT order_id, customer_id, order_date, status FROM orders WHERE status IN ('pending', 'shipped') AND order_date >= '2025-09-01';
+SELECT task_id, title, priority, status FROM tasks WHERE priority = 1 AND status IN ('todo', 'doing');
 :::
